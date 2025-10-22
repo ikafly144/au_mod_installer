@@ -8,6 +8,7 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/lang"
+	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 )
@@ -42,10 +43,13 @@ func (l *Launcher) init() {
 }
 
 func (l *Launcher) Tab() (*container.TabItem, error) {
-	content := container.NewVBox(
-		widget.NewRichTextFromMarkdown("## "+lang.LocalizeKey("installer.select_install_path", "Among Usのインストール先を選択")),
-		l.state.InstallSelect,
-		widget.NewSeparator(),
+	content := container.New(
+		layout.NewBorderLayout(nil, l.launchButton, nil, nil),
+		container.NewVBox(
+			widget.NewRichTextFromMarkdown("## "+lang.LocalizeKey("installer.select_install_path", "Among Usのインストール先を選択")),
+			l.state.InstallSelect,
+			widget.NewSeparator(),
+		),
 		l.launchButton,
 	)
 	return container.NewTabItem(lang.LocalizeKey("launcher.tab_name", "ランチャー"), content), nil
