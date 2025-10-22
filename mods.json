@@ -1,0 +1,32 @@
+[
+    {
+        "name": "SuperNewRoles",
+        "version": "3.1.1.2",
+        "author": "SuperNewRoles Team",
+        "download": {
+            "1": {
+                "url": "https://github.com/SuperNewRoles/SuperNewRoles/releases/download/3.1.1.2/SuperNewRoles-v3.1.1.2_Steam.zip",
+                "target_version": "20244926"
+            },
+            "2": {
+                "url": "https://github.com/SuperNewRoles/SuperNewRoles/releases/download/3.1.1.2/SuperNewRoles-v3.1.1.2_Epic.zip",
+                "target_version": "6279"
+            }
+        }
+    },
+    {
+        "name": "Nebula on the Ship",
+        "version": "2.25.5.3",
+        "author": "Dolly",
+        "download": {
+            "1": {
+                "url": "https://github.com/Dolly1016/Nebula/releases/download/v%2Cv2.25.5.3%2C108%2C1463/Nebula_Steam.zip",
+                "target_version": "20244926"
+            },
+            "2": {
+                "url": "https://cdn.sabafly.net/au_mods/Nebula_Epic.zip",
+                "target_version": "6279"
+            }
+        }
+    }
+]
