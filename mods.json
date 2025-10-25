@@ -3,45 +3,111 @@
         "name": "SuperNewRoles",
         "version": "3.1.1.2",
         "author": "SuperNewRoles Team",
-        "download": {
-            "1": {
-                "url": "https://github.com/SuperNewRoles/SuperNewRoles/releases/download/3.1.1.2/SuperNewRoles-v3.1.1.2_Steam.zip",
-                "target_version": "20292020"
+        "target_version": {
+            "steam": "20292020",
+            "epic": "6380"
+        },
+        "files": [
+            {
+                "compatible": [
+                    "steam"
+                ],
+                "file_type": "zip",
+                "url": "https://builds.bepinex.dev/projects/bepinex_be/735/BepInEx-Unity.IL2CPP-win-x86-6.0.0-be.735%2B5fef357.zip"
             },
-            "2": {
-                "url": "https://github.com/SuperNewRoles/SuperNewRoles/releases/download/3.1.1.2/SuperNewRoles-v3.1.1.2_Epic.zip",
-                "target_version": "6279"
+            {
+                "compatible": [
+                    "epic"
+                ],
+                "file_type": "zip",
+                "url": "https://builds.bepinex.dev/projects/bepinex_be/735/BepInEx-Unity.IL2CPP-win-x64-6.0.0-be.735%2B5fef357.zip"
+            },
+            {
+                "compatible": [
+                    "steam",
+                    "epic"
+                ],
+                "file_type": "normal",
+                "url": "https://github.com/SuperNewRoles/SuperNewRoles/releases/download/3.1.1.2/Agartha.dll",
+                "path": "BepInEx/plugins/SuperNewRoles/Agartha.dll"
+            },
+            {
+                "compatible": [
+                    "steam",
+                    "epic"
+                ],
+                "file_type": "normal",
+                "url": "https://github.com/SuperNewRoles/SuperNewRoles/releases/download/3.1.1.2/SuperNewRoles.dll",
+                "path": "BepInEx/plugins/SuperNewRoles/SuperNewRoles.dll"
             }
-        }
+        ]
     },
     {
         "name": "Nebula on the Ship",
         "version": "2.25.5.3",
         "author": "Dolly",
-        "download": {
-            "1": {
-                "url": "https://github.com/Dolly1016/Nebula/releases/download/v%2Cv2.25.5.3%2C108%2C1463/Nebula_Steam.zip",
-                "target_version": "20292020"
+        "target_version": {
+            "steam": "20292020",
+            "epic": "6380"
+        },
+        "files": [
+            {
+                "compatible": [
+                    "steam"
+                ],
+                "file_type": "zip",
+                "url": "https://builds.bepinex.dev/projects/bepinex_be/735/BepInEx-Unity.IL2CPP-win-x86-6.0.0-be.735%2B5fef357.zip"
             },
-            "2": {
-                "url": "https://cdn.sabafly.net/au_mods/Nebula_Epic.zip",
-                "target_version": "6279"
+            {
+                "compatible": [
+                    "epic"
+                ],
+                "file_type": "zip",
+                "url": "https://builds.bepinex.dev/projects/bepinex_be/735/BepInEx-Unity.IL2CPP-win-x64-6.0.0-be.735%2B5fef357.zip"
+            },
+            {
+                "compatible": [
+                    "steam",
+                    "epic"
+                ],
+                "file_type": "normal",
+                "url": "https://github.com/Dolly1016/Nebula/releases/download/v%2Cv2.25.5.3%2C108%2C1463/Nebula.dll",
+                "path": "BepInEx/plugins/Nebula/Nebula.dll"
             }
-        }
+        ]
     },
     {
         "name": "Submerged",
         "version": "v2025.10.22",
         "author": "SubmergedAmongUs",
-        "download": {
-            "1": {
-                "url": "https://github.com/SubmergedAmongUs/Submerged/releases/download/v2025.10.22/Submerged+dependencies_Steam.Itch.zip",
-                "target_version": "20292020"
+        "target_version": {
+            "steam": "20292020",
+            "epic": "6380"
+        },
+        "files": [
+            {
+                "compatible": [
+                    "steam"
+                ],
+                "file_type": "zip",
+                "url": "https://builds.bepinex.dev/projects/bepinex_be/735/BepInEx-Unity.IL2CPP-win-x86-6.0.0-be.735%2B5fef357.zip"
             },
-            "2": {
-                "url": "https://github.com/SubmergedAmongUs/Submerged/releases/download/v2025.10.22/Submerged+dependencies_Epic.MSStore.zip",
-                "target_version": "6279"
+            {
+                "compatible": [
+                    "epic"
+                ],
+                "file_type": "zip",
+                "url": "https://builds.bepinex.dev/projects/bepinex_be/735/BepInEx-Unity.IL2CPP-win-x64-6.0.0-be.735%2B5fef357.zip"
+            },
+            {
+                "compatible": [
+                    "steam",
+                    "epic"
+                ],
+                "file_type": "normal",
+                "url": "https://github.com/SubmergedAmongUs/Submerged/releases/download/v2025.10.22/Submerged.dll",
+                "path": "BepInEx/plugins/Submerged/Submerged.dll"
             }
-        }
+        ]
     }
 ]

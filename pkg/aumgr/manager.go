@@ -26,12 +26,12 @@ func GetAmongUsDir() (string, error) {
 	return val, nil
 }
 
-type LauncherType int
+type LauncherType string
 
 const (
-	LauncherUnknown LauncherType = iota
-	LauncherSteam
-	LauncherEpicGames
+	LauncherUnknown   LauncherType = ""
+	LauncherSteam     LauncherType = "steam"
+	LauncherEpicGames LauncherType = "epic"
 )
 
 var launcherTypeNames = map[LauncherType]string{

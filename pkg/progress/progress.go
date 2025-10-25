@@ -13,6 +13,7 @@ type Progress interface {
 	Done()
 	Start() bool
 	Working() bool
+	GetValue() float64
 }
 
 func NewFyneProgress(progress *widget.ProgressBar) *FyneProgress {
@@ -60,4 +61,9 @@ func (p *FyneProgress) Working() bool {
 	p.l.Lock()
 	defer p.l.Unlock()
 	return p.working
+}
+
+func (p *FyneProgress) GetValue() float64 {
+	val, _ := p.bind.Get()
+	return val
 }

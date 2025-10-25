@@ -9,7 +9,7 @@ import (
 )
 
 func (s *State) FetchMods() error {
-	mods, err := fetchMods()
+	mods, err := ModProvider()
 	if err != nil {
 		return err
 	}
@@ -30,7 +30,7 @@ func (s *State) GetModTitleList() []string {
 
 const modRepoURL = "https://cdn.sabafly.net/au_mods/mods_v3.json"
 
-func fetchMods() ([]modmgr.Mod, error) {
+var ModProvider = func() ([]modmgr.Mod, error) {
 	resp, err := http.Get(modRepoURL) // Pre-fetch to speed up later
 	if err != nil {
 		slog.Warn("Failed to pre-fetch mod repository", "error", err)

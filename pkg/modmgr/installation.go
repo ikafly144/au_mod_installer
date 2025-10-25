@@ -16,7 +16,7 @@ import (
 	"strings"
 )
 
-const currentFileVersion = 1
+const currentFileVersion = 2
 
 type ModInstallation struct {
 	FileVersion          int           `json:"file_version"`
@@ -52,6 +52,9 @@ func LoadInstallationInfo(filePath string) (*ModInstallation, error) {
 	var installation ModInstallation
 	if err := decoder.Decode(&installation); err != nil {
 		return nil, err
+	}
+	if installation.FileVersion > currentFileVersion {
+		return nil, fmt.Errorf("unsupported installation file version: %d", installation.FileVersion)
 	}
 	return &installation, nil
 }
@@ -121,23 +124,51 @@ func InstallMod(gamePath string, gameManifest aumgr.Manifest, launcherType aumgr
 		return nil, fmt.Errorf("failed to save installation info: %w", err)
 	}
 
+	gameRoot, err := os.OpenRoot(gamePath)
+	if err != nil {
+		return nil, err
+	}
 	hClient := http.DefaultClient
-	req, err := http.NewRequest(http.MethodGet, mod.DownloadURL(launcherType), nil)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := hClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	contentLength := resp.ContentLength
-	if contentLength <= 0 {
-		return nil, fmt.Errorf("invalid content length: %d", contentLength)
-	}
-	slog.Info("Downloading mod", "url", mod.DownloadURL(launcherType), "contentLength", contentLength)
-	if err := extractZip(resp.Body, contentLength, gamePath, progress); err != nil {
-		return nil, err
+	for file := range mod.Downloads(launcherType) {
+		req, err := http.NewRequest(http.MethodGet, file.URL, nil)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := hClient.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+		contentLength := resp.ContentLength
+		if contentLength <= 0 {
+			return nil, fmt.Errorf("invalid content length: %d", contentLength)
+		}
+		slog.Info("Downloading mod", "url", file.URL, "contentLength", contentLength)
+		switch file.FileType {
+		case FileTypeZip:
+			if err := extractZip(resp.Body, contentLength, gameRoot, progress, mod.CompatibleFilesCount(launcherType)); err != nil {
+				return nil, err
+			}
+		case FileTypeNormal:
+			_ = gameRoot.MkdirAll(filepath.Dir(file.Path), 0755)
+			destFile, err := gameRoot.OpenFile(file.Path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+			if err != nil {
+				return nil, err
+			}
+			defer destFile.Close()
+			buf := &ProgressWrapper{
+				start:    progress.GetValue(),
+				goal:     uint64(contentLength),
+				scale:    (1.0 / float64(mod.CompatibleFilesCount(launcherType))),
+				progress: progress,
+				buf:      destFile,
+			}
+			if _, err := io.Copy(buf, resp.Body); err != nil {
+				return nil, err
+			}
+		default:
+			return nil, fmt.Errorf("unknown file type: %s", file.FileType)
+		}
 	}
 	installation.Status = InstallStatusCompatible
 	if err := SaveInstallationInfo(installationInfoFilePath, installation); err != nil {
@@ -223,7 +254,29 @@ func uninstallMod(gamePath string, installationInfoFilePath string, progress pro
 	return nil
 }
 
+type ProgressWrapper struct {
+	start    float64
+	goal     uint64
+	scale    float64
+	progress progress.Progress
+	bytes    int
+	buf      io.Writer
+}
+
+func (pw *ProgressWrapper) Write(data []byte) (n int, err error) {
+	if pw.buf != nil {
+		n, err = pw.buf.Write(data)
+	}
+	pw.bytes += n
+	if pw.scale > 0 && pw.progress != nil {
+		pw.progress.SetValue(float64(pw.bytes)/float64(pw.goal)*pw.scale + pw.start)
+	}
+	return
+}
+
 type ProgressWriter struct {
+	start    float64
+	scale    float64
 	goal     uint64
 	progress progress.Progress
 	buf      *bytes.Buffer
@@ -234,14 +287,16 @@ func (pw *ProgressWriter) Write(data []byte) (n int, err error) {
 		n, err = pw.buf.Write(data)
 	}
 	if pw.goal > 0 && pw.progress != nil {
-		pw.progress.SetValue(float64(pw.buf.Len()) / float64(pw.goal))
+		pw.progress.SetValue(float64(pw.buf.Len())/float64(pw.goal)*pw.scale + pw.start)
 	}
 	return
 }
 
-func extractZip(reader io.Reader, contentLength int64, destPath string, progress progress.Progress) error {
+func extractZip(reader io.Reader, contentLength int64, destRoot *os.Root, progress progress.Progress, n int) error {
 	buf := &ProgressWriter{
-		goal:     uint64(float64(contentLength) * (1.0 / 0.92)),
+		start:    progress.GetValue(),
+		scale:    (1.0 / float64(n)) * 0.9,
+		goal:     uint64(contentLength),
 		progress: progress,
 		buf:      new(bytes.Buffer),
 	}
@@ -254,22 +309,23 @@ func extractZip(reader io.Reader, contentLength int64, destPath string, progress
 	}
 	filesCount := len(zipReader.File)
 	i := 0
+	start := progress.GetValue()
 	for _, f := range zipReader.File {
 		if f.FileInfo().IsDir() {
 			continue
 		}
-		if err := extractFile(f, destPath); err != nil {
+		if err := extractFile(f, destRoot); err != nil {
 			return err
 		}
 		i++
 		if progress != nil {
-			progress.SetValue((float64(i)/float64(filesCount))*0.08 + 0.92)
+			progress.SetValue(float64(i)/float64(filesCount)*buf.scale*0.2 + start)
 		}
 	}
 	return nil
 }
 
-func extractFile(f *zip.File, destPath string) error {
+func extractFile(f *zip.File, destRoot *os.Root) error {
 	rc, err := f.Open()
 	if err != nil {
 		return err
@@ -281,10 +337,8 @@ func extractFile(f *zip.File, destPath string) error {
 		return nil
 	}
 
-	_ = os.MkdirAll(filepath.Dir(filepath.Join(destPath, f.Name)), 0755)
-
-	destFilePath := filepath.Join(destPath, f.Name)
-	destFile, err := os.OpenFile(destFilePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, f.Mode())
+	_ = destRoot.MkdirAll(filepath.Dir(f.Name), 0755)
+	destFile, err := destRoot.OpenFile(f.Name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, f.Mode())
 	if err != nil {
 		return err
 	}
