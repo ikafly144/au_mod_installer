@@ -11,7 +11,7 @@ import (
 
 func main() {
 	a := app.New()
-	w := a.NewWindow(lang.LocalizeKey("app.name", "Among Us Mod Loader"))
+	w := a.NewWindow(lang.LocalizeKey("app.name", "Among Us Mod ローダー"))
 	if err := ui.Main(w); err != nil {
 		dialog.Message("UIの初期化に失敗しました: %s", err.Error()).Title("エラーが発生しました").Error()
 		os.Exit(1)

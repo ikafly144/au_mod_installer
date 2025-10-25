@@ -5,6 +5,7 @@ import (
 	"au_mod_installer/ui/common"
 	"log/slog"
 
+	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/lang"
@@ -49,6 +50,7 @@ func (l *Launcher) Tab() (*container.TabItem, error) {
 			widget.NewRichTextFromMarkdown("## "+lang.LocalizeKey("installer.select_install_path", "Among Usのインストール先を選択")),
 			l.state.InstallSelect,
 			widget.NewSeparator(),
+			widget.NewCard("TODO", "なにかいい感じのようこそテキスト", widget.NewLabelWithStyle("後でやる", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})),
 		),
 		l.launchButton,
 	)
