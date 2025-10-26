@@ -3,7 +3,6 @@ package common
 import (
 	"au_mod_installer/pkg/modmgr"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"net/http"
 )
@@ -14,18 +13,6 @@ func (s *State) FetchMods() error {
 		return err
 	}
 	return s.Mods.Set(mods)
-}
-
-func (s *State) GetModTitleList() []string {
-	names := make([]string, s.Mods.Length())
-	mods, err := s.Mods.Get()
-	if err != nil {
-		return names
-	}
-	for i, mod := range mods {
-		names[i] = fmt.Sprintf("%s (v%s)", mod.Name, mod.Version)
-	}
-	return names
 }
 
 const modRepoURL = "https://cdn.sabafly.net/au_mods/mods_v4.json"

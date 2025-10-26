@@ -153,8 +153,8 @@
         ]
     },
     {
-        "name": "SuperNewRoles + Submerged",
-        "version": "3.1.1.2",
+        "name": "SNR + Submerged",
+        "version": "3.1.1.2 + v2025.10.22",
         "author": "SuperNewRoles Team + SubmergedAmongUs",
         "target_version": {
             "steam": "20292020",

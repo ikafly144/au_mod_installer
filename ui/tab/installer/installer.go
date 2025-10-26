@@ -26,6 +26,7 @@ type Installer struct {
 	installButton    *widget.Button
 	modInstalledInfo *widget.Label
 	modsSelect       *widget.Select
+	modsSelectInfo   *widget.Label
 	progressBar      *progress.FyneProgress
 	modRefreshButton *widget.Button
 
@@ -45,7 +46,8 @@ func NewInstallerTab(s *common.State) common.Tab {
 		uninstallButton:  widget.NewButtonWithIcon(lang.LocalizeKey("installer.uninstall", "アンインストール"), theme.DeleteIcon(), i.runUninstall),
 		installButton:    widget.NewButtonWithIcon(lang.LocalizeKey("installer.install", "インストール"), theme.DownloadIcon(), i.runInstall),
 		modInstalledInfo: widget.NewLabel(lang.LocalizeKey("installer.select_install_path", "インストール先を選択してください。")),
-		modsSelect:       widget.NewSelect([]string{}, nil),
+		modsSelect:       widget.NewSelect([]string{}, i.selectInstallMod),
+		modsSelectInfo:   widget.NewLabel(lang.LocalizeKey("installer.select_install_mod", "インストールするModを選択してください。")),
 		progressBar:      progress.NewFyneProgress(widget.NewProgressBar()),
 		modRefreshButton: widget.NewButtonWithIcon(lang.LocalizeKey("installer.refresh_mods", "Modを再取得"), theme.ViewRefreshIcon(), i.refetchMods),
 	}
@@ -58,6 +60,8 @@ func NewInstallerTab(s *common.State) common.Tab {
 func (i *Installer) init() {
 	i.modInstalledInfo.Wrapping = fyne.TextWrapWord
 	i.modInstalledInfo.TextStyle.Symbol = true
+	i.modsSelectInfo.Wrapping = fyne.TextWrapWord
+	i.modsSelectInfo.TextStyle.Symbol = true
 	i.installButton.Importance = widget.HighImportance
 	i.uninstallButton.Importance = widget.DangerImportance
 	i.uninstallButton.Disable()
@@ -99,6 +103,8 @@ func (i *Installer) Tab() (*container.TabItem, error) {
 			widget.NewSeparator(),
 			widget.NewRichTextFromMarkdown("## "+lang.LocalizeKey("installer.select_mod", "インストールするModを選択")),
 			container.New(layout.NewBorderLayout(nil, nil, nil, i.modRefreshButton), i.modsSelect, i.modRefreshButton),
+			widget.NewRichTextFromMarkdown("### "+lang.LocalizeKey("installer.selected_mod_info", "選択されたModの情報")),
+			i.modsSelectInfo,
 			i.installButton,
 			widget.NewSeparator(),
 			widget.NewRichTextFromMarkdown("### "+lang.LocalizeKey("installer.installation_status", "インストール状況")), i.modInstalledInfo,
@@ -379,7 +385,7 @@ func (i *Installer) refreshModInstallation() {
 				slog.Warn("Failed to get mods", "error", err)
 			}
 			if i := slices.IndexFunc(mods, func(m modmgr.Mod) bool {
-				return slices.ContainsFunc(mods, func(im modmgr.Mod) bool {
+				return slices.ContainsFunc(installationInfo.InstalledMods, func(im modmgr.InstalledModInfo) bool {
 					return im.Name == m.Name && im.Version != m.Version
 				})
 			}); i != -1 {
@@ -416,6 +422,38 @@ func (i *Installer) refreshModInstallation() {
 	}
 }
 
+func (i *Installer) selectInstallMod(modName string) {
+	if modName == "" {
+		i.modsSelectInfo.SetText(lang.LocalizeKey("installer.select_install_mod", "インストールするModを選択してください。"))
+		return
+	}
+
+	selectedModIndex := i.modsSelect.SelectedIndex()
+	if selectedModIndex < 0 || selectedModIndex >= len(i.modIndexMap) {
+		i.state.ErrorText.Segments = []widget.RichTextSegment{
+			&widget.TextSegment{Text: lang.LocalizeKey("installer.error.no_mod_selected", "インストールするModが選択されていません。"), Style: widget.RichTextStyle{ColorName: theme.ColorNameError}},
+		}
+		i.state.ErrorText.Refresh()
+		i.state.ErrorText.Show()
+		return
+	}
+	selected, err := i.state.Mods.GetValue(i.modIndexMap[selectedModIndex])
+	if err != nil {
+		i.state.ErrorText.Segments = []widget.RichTextSegment{
+			&widget.TextSegment{Text: lang.LocalizeKey("installer.error.mod_not_found", "選択されたModが見つかりません。"), Style: widget.RichTextStyle{ColorName: theme.ColorNameError}},
+		}
+		i.state.ErrorText.Refresh()
+		i.state.ErrorText.Show()
+		return
+	}
+
+	info := lang.LocalizeKey("installer.info.mod_name", "Mod名: ") + selected.Name + "\n"
+	info += lang.LocalizeKey("installer.info.mod_version", "バージョン: ") + selected.Version + "\n"
+	info += lang.LocalizeKey("installer.info.mod_author", "作者: ") + selected.Author + "\n"
+
+	i.modsSelectInfo.SetText(strings.TrimSpace(info))
+}
+
 func (i *Installer) refreshModList() {
 	mods, err := i.state.Mods.Get()
 	if err != nil {
@@ -430,7 +468,7 @@ func (i *Installer) refreshModList() {
 			continue
 		}
 		indexMap = append(indexMap, idx)
-		modNames[index] = mod.Name + " (" + mod.Version + ")"
+		modNames[index] = mod.Name
 		index++
 	}
 	i.modIndexMap = indexMap

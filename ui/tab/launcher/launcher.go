@@ -15,8 +15,9 @@ import (
 )
 
 type Launcher struct {
-	state        *common.State
-	launchButton *widget.Button
+	state           *common.State
+	launchButton    *widget.Button
+	greetingContent *widget.Label
 
 	canLaunchListener binding.DataListener
 }
@@ -26,8 +27,9 @@ var _ common.Tab = (*Launcher)(nil)
 func NewLauncherTab(s *common.State) common.Tab {
 	var l Launcher
 	l = Launcher{
-		state:        s,
-		launchButton: widget.NewButtonWithIcon(lang.LocalizeKey("launcher.launch", "起動"), theme.MediaPlayIcon(), l.runLaunch),
+		state:           s,
+		launchButton:    widget.NewButtonWithIcon(lang.LocalizeKey("launcher.launch", "起動"), theme.MediaPlayIcon(), l.runLaunch),
+		greetingContent: widget.NewLabelWithStyle("現在開発中！", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 	}
 
 	l.init()
@@ -41,6 +43,8 @@ func (l *Launcher) init() {
 		l.state.CanLaunch.AddListener(l.canLaunchListener)
 		l.checkLaunchState()
 	}
+	l.greetingContent.Wrapping = fyne.TextWrapWord
+	l.greetingContent.Importance = widget.HighImportance
 }
 
 func (l *Launcher) Tab() (*container.TabItem, error) {
@@ -50,7 +54,7 @@ func (l *Launcher) Tab() (*container.TabItem, error) {
 			widget.NewRichTextFromMarkdown("## "+lang.LocalizeKey("installer.select_install_path", "Among Usのインストール先を選択")),
 			l.state.InstallSelect,
 			widget.NewSeparator(),
-			widget.NewCard("Among Us Mod Launcher", "バージョン："+l.state.Version, widget.NewLabelWithStyle("現在開発中！", fyne.TextAlignTrailing, fyne.TextStyle{Bold: true})),
+			widget.NewCard("Among Us Mod Launcher", "バージョン："+l.state.Version, l.greetingContent),
 		),
 		l.launchButton,
 	)
