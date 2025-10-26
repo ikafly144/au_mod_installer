@@ -143,6 +143,7 @@ func InstallMod(gameRoot *os.Root, gameManifest aumgr.Manifest, launcherType aum
 		if err := UninstallMod(gameRoot, progress); err != nil {
 			return nil, fmt.Errorf("failed to remove old mod installation: %w", err)
 		}
+		progress.SetValue(0.0)
 	}
 
 	var installedMods []InstalledModInfo
@@ -278,7 +279,8 @@ func uninstallMod(gameRoot *os.Root, progress progress.Progress) error {
 				return nil
 			}
 			if err := gameRoot.RemoveAll(path); err != nil {
-				return err
+				slog.Warn("Failed to delete file during uninstallation", "file", path, "error", err)
+				return nil
 			}
 			return nil
 		}); err != nil {
