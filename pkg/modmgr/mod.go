@@ -6,12 +6,27 @@ import (
 )
 
 type Mod struct {
+	Hidden        bool                          `json:"hidden,omitempty"`
 	Name          string                        `json:"name"`
 	Version       string                        `json:"version"`
 	Author        string                        `json:"author"`
+	Dependencies  []ModDependency               `json:"dependencies,omitempty"`
 	Files         []ModFile                     `json:"files"`
 	TargetVersion map[aumgr.LauncherType]string `json:"target_version,omitempty"`
 }
+
+type ModDependency struct {
+	Name string            `json:"name"`
+	Type ModDependencyType `json:"type"`
+}
+
+type ModDependencyType string
+
+const (
+	ModDependencyTypeRequired ModDependencyType = "required"
+	ModDependencyTypeOptional ModDependencyType = "optional"
+	ModDependencyTypeConflict ModDependencyType = "conflict"
+)
 
 type ModFile struct {
 	Compatible []aumgr.LauncherType `json:"compatible"`
@@ -31,7 +46,7 @@ func (m Mod) IsCompatible(launcherType aumgr.LauncherType, gameVersion string) b
 	if version, ok := m.TargetVersion[launcherType]; !ok || version != gameVersion {
 		return false
 	}
-	return m.CompatibleFilesCount(launcherType) > 0
+	return m.CompatibleFilesCount(launcherType) > 0 || (len(m.Dependencies) > 0 && len(m.Files) == 0)
 }
 
 func (m Mod) CompatibleFilesCount(launcherType aumgr.LauncherType) int {

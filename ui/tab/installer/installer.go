@@ -5,6 +5,7 @@ import (
 	"au_mod_installer/pkg/modmgr"
 	"au_mod_installer/pkg/progress"
 	"au_mod_installer/ui/common"
+	"fmt"
 	"log/slog"
 	"os"
 	"slices"
@@ -27,6 +28,8 @@ type Installer struct {
 	modsSelect       *widget.Select
 	progressBar      *progress.FyneProgress
 	modRefreshButton *widget.Button
+
+	modIndexMap []int
 
 	installationListener    binding.DataListener
 	modListener             binding.DataListener
@@ -120,7 +123,7 @@ func (i *Installer) runInstall() {
 		return
 	}
 	selectedModIndex := i.modsSelect.SelectedIndex()
-	if selectedModIndex < 0 || selectedModIndex >= i.state.Mods.Length() {
+	if selectedModIndex < 0 || selectedModIndex >= len(i.modIndexMap) {
 		i.state.ErrorText.Segments = []widget.RichTextSegment{
 			&widget.TextSegment{Text: lang.LocalizeKey("installer.error.no_mod_selected", "インストールするModが選択されていません。"), Style: widget.RichTextStyle{ColorName: theme.ColorNameError}},
 		}
@@ -128,7 +131,7 @@ func (i *Installer) runInstall() {
 		i.state.ErrorText.Show()
 		return
 	}
-	selected, err := i.state.Mods.GetValue(selectedModIndex)
+	selected, err := i.state.Mods.GetValue(i.modIndexMap[selectedModIndex])
 	if err != nil {
 		i.state.ErrorText.Segments = []widget.RichTextSegment{
 			&widget.TextSegment{Text: lang.LocalizeKey("installer.error.mod_not_found", "選択されたModが見つかりません。"), Style: widget.RichTextStyle{ColorName: theme.ColorNameError}},
@@ -136,6 +139,23 @@ func (i *Installer) runInstall() {
 		i.state.ErrorText.Refresh()
 		i.state.ErrorText.Show()
 		return
+	}
+
+	// Resolve dependencies
+	resolved := make(map[string]modmgr.Mod)
+	unresolved := make(map[string]struct{})
+	conflict := make(map[string][]string)
+	if err := i.resolveDependencies(selected, resolved, unresolved, conflict); err != nil {
+		i.state.ErrorText.Segments = []widget.RichTextSegment{
+			&widget.TextSegment{Text: lang.LocalizeKey("installer.error.dependency_resolution_failed", "Modの依存関係の解決に失敗しました: ") + err.Error(), Style: widget.RichTextStyle{ColorName: theme.ColorNameError}},
+		}
+		i.state.ErrorText.Refresh()
+		i.state.ErrorText.Show()
+		return
+	}
+	mods := make([]modmgr.Mod, 0, len(resolved))
+	for _, mod := range resolved {
+		mods = append(mods, mod)
 	}
 
 	detectedLauncher := aumgr.DetectLauncherType(path)
@@ -166,7 +186,14 @@ func (i *Installer) runInstall() {
 			_ = i.state.CanLaunch.Set(false)
 			_ = i.state.CanInstall.Set(false)
 		})
-		_, err = modmgr.InstallMod(path, manifest, detectedLauncher, selected, i.progressBar)
+
+		gameRoot, err := os.OpenRoot(path)
+		if err != nil {
+			slog.Warn("Failed to open game root", "error", err)
+			return
+		}
+
+		_, err = modmgr.InstallMod(gameRoot, manifest, detectedLauncher, mods, i.progressBar)
 		if err != nil {
 			fyne.DoAndWait(func() {
 				i.state.ErrorText.Segments = []widget.RichTextSegment{
@@ -189,6 +216,42 @@ func (i *Installer) runInstall() {
 	}()
 }
 
+func (i *Installer) resolveDependencies(mod modmgr.Mod, resolved map[string]modmgr.Mod, unresolved map[string]struct{}, conflict map[string][]string) error {
+	if _, ok := resolved[mod.Name]; ok {
+		return nil
+	}
+	if _, ok := unresolved[mod.Name]; ok {
+		return fmt.Errorf("circular dependency detected: %s", mod.Name)
+	}
+	unresolved[mod.Name] = struct{}{}
+	for _, dep := range mod.Dependencies {
+		switch dep.Type {
+		case modmgr.ModDependencyTypeRequired:
+			depMod, err := i.state.Mod(dep.Name)
+			if err != nil {
+				return fmt.Errorf("failed to resolve dependency %s for mod %s: %w", dep.Name, mod.Name, err)
+			}
+			if err := i.resolveDependencies(*depMod, resolved, unresolved, conflict); err != nil {
+				return err
+			}
+		case modmgr.ModDependencyTypeOptional:
+			depMod, err := i.state.Mod(dep.Name)
+			if err != nil {
+				slog.Info("Optional dependency not found, skipping", "dependency", dep.Name, "mod", mod.Name)
+				continue
+			}
+			if err := i.resolveDependencies(*depMod, resolved, unresolved, conflict); err != nil {
+				return err
+			}
+		case modmgr.ModDependencyTypeConflict:
+			conflict[mod.Name] = append(conflict[mod.Name], dep.Name)
+		}
+	}
+	resolved[mod.Name] = mod
+	delete(unresolved, mod.Name)
+	return nil
+}
+
 func (i *Installer) runUninstall() {
 	defer i.refreshModInstallation()
 	i.state.ErrorText.Hide()
@@ -202,8 +265,19 @@ func (i *Installer) runUninstall() {
 		return
 	}
 	slog.Info("Uninstalling mod", "path", path)
-	installationInfoFilePath := modmgr.GetInstallationInfoFilePath(path)
-	if _, err := os.Stat(installationInfoFilePath); os.IsNotExist(err) {
+
+	gameRoot, err := os.OpenRoot(path)
+	if err != nil {
+		i.state.ErrorText.Segments = []widget.RichTextSegment{
+			&widget.TextSegment{Text: lang.LocalizeKey("installer.error.failed_to_open_path", "指定されたパスのオープンに失敗しました。: ") + err.Error(), Style: widget.RichTextStyle{ColorName: theme.ColorNameError}},
+		}
+		i.state.ErrorText.Refresh()
+		i.state.ErrorText.Show()
+		slog.Warn("Failed to open game root", "error", err)
+		return
+	}
+
+	if _, err := gameRoot.Stat(modmgr.InstallationInfoFileName); os.IsNotExist(err) {
 		i.state.ErrorText.Segments = []widget.RichTextSegment{
 			&widget.TextSegment{Text: lang.LocalizeKey("installer.error.mod_not_installed", "このパスにはModがインストールされていません。"), Style: widget.RichTextStyle{ColorName: theme.ColorNameError}},
 		}
@@ -212,7 +286,7 @@ func (i *Installer) runUninstall() {
 		return
 	}
 	go func() {
-		if err := modmgr.UninstallMod(path, installationInfoFilePath, i.progressBar); err != nil {
+		if err := modmgr.UninstallMod(gameRoot, i.progressBar); err != nil {
 			fyne.Do(func() {
 				i.state.ErrorText.Segments = []widget.RichTextSegment{
 					&widget.TextSegment{Text: lang.LocalizeKey("installer.error.failed_to_uninstall", "Modのアンインストールに失敗しました: ") + err.Error(), Style: widget.RichTextStyle{ColorName: theme.ColorNameError}},
@@ -278,8 +352,15 @@ func (i *Installer) refreshModInstallation() {
 			i.modInstalledInfo.SetText(lang.LocalizeKey("installer.error.failed_to_get_version", "Modがインストールされていますが、ゲームのバージョン情報の取得に失敗しました。"))
 			return
 		}
-		installationInfoFilePath := modmgr.GetInstallationInfoFilePath(path)
-		installationInfo, err := modmgr.LoadInstallationInfo(installationInfoFilePath)
+
+		gameRoot, err := os.OpenRoot(path)
+		if err != nil {
+			slog.Warn("Failed to open game root", "error", err)
+			i.modInstalledInfo.SetText(lang.LocalizeKey("installer.error.failed_to_open_path", "Modがインストールされていますが、インストール先のオープンに失敗しました。"))
+			return
+		}
+
+		installationInfo, err := modmgr.LoadInstallationInfo(gameRoot)
 		if err != nil {
 			slog.Warn("Failed to load installation info", "error", err)
 			i.modInstalledInfo.SetText(lang.LocalizeKey("installer.error.failed_to_get_installation_info", "Modがインストールされていますが、インストール情報の取得に失敗しました。"))
@@ -298,7 +379,9 @@ func (i *Installer) refreshModInstallation() {
 				slog.Warn("Failed to get mods", "error", err)
 			}
 			if i := slices.IndexFunc(mods, func(m modmgr.Mod) bool {
-				return installationInfo.InstalledMod.Name == m.Name && installationInfo.InstalledMod.Version != m.Version
+				return slices.ContainsFunc(mods, func(im modmgr.Mod) bool {
+					return im.Name == m.Name && im.Version != m.Version
+				})
 			}); i != -1 {
 				info += lang.LocalizeKey("installer.info.mod_version_outdated", "Modのバージョンが最新のものと異なります。Modを更新してください。") + "\n"
 			} else {
@@ -308,12 +391,18 @@ func (i *Installer) refreshModInstallation() {
 			info += lang.LocalizeKey("installer.info.game_version", "ゲームバージョン: ") + manifest.GetVersion() + " (Modインストール時: " + installationInfo.InstalledGameVersion + ")\n"
 			info += lang.LocalizeKey("installer.info.mod_incompatible", "Modは現在のゲームバージョンと互換性がありません。") + "\n"
 			installationInfo.Status = modmgr.InstallStatusIncompatible
-			if err := modmgr.SaveInstallationInfo(installationInfoFilePath, installationInfo); err != nil {
+			if err := modmgr.SaveInstallationInfo(gameRoot, installationInfo); err != nil {
 				slog.Warn("Failed to save installation info", "error", err)
 			}
 		}
-		info += lang.LocalizeKey("installer.info.mod_name", "Mod: ") + installationInfo.InstalledMod.Name + "\n"
-		info += lang.LocalizeKey("installer.info.mod_version", "Modバージョン: ") + installationInfo.InstalledMod.Version + "\n"
+		var modNames string
+		for idx, mod := range installationInfo.InstalledMods {
+			if idx > 0 {
+				modNames += ", "
+			}
+			modNames += mod.Name + " (" + mod.Version + ")"
+		}
+		info += lang.LocalizeKey("installer.info.mod_name", "Mod: ") + modNames + "\n"
 		i.modInstalledInfo.SetText(strings.TrimSpace(info))
 		if err := i.state.CanLaunch.Set(canLaunch); err != nil {
 			slog.Warn("Failed to set launchable", "error", err)
@@ -334,10 +423,18 @@ func (i *Installer) refreshModList() {
 		return
 	}
 	modNames := make([]string, len(mods))
+	indexMap := make([]int, 0, len(mods))
+	index := 0
 	for idx, mod := range mods {
-		modNames[idx] = mod.Name + " (" + mod.Version + ")"
+		if mod.Hidden {
+			continue
+		}
+		indexMap = append(indexMap, idx)
+		modNames[index] = mod.Name + " (" + mod.Version + ")"
+		index++
 	}
-	i.modsSelect.Options = modNames
+	i.modIndexMap = indexMap
+	i.modsSelect.Options = modNames[:index]
 	i.modsSelect.ClearSelected()
 	i.modsSelect.Refresh()
 }

@@ -1,8 +1,9 @@
 [
     {
-        "name": "SuperNewRoles",
-        "version": "3.1.1.2",
-        "author": "SuperNewRoles Team",
+        "hidden": true,
+        "name": "BepInEx",
+        "version": "6.0.0-be.735+5fef357",
+        "author": "BepInEx Team",
         "target_version": {
             "steam": "20292020",
             "epic": "6380"
@@ -22,6 +23,59 @@
                 "file_type": "zip",
                 "url": "https://builds.bepinex.dev/projects/bepinex_be/735/BepInEx-Unity.IL2CPP-win-x64-6.0.0-be.735%2B5fef357.zip"
             },
+            {
+                "compatible": [
+                    "steam",
+                    "epic"
+                ],
+                "file_type": "normal",
+                "url": "https://cdn.sabafly.net/au_mods/BepInEx.cfg",
+                "path": "BepInEx/config/BepInEx.cfg"
+            }
+        ]
+    },
+    {
+        "hidden": true,
+        "name": "Reactor",
+        "version": "2.5.0",
+        "author": "NuclearPowered",
+        "target_version": {
+            "steam": "20292020",
+            "epic": "6380"
+        },
+        "dependencies": [
+            {
+                "name": "BepInEx",
+                "type": "required"
+            }
+        ],
+        "files": [
+            {
+                "compatible": [
+                    "steam",
+                    "epic"
+                ],
+                "file_type": "normal",
+                "url": "https://github.com/NuclearPowered/Reactor/releases/download/2.5.0/Reactor.dll",
+                "path": "BepInEx/plugins/Reactor/Reactor.dll"
+            }
+        ]
+    },
+    {
+        "name": "SuperNewRoles",
+        "version": "3.1.1.2",
+        "author": "SuperNewRoles Team",
+        "target_version": {
+            "steam": "20292020",
+            "epic": "6380"
+        },
+        "dependencies": [
+            {
+                "name": "BepInEx",
+                "type": "required"
+            }
+        ],
+        "files": [
             {
                 "compatible": [
                     "steam",
@@ -50,21 +104,13 @@
             "steam": "20292020",
             "epic": "6380"
         },
+        "dependencies": [
+            {
+                "name": "BepInEx",
+                "type": "required"
+            }
+        ],
         "files": [
-            {
-                "compatible": [
-                    "steam"
-                ],
-                "file_type": "zip",
-                "url": "https://builds.bepinex.dev/projects/bepinex_be/735/BepInEx-Unity.IL2CPP-win-x86-6.0.0-be.735%2B5fef357.zip"
-            },
-            {
-                "compatible": [
-                    "epic"
-                ],
-                "file_type": "zip",
-                "url": "https://builds.bepinex.dev/projects/bepinex_be/735/BepInEx-Unity.IL2CPP-win-x64-6.0.0-be.735%2B5fef357.zip"
-            },
             {
                 "compatible": [
                     "steam",
@@ -79,26 +125,22 @@
     {
         "name": "Submerged",
         "version": "v2025.10.22",
-        "author": "SubmergedAmongUs",
+        "author": "Submerged",
         "target_version": {
             "steam": "20292020",
             "epic": "6380"
         },
+        "dependencies": [
+            {
+                "name": "BepInEx",
+                "type": "required"
+            },
+            {
+                "name": "Reactor",
+                "type": "required"
+            }
+        ],
         "files": [
-            {
-                "compatible": [
-                    "steam"
-                ],
-                "file_type": "zip",
-                "url": "https://builds.bepinex.dev/projects/bepinex_be/735/BepInEx-Unity.IL2CPP-win-x86-6.0.0-be.735%2B5fef357.zip"
-            },
-            {
-                "compatible": [
-                    "epic"
-                ],
-                "file_type": "zip",
-                "url": "https://builds.bepinex.dev/projects/bepinex_be/735/BepInEx-Unity.IL2CPP-win-x64-6.0.0-be.735%2B5fef357.zip"
-            },
             {
                 "compatible": [
                     "steam",
@@ -107,6 +149,29 @@
                 "file_type": "normal",
                 "url": "https://github.com/SubmergedAmongUs/Submerged/releases/download/v2025.10.22/Submerged.dll",
                 "path": "BepInEx/plugins/Submerged/Submerged.dll"
+            }
+        ]
+    },
+    {
+        "name": "SuperNewRoles + Submerged",
+        "version": "3.1.1.2",
+        "author": "SuperNewRoles Team + SubmergedAmongUs",
+        "target_version": {
+            "steam": "20292020",
+            "epic": "6380"
+        },
+        "dependencies": [
+            {
+                "name": "BepInEx",
+                "type": "required"
+            },
+            {
+                "name": "SuperNewRoles",
+                "type": "required"
+            },
+            {
+                "name": "Submerged",
+                "type": "required"
             }
         ]
     }

@@ -20,8 +20,12 @@ func (s *State) CheckInstalled() bool {
 	if err != nil || path == "" {
 		return false
 	}
-	installationInfoFilePath := modmgr.GetInstallationInfoFilePath(path)
-	if _, err := os.Stat(installationInfoFilePath); err == nil || !os.IsNotExist(err) {
+	gameRoot, err := os.OpenRoot(path)
+	if err != nil {
+		slog.Warn("Failed to open game root", "error", err)
+		return false
+	}
+	if _, err := gameRoot.Stat(modmgr.InstallationInfoFileName); err == nil || !os.IsNotExist(err) {
 		if err := s.ModInstalled.Set(true); err != nil {
 			slog.Warn("Failed to set modInstalled", "error", err)
 		}

@@ -9,8 +9,8 @@ import (
 	"fyne.io/fyne/v2/container"
 )
 
-func Main(w fyne.Window) error {
-	state, err := common.NewState(w)
+func Main(w fyne.Window, version string) error {
+	state, err := common.NewState(w, version)
 	if err != nil {
 		return err
 	}

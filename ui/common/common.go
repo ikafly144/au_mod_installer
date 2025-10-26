@@ -4,6 +4,7 @@ import (
 	"au_mod_installer/pkg/aumgr"
 	"au_mod_installer/pkg/modmgr"
 	"errors"
+	"fmt"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -12,7 +13,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-func NewState(w fyne.Window) (*State, error) {
+func NewState(w fyne.Window, version string) (*State, error) {
 	detectedPath, err := aumgr.GetAmongUsDir()
 	if err != nil {
 		return nil, err
@@ -32,6 +33,7 @@ func NewState(w fyne.Window) (*State, error) {
 		InstallSelect:    widget.NewSelect([]string{}, s.selectLauncher),
 		ErrorText:        widget.NewRichTextFromMarkdown(""),
 	}
+
 	s.ErrorText.Wrapping = fyne.TextWrapWord
 	s.ErrorText.Hide()
 	s.InstallSelect.PlaceHolder = lang.LocalizeKey("installer.select_install", "（Among Usを選択）")
@@ -45,6 +47,7 @@ func NewState(w fyne.Window) (*State, error) {
 }
 
 type State struct {
+	Version          string
 	Window           fyne.Window
 	SelectedGamePath binding.String
 	DetectedGamePath string
@@ -55,6 +58,19 @@ type State struct {
 
 	InstallSelect *widget.Select
 	ErrorText     *widget.RichText
+}
+
+func (s *State) Mod(name string) (*modmgr.Mod, error) {
+	mods, err := s.Mods.Get()
+	if err != nil {
+		return nil, err
+	}
+	for _, mod := range mods {
+		if mod.Name == name {
+			return &mod, nil
+		}
+	}
+	return nil, fmt.Errorf("mod not found: %s", name)
 }
 
 type Tab interface {
