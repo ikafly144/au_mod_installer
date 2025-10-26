@@ -50,7 +50,7 @@ func (l *Launcher) Tab() (*container.TabItem, error) {
 			widget.NewRichTextFromMarkdown("## "+lang.LocalizeKey("installer.select_install_path", "Among Usのインストール先を選択")),
 			l.state.InstallSelect,
 			widget.NewSeparator(),
-			widget.NewCard("TODO", "なにかいい感じのようこそテキスト", widget.NewLabelWithStyle("後でやる", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})),
+			widget.NewCard("Among Us Mod Launcher", "バージョン："+l.state.Version, widget.NewLabelWithStyle("現在開発中！", fyne.TextAlignTrailing, fyne.TextStyle{Bold: true})),
 		),
 		l.launchButton,
 	)

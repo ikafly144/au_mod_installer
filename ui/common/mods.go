@@ -28,7 +28,7 @@ func (s *State) GetModTitleList() []string {
 	return names
 }
 
-const modRepoURL = "https://cdn.sabafly.net/au_mods/mods_v3.json"
+const modRepoURL = "https://cdn.sabafly.net/au_mods/mods_v4.json"
 
 var ModProvider = func() ([]modmgr.Mod, error) {
 	resp, err := http.Get(modRepoURL) // Pre-fetch to speed up later

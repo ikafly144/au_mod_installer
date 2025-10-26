@@ -23,6 +23,7 @@ func NewState(w fyne.Window, version string) (*State, error) {
 	}
 	var s State
 	s = State{
+		Version:          version,
 		Window:           w,
 		SelectedGamePath: binding.NewString(),
 		DetectedGamePath: detectedPath,
