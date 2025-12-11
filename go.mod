@@ -1,11 +1,13 @@
 module github.com/ikafly144/au_mod_installer
 
-go 1.25.3
+go 1.25.4
 
 require (
 	fyne.io/fyne/v2 v2.7.0
 	github.com/TheTitanrain/w32 v0.0.0-20200114052255-2654d97dbd3d
+	github.com/google/go-github/v80 v80.0.0
 	github.com/sqweek/dialog v0.0.0-20240226140203-065105509627
+	github.com/valkey-io/valkey-go v1.0.69
 	github.com/zzl/go-win32api v1.2.0
 	golang.org/x/sys v0.37.0
 )
@@ -31,6 +33,7 @@ require (
 	github.com/go-text/typesetting v0.3.0 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
+	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/hack-pad/go-indexeddb v0.3.2 // indirect
 	github.com/hack-pad/safejs v0.1.1 // indirect
 	github.com/jackmordaunt/icns/v2 v2.2.6 // indirect
@@ -49,7 +52,6 @@ require (
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/urfave/cli/v2 v2.27.1 // indirect
-	github.com/valkey-io/valkey-go v1.0.69 // indirect
 	github.com/xrash/smetrics v0.0.0-20201216005158-039620a65673 // indirect
 	github.com/yuin/goldmark v1.7.13 // indirect
 	golang.org/x/image v0.32.0 // indirect

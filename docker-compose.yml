@@ -1,13 +1,12 @@
 services:
+  # Valkey (Redis互換) データベース
   valkey:
     image: valkey/valkey:8-alpine
     container_name: au-mod-installer-valkey
     restart: unless-stopped
-    ports:
-      - "6379:6379"
     volumes:
       - valkey-data:/data
-    command: valkey-server --save 60 1 --loglevel warning
+    command: ["valkey-server", "--appendonly", "yes", "--save", "60", "1", "--loglevel", "warning"]
     healthcheck:
       test: ["CMD", "valkey-cli", "ping"]
       interval: 10s
@@ -20,6 +19,7 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # API Server
   server:
     build:
       context: .
@@ -27,13 +27,10 @@ services:
     container_name: au-mod-installer-server
     restart: unless-stopped
     ports:
-      - "8080:8080"
-    volumes:
-      # Mount mods.json for initial data load
-      - ./mods.json:/app/mods.json:ro
+      - "8180:8180"
     environment:
       - TZ=Asia/Tokyo
-    command: ["-addr", ":8080", "-mods", "/app/mods.json", "-valkey", "valkey:6379"]
+    command: ["-addr", ":8180", "-valkey", "valkey:6379"]
     depends_on:
       valkey:
         condition: service_healthy
@@ -48,7 +45,6 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-    # Resource limits
     deploy:
       resources:
         limits:
@@ -57,6 +53,29 @@ services:
         reservations:
           cpus: '0.1'
           memory: 32M
+
+  # Admin Panel
+  admin:
+    build:
+      context: .
+      dockerfile: server-admin/Dockerfile
+    container_name: au-mod-installer-admin
+    restart: unless-stopped
+    ports:
+      - "8181:8181"
+    environment:
+      - TZ=Asia/Tokyo
+    depends_on:
+      valkey:
+        condition: service_healthy
+    command: ["-addr", ":8181", "-valkey", "valkey:6379"]
+    profiles:
+      - with-admin
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # Optional: Nginx reverse proxy
   nginx:

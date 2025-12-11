@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
+	"github.com/google/go-github/v80/github"
+	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 	"github.com/ikafly144/au_mod_installer/server-admin/model"
 	"github.com/ikafly144/au_mod_installer/server-admin/repository"
 	"github.com/ikafly144/au_mod_installer/server-admin/templates"
@@ -23,21 +26,31 @@ func New(repo repository.Repository, tmpl *templates.Templates) *Handler {
 	return &Handler{repo: repo, tmpl: tmpl}
 }
 
-// HandleIndex renders the mod list page
-func (h *Handler) HandleIndex(w http.ResponseWriter, r *http.Request) {
+// HandleList renders the mod list page
+func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 	mods, err := h.repo.GetModList(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
+	modTypes := []struct {
+		Value string
+		Label string
+	}{
+		{Value: string(modmgr.ModTypeMod), Label: "Mod"},
+		{Value: string(modmgr.ModTypeLibrary), Label: "Library"},
+		{Value: string(modmgr.ModTypeModPack), Label: "ModPack"},
+	}
+
 	data := map[string]any{
-		"Title": "Mod一覧",
-		"Mods":  mods,
+		"Title":    "Mod一覧",
+		"Mods":     mods,
+		"ModTypes": modTypes,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := h.tmpl.Render(w, "index", data); err != nil {
+	if err := h.tmpl.Render(w, "list", data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -76,6 +89,78 @@ func (h *Handler) HandleVersionsPage(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := h.tmpl.Render(w, "versions", data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// HandleVersionNew renders the version creation page
+func (h *Handler) HandleVersionNew(w http.ResponseWriter, r *http.Request) {
+	modID := r.PathValue("modID")
+	if modID == "" {
+		http.Error(w, "modID is required", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	mod, err := h.repo.GetMod(ctx, modID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if mod == nil {
+		http.Error(w, "mod not found", http.StatusNotFound)
+		return
+	}
+
+	data := map[string]any{
+		"Title": fmt.Sprintf("新規バージョン - %s", mod.Name),
+		"Mod":   mod,
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := h.tmpl.Render(w, "version_form", data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// HandleVersionEdit renders the version edit page
+func (h *Handler) HandleVersionEdit(w http.ResponseWriter, r *http.Request) {
+	modID := r.PathValue("modID")
+	versionID := r.PathValue("versionID")
+	if modID == "" || versionID == "" {
+		http.Error(w, "modID and versionID are required", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	mod, err := h.repo.GetMod(ctx, modID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if mod == nil {
+		http.Error(w, "mod not found", http.StatusNotFound)
+		return
+	}
+
+	version, err := h.repo.GetVersion(ctx, modID, versionID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if version == nil {
+		http.Error(w, "version not found", http.StatusNotFound)
+		return
+	}
+
+	data := map[string]any{
+		"Title":   fmt.Sprintf("バージョン編集 - %s %s", mod.Name, version.ID),
+		"Mod":     mod,
+		"Version": version,
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := h.tmpl.Render(w, "version_form", data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -396,6 +481,90 @@ func (h *Handler) HandleExport(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=mods_%s.json", time.Now().Format("20060102_150405")))
 	writeJSON(w, http.StatusOK, result)
+}
+
+// HandleSetLatestVersion sets the latest version for a mod
+func (h *Handler) HandleSetLatestVersion(w http.ResponseWriter, r *http.Request) {
+	modID := r.PathValue("modID")
+	versionID := r.PathValue("versionID")
+	if modID == "" || versionID == "" {
+		writeError(w, http.StatusBadRequest, "modID and versionID are required")
+		return
+	}
+
+	ctx := r.Context()
+
+	// Verify version exists
+	_, err := h.repo.GetVersion(ctx, modID, versionID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "version not found")
+		return
+	}
+
+	mod, err := h.repo.GetMod(ctx, modID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if mod == nil {
+		writeError(w, http.StatusNotFound, "mod not found")
+		return
+	}
+
+	mod.LatestVersion = versionID
+	if err := h.repo.SetMod(ctx, *mod); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "latest_version": versionID})
+}
+
+// HandleGetGitHubRelease fetches release info from GitHub
+func (h *Handler) HandleGetGitHubRelease(w http.ResponseWriter, r *http.Request) {
+	repoParam := r.URL.Query().Get("repo")
+	if repoParam == "" {
+		writeError(w, http.StatusBadRequest, "repo is required")
+		return
+	}
+
+	parts := strings.Split(repoParam, "/")
+	if len(parts) != 2 {
+		writeError(w, http.StatusBadRequest, "invalid repo format (expected owner/repo)")
+		return
+	}
+	owner, repo := parts[0], parts[1]
+
+	client := github.NewClient(nil)
+	release, _, err := client.Repositories.GetLatestRelease(r.Context(), owner, repo)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to fetch from github: "+err.Error())
+		return
+	}
+
+	type Asset struct {
+		Name               string `json:"name"`
+		BrowserDownloadURL string `json:"browser_download_url"`
+	}
+
+	type ReleaseResponse struct {
+		TagName string  `json:"tag_name"`
+		Assets  []Asset `json:"assets"`
+	}
+
+	resp := ReleaseResponse{
+		TagName: release.GetTagName(),
+		Assets:  make([]Asset, 0, len(release.Assets)),
+	}
+
+	for _, asset := range release.Assets {
+		resp.Assets = append(resp.Assets, Asset{
+			Name:               asset.GetName(),
+			BrowserDownloadURL: asset.GetBrowserDownloadURL(),
+		})
+	}
+
+	writeJSON(w, http.StatusOK, resp)
 }
 
 type errorResponse struct {

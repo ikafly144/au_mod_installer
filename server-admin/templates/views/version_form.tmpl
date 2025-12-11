@@ -1,0 +1,375 @@
+{{define "version_form"}}
+{{template "layout" .}}
+{{end}}
+
+{{define "content"}}
+<a href="/mods/{{.Mod.ID}}/versions" class="back-link">← バージョン一覧に戻る</a>
+
+<div class="card">
+    <div class="card-header">
+        <h2>{{if .Version.ID}}バージョン編集: {{.Version.ID}}{{else}}新規バージョン作成{{end}}</h2>
+    </div>
+    <div class="card-body">
+        {{if not .Version.ID}}
+        <div class="import-section" style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #eee;">
+            <h3>GitHubからインポート</h3>
+            <div style="display: flex; gap: 10px; margin-top: 10px;">
+                <input type="text" id="github-repo" placeholder="owner/repo (例: ikafly144/au_mod_installer)" class="flex-grow" style="padding: 8px;">
+                <button type="button" class="btn btn-secondary" onclick="fetchGitHubRelease()">取得</button>
+            </div>
+        </div>
+        {{end}}
+
+        <form id="version-form" onsubmit="return false;">
+            <input type="hidden" id="version-editing" value="{{if .Version.ID}}{{.Version.ID}}{{end}}">
+            
+            <div class="form-group">
+                <label for="version-id">バージョン *</label>
+                <input type="text" id="version-id" name="id" required placeholder="例: 1.0.0" value="{{if .Version.ID}}{{.Version.ID}}{{end}}" {{if .Version.ID}}disabled{{end}}>
+            </div>
+
+            <div class="form-group">
+                <label>対象AUバージョン</label>
+                <div id="target-list" class="dynamic-list"></div>
+                <button type="button" class="btn btn-sm btn-secondary" onclick="addTarget()">+ 追加</button>
+            </div>
+            
+            <!-- For Mod/Plugin/Library -->
+            <div id="group-files" class="form-group">
+                <label>ファイル</label>
+                <div id="files-list" class="dynamic-list"></div>
+                <button type="button" class="btn btn-sm btn-secondary" onclick="addFile()">+ 追加</button>
+            </div>
+            <div id="group-deps" class="form-group">
+                <label>依存関係</label>
+                <div id="deps-list" class="dynamic-list"></div>
+                <button type="button" class="btn btn-sm btn-secondary" onclick="addDep()">+ 追加</button>
+            </div>
+
+            <!-- For ModPack -->
+            <div id="group-mods" class="form-group" style="display: none;">
+                <label>同梱Mod</label>
+                <div id="mods-list" class="dynamic-list"></div>
+                <button type="button" class="btn btn-sm btn-secondary" onclick="addMod()">+ 追加</button>
+            </div>
+
+            <div class="form-actions" style="margin-top: 20px;">
+                <button class="btn btn-primary" onclick="saveVersion()">保存</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Datalists for autocomplete -->
+<datalist id="all-mods-list"></datalist>
+{{end}}
+
+{{define "scripts"}}
+<style>
+    .dynamic-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-bottom: 8px;
+    }
+    .dynamic-item {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        background: #f8f9fa;
+        padding: 8px;
+        border-radius: 4px;
+        border: 1px solid #dee2e6;
+    }
+    .dynamic-item input, .dynamic-item select {
+        padding: 4px 8px;
+        border: 1px solid #ced4da;
+        border-radius: 4px;
+    }
+    .dynamic-item .btn-remove {
+        background: #dc3545;
+        color: white;
+        border: none;
+        padding: 4px 8px;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+    .flex-grow { flex-grow: 1; }
+    .w-auto { width: auto; }
+    .w-100 { width: 100px; }
+    .w-150 { width: 150px; }
+</style>
+<script>
+    const modId = '{{.Mod.ID}}';
+    const modType = '{{.Mod.Type}}';
+    // Pre-loaded version data for edit mode
+    const versionData = {{if .Version}}{{json .Version}}{{else}}null{{end}};
+    
+    // Cache for versions
+    const versionsCache = {};
+
+    // UI Helpers
+    function createItem(html) {
+        const div = document.createElement('div');
+        div.className = 'dynamic-item';
+        div.innerHTML = html + '<button type="button" class="btn-remove" onclick="this.parentElement.remove()">×</button>';
+        return div;
+    }
+
+    function addTarget(launcher = '', version = '') {
+        const html = `
+            <select class="target-launcher w-150">
+                <option value="steam" ${launcher === 'steam' ? 'selected' : ''}>Steam</option>
+                <option value="epic" ${launcher === 'epic' ? 'selected' : ''}>Epic Games</option>
+            </select>
+            <input type="text" class="target-version flex-grow" placeholder="バージョン (例: 2024.3.5)" value="${version}">
+        `;
+        document.getElementById('target-list').appendChild(createItem(html));
+    }
+
+    function addFile(data = {}) {
+        const html = `
+            <input type="text" class="file-url flex-grow" placeholder="URL" value="${data.url || ''}">
+            <select class="file-type w-100">
+                <option value="normal" ${data.file_type === 'normal' ? 'selected' : ''}>Normal</option>
+                <option value="zip" ${data.file_type === 'zip' ? 'selected' : ''}>Zip</option>
+            </select>
+            <input type="text" class="file-path w-150" placeholder="展開パス (任意)" value="${data.path || ''}">
+            <label><input type="checkbox" class="file-comp-x86" ${(data.compatible || []).includes('x86') ? 'checked' : ''}> x86</label>
+            <label><input type="checkbox" class="file-comp-x64" ${(data.compatible || []).includes('x64') ? 'checked' : ''}> x64</label>
+        `;
+        document.getElementById('files-list').appendChild(createItem(html));
+    }
+
+    function addDep(data = {}) {
+        const uniqueId = 'dep-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+        const html = `
+            <input type="text" class="dep-id flex-grow" placeholder="Mod ID" value="${data.id || ''}" list="all-mods-list" onchange="onModIdChange(this)">
+            <input type="text" class="dep-version w-100" placeholder="Version" value="${data.version || ''}" list="${uniqueId}" onfocus="onVersionFocus(this)">
+            <datalist id="${uniqueId}"></datalist>
+            <select class="dep-type w-100">
+                <option value="required" ${data.type === 'required' ? 'selected' : ''}>必須</option>
+                <option value="optional" ${data.type === 'optional' ? 'selected' : ''}>任意</option>
+                <option value="conflict" ${data.type === 'conflict' ? 'selected' : ''}>競合</option>
+                <option value="embedded" ${data.type === 'embedded' ? 'selected' : ''}>埋込</option>
+            </select>
+        `;
+        document.getElementById('deps-list').appendChild(createItem(html));
+    }
+
+    function addMod(data = {}) {
+        const uniqueId = 'mod-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+        const html = `
+            <input type="text" class="mod-id flex-grow" placeholder="Mod ID" value="${data.id || ''}" list="all-mods-list" onchange="onModIdChange(this)">
+            <input type="text" class="mod-version w-100" placeholder="Version" value="${data.version || ''}" list="${uniqueId}" onfocus="onVersionFocus(this)">
+            <datalist id="${uniqueId}"></datalist>
+        `;
+        document.getElementById('mods-list').appendChild(createItem(html));
+    }
+
+    async function loadAllMods() {
+        try {
+            const mods = await api('/mods');
+            const datalist = document.getElementById('all-mods-list');
+            datalist.innerHTML = '';
+            mods.forEach(mod => {
+                const option = document.createElement('option');
+                option.value = mod.id;
+                option.textContent = mod.name; // Shows as "id (name)" or similar in some browsers, or just value
+                datalist.appendChild(option);
+            });
+        } catch (error) {
+            console.error('Failed to load mods:', error);
+        }
+    }
+
+    async function fetchGitHubRelease() {
+        const repo = document.getElementById('github-repo').value.trim();
+        if (!repo) {
+            showToast('リポジトリを入力してください', 'error');
+            return;
+        }
+
+        try {
+            const release = await api(`/github/releases/latest?repo=${repo}`);
+            
+            // Set version ID
+            let version = release.tag_name;
+            if (version.startsWith('v')) version = version.substring(1);
+            document.getElementById('version-id').value = version;
+
+            // Add files
+            // document.getElementById('files-list').innerHTML = ''; // Keep existing?
+            release.assets.forEach(asset => {
+                let type = 'normal';
+                if (asset.name.endsWith('.zip')) type = 'zip';
+                
+                addFile({
+                    url: asset.browser_download_url,
+                    file_type: type,
+                    path: ''
+                });
+            });
+            
+            showToast('GitHubから情報を取得しました');
+        } catch (error) {
+            showToast(error.message, 'error');
+        }
+    }
+
+    function onModIdChange(input) {
+        // Clear version input when mod ID changes
+        const row = input.parentElement;
+        const versionInput = row.querySelector('input[placeholder="Version"]');
+        if (versionInput) {
+            versionInput.value = '';
+        }
+    }
+
+    async function onVersionFocus(input) {
+        const row = input.parentElement;
+        const modIdInput = row.querySelector('input[placeholder="Mod ID"]');
+        if (!modIdInput || !modIdInput.value) return;
+
+        const targetModId = modIdInput.value;
+        const datalistId = input.getAttribute('list');
+        const datalist = document.getElementById(datalistId);
+        
+        if (!datalist) return;
+
+        // Use cached versions if available
+        if (versionsCache[targetModId]) {
+            updateVersionDatalist(datalist, versionsCache[targetModId]);
+            return;
+        }
+
+        try {
+            const versions = await api(`/mods/${targetModId}/versions`);
+            versionsCache[targetModId] = versions;
+            updateVersionDatalist(datalist, versions);
+        } catch (error) {
+            console.error(`Failed to load versions for ${targetModId}:`, error);
+        }
+    }
+
+    function updateVersionDatalist(datalist, versions) {
+        datalist.innerHTML = '';
+        versions.forEach(v => {
+            const option = document.createElement('option');
+            option.value = v.id;
+            datalist.appendChild(option);
+        });
+    }
+
+    function initForm() {
+        // Load mod list for autocomplete
+        loadAllMods();
+
+        // Toggle fields based on modType
+        const isModPack = modType === 'modpack';
+        document.getElementById('group-files').style.display = isModPack ? 'none' : 'block';
+        document.getElementById('group-deps').style.display = isModPack ? 'none' : 'block';
+        document.getElementById('group-mods').style.display = isModPack ? 'block' : 'none';
+
+        if (versionData) {
+            // Populate Target Versions
+            if (versionData.target_version) {
+                Object.entries(versionData.target_version).forEach(([k, v]) => addTarget(k, v));
+            }
+
+            if (isModPack) {
+                (versionData.mods || []).forEach(m => addMod(m));
+            } else {
+                (versionData.files || []).forEach(f => addFile(f));
+                (versionData.dependencies || []).forEach(d => addDep(d));
+            }
+        }
+    }
+
+    async function saveVersion() {
+        const editing = document.getElementById('version-editing').value;
+        const versionId = document.getElementById('version-id').value.trim();
+        const isModPack = modType === 'modpack';
+
+        if (!versionId) {
+            showToast('バージョンは必須です', 'error');
+            return;
+        }
+
+        // Collect Target Versions
+        const target_version = {};
+        document.querySelectorAll('#target-list .dynamic-item').forEach(item => {
+            const launcher = item.querySelector('.target-launcher').value;
+            const ver = item.querySelector('.target-version').value.trim();
+            if (launcher && ver) target_version[launcher] = ver;
+        });
+
+        let files = null;
+        let dependencies = null;
+        let mods = null;
+
+        if (isModPack) {
+            mods = [];
+            document.querySelectorAll('#mods-list .dynamic-item').forEach(item => {
+                const id = item.querySelector('.mod-id').value.trim();
+                const ver = item.querySelector('.mod-version').value.trim();
+                if (id) mods.push({ id, version: ver });
+            });
+        } else {
+            files = [];
+            document.querySelectorAll('#files-list .dynamic-item').forEach(item => {
+                const url = item.querySelector('.file-url').value.trim();
+                if (!url) return;
+                const compatible = [];
+                if (item.querySelector('.file-comp-x86').checked) compatible.push('x86');
+                if (item.querySelector('.file-comp-x64').checked) compatible.push('x64');
+                
+                files.push({
+                    url,
+                    file_type: item.querySelector('.file-type').value,
+                    path: item.querySelector('.file-path').value.trim(),
+                    compatible
+                });
+            });
+
+            dependencies = [];
+            document.querySelectorAll('#deps-list .dynamic-item').forEach(item => {
+                const id = item.querySelector('.dep-id').value.trim();
+                if (!id) return;
+                dependencies.push({
+                    id,
+                    version: item.querySelector('.dep-version').value.trim(),
+                    type: item.querySelector('.dep-type').value
+                });
+            });
+        }
+
+        const version = {
+            id: versionId,
+            target_version,
+            files,
+            dependencies,
+            mods
+        };
+
+        try {
+            if (editing) {
+                await api(`/mods/${modId}/versions/${versionId}`, 'PUT', version);
+                showToast('バージョンを更新しました');
+            } else {
+                await api(`/mods/${modId}/versions`, 'POST', version);
+                showToast('バージョンを作成しました');
+            }
+            // Redirect back to list
+            setTimeout(() => {
+                window.location.href = `/mods/${modId}/versions`;
+            }, 500);
+        } catch (error) {
+            showToast(error.message, 'error');
+        }
+    }
+
+    // Initialize on load
+    document.addEventListener('DOMContentLoaded', initForm);
+</script>
+{{end}}

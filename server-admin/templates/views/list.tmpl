@@ -1,4 +1,4 @@
-{{define "index"}}
+{{define "list"}}
 {{template "layout" .}}
 {{end}}
 
@@ -34,7 +34,7 @@
                         -
                         {{end}}
                     </td>
-                    <td>{{if .LatestVersionID}}{{.LatestVersionID}}{{else}}-{{end}}</td>
+                    <td>{{if .LatestVersion}}{{.LatestVersion}}{{else}}-{{end}}</td>
                     <td class="actions">
                         <a href="/mods/{{.ID}}/versions" class="btn btn-secondary">バージョン</a>
                         <button class="btn btn-secondary" onclick='editMod({{json .}})'>編集</button>
@@ -78,8 +78,9 @@
                     <label for="mod-type">タイプ</label>
                     <select id="mod-type" name="type">
                         <option value="">未指定</option>
-                        <option value="mod">Mod</option>
-                        <option value="plugin">Plugin</option>
+                        {{range .ModTypes}}
+                        <option value="{{.Value}}">{{.Label}}</option>
+                        {{end}}
                     </select>
                 </div>
                 <div class="form-group">

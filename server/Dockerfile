@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.23-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
 
@@ -19,7 +19,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /server ./server
 
 # Runtime stage
-FROM alpine:3.19
+FROM alpine:latest
 
 WORKDIR /app
 
@@ -31,9 +31,6 @@ RUN adduser -D -g '' appuser
 
 # Copy binary from builder
 COPY --from=builder /server /app/server
-
-# Copy mods.json (optional, can be overridden by volume mount)
-COPY mods.json /app/mods.json
 
 # Change ownership
 RUN chown -R appuser:appuser /app

@@ -57,11 +57,13 @@ func main() {
 	mux := http.NewServeMux()
 
 	// Static files
-	mux.Handle("GET /static/", http.StripPrefix("/static/", templates.StaticHandler()))
+	mux.Handle("GET /static/", templates.StaticHandler())
 
 	// Page routes
-	mux.HandleFunc("GET /", h.HandleIndex)
-	mux.HandleFunc("GET /mods/{modID}/versions", h.HandleVersionsPage)
+	mux.HandleFunc("GET /{$}", h.HandleList)
+	mux.HandleFunc("GET /mods/{modID}/versions/{$}", h.HandleVersionsPage)
+	mux.HandleFunc("GET /mods/{modID}/versions/new", h.HandleVersionNew)
+	mux.HandleFunc("GET /mods/{modID}/versions/{versionID}/edit", h.HandleVersionEdit)
 
 	// API routes
 	mux.HandleFunc("GET /api/mods", h.HandleGetMods)
@@ -75,13 +77,16 @@ func main() {
 	mux.HandleFunc("GET /api/mods/{modID}/versions/{versionID}", h.HandleGetVersion)
 	mux.HandleFunc("PUT /api/mods/{modID}/versions/{versionID}", h.HandleUpdateVersion)
 	mux.HandleFunc("DELETE /api/mods/{modID}/versions/{versionID}", h.HandleDeleteVersion)
+	mux.HandleFunc("POST /api/mods/{modID}/versions/{versionID}/latest", h.HandleSetLatestVersion)
+
+	mux.HandleFunc("GET /api/github/releases/latest", h.HandleGetGitHubRelease)
 
 	mux.HandleFunc("POST /api/import", h.HandleImport)
 	mux.HandleFunc("GET /api/export", h.HandleExport)
 
 	server := &http.Server{
 		Addr:    addr,
-		Handler: corsMiddleware(mux),
+		Handler: loggingMiddleware(corsMiddleware(mux)),
 	}
 
 	// Start server in a goroutine
@@ -122,5 +127,41 @@ func corsMiddleware(next http.Handler) http.Handler {
 		}
 
 		next.ServeHTTP(w, r)
+	})
+}
+
+type responseWriter struct {
+	http.ResponseWriter
+	status int
+	size   int
+}
+
+func (rw *responseWriter) WriteHeader(status int) {
+	rw.status = status
+	rw.ResponseWriter.WriteHeader(status)
+}
+
+func (rw *responseWriter) Write(b []byte) (int, error) {
+	if rw.status == 0 {
+		rw.status = http.StatusOK
+	}
+	n, err := rw.ResponseWriter.Write(b)
+	rw.size += n
+	return n, err
+}
+
+func loggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		rw := &responseWriter{ResponseWriter: w}
+		next.ServeHTTP(rw, r)
+		slog.Info("request",
+			"method", r.Method,
+			"path", r.URL.Path,
+			"status", rw.status,
+			"size", rw.size,
+			"duration", time.Since(start),
+			"remote", r.RemoteAddr,
+		)
 	})
 }
