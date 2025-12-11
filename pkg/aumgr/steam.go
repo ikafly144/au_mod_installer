@@ -1,12 +1,13 @@
 package aumgr
 
 import (
-	"au_mod_installer/pkg/acf"
 	"bytes"
 	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
+
+	"github.com/ikafly144/au_mod_installer/pkg/acf"
 )
 
 const steamAppID = "945360"

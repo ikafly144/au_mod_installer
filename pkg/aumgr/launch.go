@@ -3,22 +3,31 @@ package aumgr
 import (
 	"fmt"
 	"os/exec"
+	"path/filepath"
 )
 
-func LaunchAmongUs(launcherType LauncherType, amongUsDir string) error {
+func LaunchAmongUs(launcherType LauncherType, amongUsDir string, dllDir string, args ...string) error {
 	switch launcherType {
-	case LauncherSteam:
-		return launchSteam(amongUsDir)
 	case LauncherEpicGames:
-		return launchEpicGames(amongUsDir)
+		return launchEpicGames(amongUsDir, dllDir, args...)
 	default:
-		return fmt.Errorf("unsupported launcher type: %s", launcherType)
+		return launchDefault(amongUsDir, dllDir, args...)
 	}
 }
 
-func launchSteam(amongUsDir string) error {
-	cmd := exec.Command("rundll32.exe", "url.dll,FileProtocolHandler", "steam://launch/"+steamAppID)
-	return cmd.Start()
+func launchDefault(amongUsDir string, dllDir string, args ...string) error {
+	cmd := exec.Command(filepath.Join(amongUsDir, "Among Us.exe"))
+	// if dllDir != "" {
+	// 	if err := windows.SetDllDirectory(dllDir); err != nil {
+	// 		return fmt.Errorf("SetDllDirectory failed: %v", err)
+	// 	}
+	// }
+
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start Among Us: %w", err)
+	}
+
+	return nil
 }
 
 const (
@@ -27,7 +36,8 @@ const (
 	epicArtifactId = "963137e4c29d4c79a81323b8fab03a40"
 )
 
-func launchEpicGames(amongUsDir string) error {
+// TODO: implement authentication with Epic Games Launcher
+func launchEpicGames(amongUsDir string, dllDir string, args ...string) error {
 	cmd := exec.Command("rundll32.exe", "url.dll,FileProtocolHandler", "com.epicgames.launcher://apps/"+epicNamespace+"%3A"+epicCatalogId+"%3A"+epicArtifactId+"?action=launch&silent=true")
 	return cmd.Start()
 }

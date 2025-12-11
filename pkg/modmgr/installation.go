@@ -2,8 +2,6 @@ package modmgr
 
 import (
 	"archive/zip"
-	"au_mod_installer/pkg/aumgr"
-	"au_mod_installer/pkg/progress"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -16,6 +14,9 @@ import (
 	"slices"
 	"sort"
 	"strings"
+
+	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
+	"github.com/ikafly144/au_mod_installer/pkg/progress"
 )
 
 const currentFileVersion = 2
@@ -68,8 +69,9 @@ func (mi *ModInstallation) OldVanillaFiles() []string {
 }
 
 type InstalledModInfo struct {
-	Mod   `json:",inline"`
-	Paths []string `json:"paths"`
+	ModID      string `json:"mod_id"`
+	ModVersion `json:",inline"`
+	Paths      []string `json:"paths"`
 }
 
 type InstallStatus string
@@ -83,8 +85,8 @@ const (
 
 const InstallationInfoFileName = ".mod_installation"
 
-func LoadInstallationInfo(root *os.Root) (*ModInstallation, error) {
-	file, err := root.OpenFile(InstallationInfoFileName, os.O_RDONLY, 0644)
+func LoadInstallationInfo(modInstallLocation *os.Root) (*ModInstallation, error) {
+	file, err := modInstallLocation.OpenFile(InstallationInfoFileName, os.O_RDONLY, 0644)
 	if err != nil {
 		return nil, err
 	}
@@ -118,8 +120,8 @@ func SaveInstallationInfo(gameRoot *os.Root, installation *ModInstallation) erro
 	return nil
 }
 
-func InstallMod(gameRoot *os.Root, gameManifest aumgr.Manifest, launcherType aumgr.LauncherType, mods []Mod, progress progress.Progress) (*ModInstallation, error) {
-	slog.Info("Starting mod installation", "mods", mods)
+func InstallMod(modId string, modInstallLocation *os.Root, gameManifest aumgr.Manifest, launcherType aumgr.LauncherType, binaryType aumgr.BinaryType, modVersions []ModVersion, progress progress.Progress) (*ModInstallation, error) {
+	slog.Info("Starting mod installation", "mods", modVersions)
 	if progress != nil {
 		progress.SetValue(0.0)
 		progress.Start()
@@ -129,28 +131,29 @@ func InstallMod(gameRoot *os.Root, gameManifest aumgr.Manifest, launcherType aum
 	if gameManifest == nil {
 		return nil, fmt.Errorf("game manifest is nil")
 	}
-	if launcherType == aumgr.LauncherUnknown {
-		return nil, fmt.Errorf("unknown launcher type")
+	if binaryType == aumgr.BinaryTypeUnknown {
+		return nil, fmt.Errorf("unknown binary type")
 	}
-	for _, mod := range mods {
-		if !mod.IsCompatible(launcherType, gameManifest.GetVersion()) {
+	for _, mod := range modVersions {
+		if !mod.IsCompatible(launcherType, binaryType, gameManifest.GetVersion()) {
 			return nil, fmt.Errorf("mod is not compatible with the current game version: %s", gameManifest.GetVersion())
 		}
 	}
 
 	// Remove old installation if exists
-	if _, err := gameRoot.Stat(InstallationInfoFileName); err == nil || !os.IsNotExist(err) {
-		if err := UninstallMod(gameRoot, progress); err != nil {
+	if _, err := modInstallLocation.Stat(InstallationInfoFileName); err == nil || !os.IsNotExist(err) {
+		if err := UninstallMod(modInstallLocation, progress); err != nil {
 			return nil, fmt.Errorf("failed to remove old mod installation: %w", err)
 		}
 		progress.SetValue(0.0)
 	}
 
 	var installedMods []InstalledModInfo
-	for _, mod := range mods {
+	for _, modVersion := range modVersions {
 		installedMods = append(installedMods, InstalledModInfo{
-			Mod:   mod,
-			Paths: nil,
+			ModID:      modId,
+			ModVersion: modVersion,
+			Paths:      nil,
 		})
 	}
 
@@ -160,18 +163,18 @@ func InstallMod(gameRoot *os.Root, gameManifest aumgr.Manifest, launcherType aum
 		InstalledGameVersion: gameManifest.GetVersion(),
 		Status:               InstallStatusBroken,
 	}
-	if err := SaveInstallationInfo(gameRoot, installation); err != nil {
+	if err := SaveInstallationInfo(modInstallLocation, installation); err != nil {
 		return nil, fmt.Errorf("failed to save installation info: %w", err)
 	}
 	defer func(installation *ModInstallation) {
-		if err := SaveInstallationInfo(gameRoot, installation); err != nil {
+		if err := SaveInstallationInfo(modInstallLocation, installation); err != nil {
 			slog.Error("Failed to finalize installation info", "error", err)
 		}
 	}(installation)
 
 	hClient := http.DefaultClient
-	for i := range mods {
-		for file := range mods[i].Downloads(launcherType) {
+	for i := range modVersions {
+		for file := range modVersions[i].Downloads(binaryType) {
 			req, err := http.NewRequest(http.MethodGet, file.URL, nil)
 			if err != nil {
 				return nil, err
@@ -188,18 +191,18 @@ func InstallMod(gameRoot *os.Root, gameManifest aumgr.Manifest, launcherType aum
 			slog.Info("Downloading mod", "url", file.URL, "contentLength", contentLength)
 			switch file.FileType {
 			case FileTypeZip:
-				extractFiles, err := extractZip(resp.Body, contentLength, gameRoot, progress, mods[i].CompatibleFilesCount(launcherType)*len(mods))
+				extractFiles, err := extractZip(resp.Body, contentLength, modInstallLocation, progress, modVersions[i].CompatibleFilesCount(binaryType)*len(modVersions))
 				installation.InstalledMods[i].Paths = append(installation.InstalledMods[i].Paths, extractFiles...)
 				if err != nil {
-					if e := SaveInstallationInfo(gameRoot, installation); e != nil {
+					if e := SaveInstallationInfo(modInstallLocation, installation); e != nil {
 						return nil, fmt.Errorf("failed to install mod: %w (%v)", err, e)
 					}
 					return nil, err
 				}
 			case FileTypeNormal:
 				installation.InstalledMods[i].Paths = append(installation.InstalledMods[i].Paths, file.Path)
-				_ = gameRoot.MkdirAll(filepath.Dir(file.Path), 0755)
-				destFile, err := gameRoot.OpenFile(file.Path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+				_ = modInstallLocation.MkdirAll(filepath.Dir(file.Path), 0755)
+				destFile, err := modInstallLocation.OpenFile(file.Path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 				if err != nil {
 					return nil, err
 				}
@@ -207,7 +210,7 @@ func InstallMod(gameRoot *os.Root, gameManifest aumgr.Manifest, launcherType aum
 				buf := &ProgressWrapper{
 					start:    progress.GetValue(),
 					goal:     uint64(contentLength),
-					scale:    (1.0 / float64(mods[i].CompatibleFilesCount(launcherType)*len(mods))),
+					scale:    (1.0 / float64(modVersions[i].CompatibleFilesCount(binaryType)*len(modVersions))),
 					progress: progress,
 					buf:      destFile,
 				}
@@ -223,28 +226,28 @@ func InstallMod(gameRoot *os.Root, gameManifest aumgr.Manifest, launcherType aum
 	return installation, nil
 }
 
-func UninstallMod(gameRoot *os.Root, progress progress.Progress) error {
-	if err := uninstallMod(gameRoot, progress); err != nil {
+func UninstallMod(modInstallLocation *os.Root, progress progress.Progress) error {
+	if err := uninstallMod(modInstallLocation, progress); err != nil {
 		return fmt.Errorf("failed to uninstall mod: %w", err)
 	}
-	if err := gameRoot.Remove(InstallationInfoFileName); err != nil {
+	if err := modInstallLocation.Remove(InstallationInfoFileName); err != nil {
 		return err
 	}
 	return nil
 }
 
-func uninstallMod(gameRoot *os.Root, progress progress.Progress) error {
+func uninstallMod(modInstallLocation *os.Root, progress progress.Progress) error {
 	if progress != nil {
 		progress.SetValue(0.0)
 		progress.Start()
 		defer progress.Done()
 	}
-	installation, err := LoadInstallationInfo(gameRoot)
+	installation, err := LoadInstallationInfo(modInstallLocation)
 	if err != nil {
 		return err
 	}
 
-	dirInfo, err := gameRoot.Open(".")
+	dirInfo, err := modInstallLocation.Open(".")
 	if err != nil {
 		return err
 	}
@@ -257,7 +260,7 @@ func uninstallMod(gameRoot *os.Root, progress progress.Progress) error {
 	switch installation.FileVersion {
 	case 0, 1:
 		i := 0
-		if err := fs.WalkDir(gameRoot.FS(), ".", func(path string, info fs.DirEntry, err error) error {
+		if err := fs.WalkDir(modInstallLocation.FS(), ".", func(path string, info fs.DirEntry, err error) error {
 			i++
 			if progress != nil {
 				progress.SetValue(float64(i) / float64(len(fileCount)))
@@ -278,7 +281,7 @@ func uninstallMod(gameRoot *os.Root, progress progress.Progress) error {
 			if filepath.Ext(path) == InstallationInfoFileName {
 				return nil
 			}
-			if err := gameRoot.RemoveAll(path); err != nil {
+			if err := modInstallLocation.RemoveAll(path); err != nil {
 				slog.Warn("Failed to delete file during uninstallation", "file", path, "error", err)
 				return nil
 			}
@@ -295,10 +298,10 @@ func uninstallMod(gameRoot *os.Root, progress progress.Progress) error {
 			return len(paths[i]) > len(paths[j])
 		})
 		for _, path := range paths {
-			if err := gameRoot.RemoveAll(path); err != nil {
+			if err := modInstallLocation.RemoveAll(path); err != nil {
 				slog.Warn("Failed to remove mod file during uninstallation", "file", path, "error", err)
 			}
-			if err := removeEmptyDirs(gameRoot, filepath.Dir(path)); err != nil {
+			if err := removeEmptyDirs(modInstallLocation, filepath.Dir(path)); err != nil {
 				slog.Warn("Failed to remove empty directory during uninstallation", "dir", filepath.Dir(path), "error", err)
 			}
 		}

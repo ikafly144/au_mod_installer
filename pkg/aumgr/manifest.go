@@ -1,7 +1,5 @@
 package aumgr
 
-import "errors"
-
 type Manifest interface {
 	GetVersion() string
 }
@@ -13,6 +11,12 @@ func GetManifest(launcherType LauncherType, amongUsDir string) (Manifest, error)
 	case LauncherEpicGames:
 		return getEpicManifest()
 	default:
-		return nil, errors.New("unsupported launcher type")
+		return UnknownManifest{}, nil
 	}
+}
+
+type UnknownManifest struct{}
+
+func (m UnknownManifest) GetVersion() string {
+	return "unknown"
 }

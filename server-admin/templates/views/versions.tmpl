@@ -1,0 +1,188 @@
+{{define "versions"}}
+{{template "layout" .}}
+{{end}}
+
+{{define "content"}}
+<a href="/" class="back-link">← Mod一覧に戻る</a>
+
+<div class="card">
+    <div class="card-header">
+        <h2>バージョン一覧: {{.Mod.Name}}</h2>
+        <button class="btn btn-primary" onclick="showVersionModal()">+ 新規バージョン</button>
+    </div>
+    <div class="card-body">
+        {{if .Versions}}
+        <table>
+            <thead>
+                <tr>
+                    <th>バージョン</th>
+                    <th>作成日</th>
+                    <th>対象AU</th>
+                    <th>ファイル数</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Versions}}
+                <tr>
+                    <td><code>{{.ID}}</code></td>
+                    <td>{{.CreatedAt.Format "2006/01/02"}}</td>
+                    <td>
+                        {{if .TargetVersion}}
+                        {{range $k, $v := .TargetVersion}}
+                        {{$k}}: {{$v}}<br>
+                        {{end}}
+                        {{else}}
+                        -
+                        {{end}}
+                    </td>
+                    <td>{{len .Files}}</td>
+                    <td class="actions">
+                        <button class="btn btn-secondary" onclick='editVersion({{json .}})'>編集</button>
+                        <button class="btn btn-danger" onclick="deleteVersion('{{.ID}}')">削除</button>
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+        {{else}}
+        <div class="empty-state">
+            バージョンがありません。「新規バージョン」ボタンから追加してください。
+        </div>
+        {{end}}
+    </div>
+</div>
+
+<!-- Version Modal -->
+<div id="version-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="version-modal-title">新規バージョン</h3>
+            <button class="modal-close" onclick="closeVersionModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="version-form">
+                <input type="hidden" id="version-editing" value="">
+                <div class="form-group">
+                    <label for="version-id">バージョン *</label>
+                    <input type="text" id="version-id" name="id" required placeholder="例: 1.0.0">
+                </div>
+                <div class="form-group">
+                    <label for="version-target">対象AUバージョン (JSON)</label>
+                    <textarea id="version-target" name="target_version" class="json-editor"
+                        placeholder='{"steam": "2024.3.5", "epic": "2024.3.5"}'></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="version-files">ファイル (JSON配列)</label>
+                    <textarea id="version-files" name="files" class="json-editor"
+                        placeholder='[{"url": "https://...", "file_type": "dll", "compatible": ["steam"]}]'></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="version-deps">依存関係 (JSON配列)</label>
+                    <textarea id="version-deps" name="dependencies" class="json-editor"
+                        placeholder='[{"id": "bepinex", "type": "required"}]'></textarea>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeVersionModal()">キャンセル</button>
+            <button class="btn btn-primary" onclick="saveVersion()">保存</button>
+        </div>
+    </div>
+</div>
+{{end}}
+
+{{define "scripts"}}
+<script>
+    const modId = '{{.Mod.ID}}';
+
+    function showVersionModal(version = null) {
+        document.getElementById('version-modal-title').textContent = version ? 'バージョン編集' : '新規バージョン';
+        document.getElementById('version-editing').value = version ? version.id : '';
+        document.getElementById('version-id').value = version?.id || '';
+        document.getElementById('version-id').disabled = !!version;
+        document.getElementById('version-target').value = version?.target_version ? JSON.stringify(version.target_version, null, 2) : '';
+        document.getElementById('version-files').value = version?.files ? JSON.stringify(version.files, null, 2) : '';
+        document.getElementById('version-deps').value = version?.dependencies ? JSON.stringify(version.dependencies, null, 2) : '';
+        document.getElementById('version-modal').classList.add('active');
+    }
+
+    function closeVersionModal() {
+        document.getElementById('version-modal').classList.remove('active');
+    }
+
+    function editVersion(version) {
+        showVersionModal(version);
+    }
+
+    async function saveVersion() {
+        const editing = document.getElementById('version-editing').value;
+        const versionId = document.getElementById('version-id').value.trim();
+
+        if (!versionId) {
+            showToast('バージョンは必須です', 'error');
+            return;
+        }
+
+        let target_version = null;
+        let files = null;
+        let dependencies = null;
+
+        try {
+            const targetText = document.getElementById('version-target').value.trim();
+            if (targetText) target_version = JSON.parse(targetText);
+        } catch {
+            showToast('対象AUバージョンのJSONが不正です', 'error');
+            return;
+        }
+
+        try {
+            const filesText = document.getElementById('version-files').value.trim();
+            if (filesText) files = JSON.parse(filesText);
+        } catch {
+            showToast('ファイルのJSONが不正です', 'error');
+            return;
+        }
+
+        try {
+            const depsText = document.getElementById('version-deps').value.trim();
+            if (depsText) dependencies = JSON.parse(depsText);
+        } catch {
+            showToast('依存関係のJSONが不正です', 'error');
+            return;
+        }
+
+        const version = {
+            id: versionId,
+            target_version,
+            files,
+            dependencies
+        };
+
+        try {
+            if (editing) {
+                await api(`/mods/${modId}/versions/${versionId}`, 'PUT', version);
+                showToast('バージョンを更新しました');
+            } else {
+                await api(`/mods/${modId}/versions`, 'POST', version);
+                showToast('バージョンを作成しました');
+            }
+            closeVersionModal();
+            location.reload();
+        } catch (error) {
+            showToast(error.message, 'error');
+        }
+    }
+
+    async function deleteVersion(versionId) {
+        if (!confirm(`バージョン "${versionId}" を削除しますか？`)) return;
+        try {
+            await api(`/mods/${modId}/versions/${versionId}`, 'DELETE');
+            showToast('バージョンを削除しました');
+            location.reload();
+        } catch (error) {
+            showToast(error.message, 'error');
+        }
+    }
+</script>
+{{end}}

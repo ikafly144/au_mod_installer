@@ -1,0 +1,162 @@
+{{define "index"}}
+{{template "layout" .}}
+{{end}}
+
+{{define "content"}}
+<div class="card">
+    <div class="card-header">
+        <h2>Mod一覧</h2>
+        <button class="btn btn-primary" onclick="showModModal()">+ 新規Mod</button>
+    </div>
+    <div class="card-body">
+        {{if .Mods}}
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>名前</th>
+                    <th>作者</th>
+                    <th>タイプ</th>
+                    <th>最新バージョン</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Mods}}
+                <tr>
+                    <td><code>{{.ID}}</code></td>
+                    <td>{{.Name}}</td>
+                    <td>{{.Author}}</td>
+                    <td>
+                        {{if .Type}}
+                        <span class="badge badge-{{.Type}}">{{.Type}}</span>
+                        {{else}}
+                        -
+                        {{end}}
+                    </td>
+                    <td>{{if .LatestVersionID}}{{.LatestVersionID}}{{else}}-{{end}}</td>
+                    <td class="actions">
+                        <a href="/mods/{{.ID}}/versions" class="btn btn-secondary">バージョン</a>
+                        <button class="btn btn-secondary" onclick='editMod({{json .}})'>編集</button>
+                        <button class="btn btn-danger" onclick="deleteMod('{{.ID}}')">削除</button>
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+        {{else}}
+        <div class="empty-state">
+            Modがありません。「新規Mod」ボタンから追加してください。
+        </div>
+        {{end}}
+    </div>
+</div>
+
+<!-- Mod Modal -->
+<div id="mod-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="mod-modal-title">新規Mod</h3>
+            <button class="modal-close" onclick="closeModModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="mod-form">
+                <input type="hidden" id="mod-editing" value="">
+                <div class="form-group">
+                    <label for="mod-id">ID *</label>
+                    <input type="text" id="mod-id" name="id" required>
+                </div>
+                <div class="form-group">
+                    <label for="mod-name">名前 *</label>
+                    <input type="text" id="mod-name" name="name" required>
+                </div>
+                <div class="form-group">
+                    <label for="mod-author">作者 *</label>
+                    <input type="text" id="mod-author" name="author" required>
+                </div>
+                <div class="form-group">
+                    <label for="mod-type">タイプ</label>
+                    <select id="mod-type" name="type">
+                        <option value="">未指定</option>
+                        <option value="mod">Mod</option>
+                        <option value="plugin">Plugin</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="mod-description">説明</label>
+                    <textarea id="mod-description" name="description"></textarea>
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeModModal()">キャンセル</button>
+            <button class="btn btn-primary" onclick="saveMod()">保存</button>
+        </div>
+    </div>
+</div>
+{{end}}
+
+{{define "scripts"}}
+<script>
+    function showModModal(mod = null) {
+        document.getElementById('mod-modal-title').textContent = mod ? 'Mod編集' : '新規Mod';
+        document.getElementById('mod-editing').value = mod ? mod.id : '';
+        document.getElementById('mod-id').value = mod?.id || '';
+        document.getElementById('mod-id').disabled = !!mod;
+        document.getElementById('mod-name').value = mod?.name || '';
+        document.getElementById('mod-author').value = mod?.author || '';
+        document.getElementById('mod-type').value = mod?.type || '';
+        document.getElementById('mod-description').value = mod?.description || '';
+        document.getElementById('mod-modal').classList.add('active');
+    }
+
+    function closeModModal() {
+        document.getElementById('mod-modal').classList.remove('active');
+    }
+
+    function editMod(mod) {
+        showModModal(mod);
+    }
+
+    async function saveMod() {
+        const editing = document.getElementById('mod-editing').value;
+        const mod = {
+            id: document.getElementById('mod-id').value.trim(),
+            name: document.getElementById('mod-name').value.trim(),
+            author: document.getElementById('mod-author').value.trim(),
+            type: document.getElementById('mod-type').value,
+            description: document.getElementById('mod-description').value.trim()
+        };
+
+        if (!mod.id || !mod.name || !mod.author) {
+            showToast('ID、名前、作者は必須です', 'error');
+            return;
+        }
+
+        try {
+            if (editing) {
+                await api(`/mods/${mod.id}`, 'PUT', mod);
+                showToast('Modを更新しました');
+            } else {
+                await api('/mods', 'POST', mod);
+                showToast('Modを作成しました');
+            }
+            closeModModal();
+            location.reload();
+        } catch (error) {
+            showToast(error.message, 'error');
+        }
+    }
+
+    async function deleteMod(modId) {
+        if (!confirm(`Mod "${modId}" を削除しますか？関連するバージョンもすべて削除されます。`)) return;
+        try {
+            await api(`/mods/${modId}`, 'DELETE');
+            showToast('Modを削除しました');
+            location.reload();
+        } catch (error) {
+            showToast(error.message, 'error');
+        }
+    }
+</script>
+{{end}}

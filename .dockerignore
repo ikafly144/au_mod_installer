@@ -1,0 +1,42 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+server/server
+client/client
+
+# Test files
+*_test.go
+*.test
+
+# Documentation
+*.md
+!README.md
+
+# Local files
+local/
+img/
+
+# Docker files
+docker-compose*.yml
+Dockerfile*
+.dockerignore
+
+# Certificates (for nginx)
+certs/
+
+# OS files
+.DS_Store
+Thumbs.db

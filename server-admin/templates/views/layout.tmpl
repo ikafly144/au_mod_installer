@@ -1,0 +1,135 @@
+{{define "layout"}}
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Title}} - AU Mod Admin</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+    <header>
+        <div class="container">
+            <h1><a href="/">🎮 AU Mod Repository Admin</a></h1>
+            <div class="header-actions">
+                <a href="/api/export" class="btn btn-secondary">📤 エクスポート</a>
+                <button class="btn btn-secondary" onclick="showImportModal()">📥 インポート</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="container">
+        {{template "content" .}}
+    </main>
+
+    <!-- Import Modal -->
+    <div id="import-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>インポート</h3>
+                <button class="modal-close" onclick="closeImportModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="import-file">JSONファイルを選択</label>
+                    <input type="file" id="import-file" accept=".json">
+                </div>
+                <div class="form-group">
+                    <label for="import-text">または JSON を直接入力</label>
+                    <textarea id="import-text" class="json-editor" style="min-height: 200px;"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeImportModal()">キャンセル</button>
+                <button class="btn btn-primary" onclick="importMods()">インポート</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="toast"></div>
+
+    <script>
+        // Toast notification
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `toast ${type} show`;
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        // API helper
+        async function api(endpoint, method = 'GET', body = null) {
+            const options = {
+                method,
+                headers: { 'Content-Type': 'application/json' }
+            };
+            if (body) options.body = JSON.stringify(body);
+
+            const response = await fetch(`/api${endpoint}`, options);
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'API error');
+            }
+            if (response.status === 204) return null;
+            return response.json();
+        }
+
+        // Import modal
+        function showImportModal() {
+            document.getElementById('import-file').value = '';
+            document.getElementById('import-text').value = '';
+            document.getElementById('import-modal').classList.add('active');
+        }
+
+        function closeImportModal() {
+            document.getElementById('import-modal').classList.remove('active');
+        }
+
+        async function importMods() {
+            let data = null;
+            const fileInput = document.getElementById('import-file');
+            const textInput = document.getElementById('import-text');
+
+            if (fileInput.files.length > 0) {
+                try {
+                    const text = await fileInput.files[0].text();
+                    data = JSON.parse(text);
+                } catch {
+                    showToast('ファイルの読み込みに失敗しました', 'error');
+                    return;
+                }
+            } else if (textInput.value.trim()) {
+                try {
+                    data = JSON.parse(textInput.value);
+                } catch {
+                    showToast('JSONが不正です', 'error');
+                    return;
+                }
+            } else {
+                showToast('ファイルまたはJSONを入力してください', 'error');
+                return;
+            }
+
+            if (!Array.isArray(data)) {
+                data = [data];
+            }
+
+            try {
+                const result = await api('/import', 'POST', data);
+                showToast(`${result.imported}件のModをインポートしました`);
+                closeImportModal();
+                location.reload();
+            } catch (error) {
+                showToast(error.message, 'error');
+            }
+        }
+    </script>
+
+    {{template "scripts" .}}
+</body>
+
+</html>
+{{end}}

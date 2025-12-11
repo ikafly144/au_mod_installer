@@ -1,4 +1,4 @@
-module au_mod_installer
+module github.com/ikafly144/au_mod_installer
 
 go 1.25.3
 
@@ -6,6 +6,7 @@ require (
 	fyne.io/fyne/v2 v2.7.0
 	github.com/TheTitanrain/w32 v0.0.0-20200114052255-2654d97dbd3d
 	github.com/sqweek/dialog v0.0.0-20240226140203-065105509627
+	github.com/zzl/go-win32api v1.2.0
 	golang.org/x/sys v0.37.0
 )
 
@@ -48,6 +49,7 @@ require (
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/urfave/cli/v2 v2.27.1 // indirect
+	github.com/valkey-io/valkey-go v1.0.69 // indirect
 	github.com/xrash/smetrics v0.0.0-20201216005158-039620a65673 // indirect
 	github.com/yuin/goldmark v1.7.13 // indirect
 	golang.org/x/image v0.32.0 // indirect

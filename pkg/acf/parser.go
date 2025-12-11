@@ -1,8 +1,9 @@
 package acf
 
 import (
-	"au_mod_installer/pkg/acf/lexer"
 	"fmt"
+
+	"github.com/ikafly144/au_mod_installer/pkg/acf/lexer"
 )
 
 type Parser struct {
