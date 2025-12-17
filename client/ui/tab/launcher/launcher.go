@@ -50,15 +50,21 @@ func (l *Launcher) init() {
 }
 
 func (l *Launcher) Tab() (*container.TabItem, error) {
+	bottom := container.NewVBox(
+		l.state.ErrorText,
+		widget.NewSeparator(),
+		l.launchButton,
+	)
 	content := container.New(
-		layout.NewBorderLayout(nil, l.launchButton, nil, nil),
+		layout.NewBorderLayout(nil, bottom, nil, nil),
 		container.NewVBox(
 			widget.NewRichTextFromMarkdown("## "+lang.LocalizeKey("installer.select_install_path", "Among Usのインストール先を選択")),
 			l.state.InstallSelect,
 			widget.NewSeparator(),
 			widget.NewCard("Among Us Mod Launcher", "バージョン："+l.state.Version, l.greetingContent),
+			widget.NewRichTextFromMarkdown("### "+lang.LocalizeKey("installation.installation_status", "インストール状況")), l.state.ModInstalledInfo,
 		),
-		l.launchButton,
+		bottom,
 	)
 	return container.NewTabItem(lang.LocalizeKey("launcher.tab_name", "ランチャー"), content), nil
 }
@@ -104,16 +110,29 @@ func (l *Launcher) runLaunch() {
 	// 	"--doorstop-clr-corlib-dir", fmt.Sprintf("\"%s\"", filepath.Join(l.state.ModInstallDir(), "dotnet")),
 	// 	"--doorstop-clr-runtime-coreclr-path", fmt.Sprintf("\"%s\"", filepath.Join(l.state.ModInstallDir(), "dotnet", "coreclr.dll")),
 	// }
-
-	if err := aumgr.LaunchAmongUs(aumgr.DetectLauncherType(path), path, l.state.ModInstallDir()); err != nil {
-		l.state.ErrorText.Segments = []widget.RichTextSegment{
-			&widget.TextSegment{Text: "Among Usの起動に失敗しました: " + err.Error(), Style: widget.RichTextStyle{ColorName: theme.ColorNameError}},
+	_ = l.state.CanLaunch.Set(false)
+	_ = l.state.CanInstall.Set(false)
+	go func() {
+		fyne.Do(func() {
+			l.state.ErrorText.Segments = []widget.RichTextSegment{
+				&widget.TextSegment{Text: "現在Among Usを実行中です…"},
+			}
+			l.state.ErrorText.Refresh()
+			l.state.ErrorText.Show()
+		})
+		if err := aumgr.LaunchAmongUs(aumgr.DetectLauncherType(path), path, l.state.ModInstallDir()); err != nil {
+			fyne.Do(func() {
+				l.state.ErrorText.Segments = []widget.RichTextSegment{
+					&widget.TextSegment{Text: "Among Usの起動に失敗しました: " + err.Error(), Style: widget.RichTextStyle{ColorName: theme.ColorNameError}},
+				}
+				l.state.ErrorText.Refresh()
+			})
+			slog.Warn("Failed to launch Among Us", "error", err)
+			return
 		}
-		l.state.ErrorText.Refresh()
-		l.state.ErrorText.Show()
-		slog.Warn("Failed to launch Among Us", "error", err)
-		return
-	}
+		_ = l.state.CanLaunch.Set(true)
+		_ = l.state.CanInstall.Set(true)
+	}()
 }
 
 func (l *Launcher) checkLaunchState() {

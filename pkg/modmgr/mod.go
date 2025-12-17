@@ -35,6 +35,7 @@ func (mt ModType) IsVisible() bool {
 }
 
 type ModVersion struct {
+	ModID_        string                        `json:"-"` // for local use only
 	ID            string                        `json:"id"`
 	CreatedAt     time.Time                     `json:"created_at"`
 	Dependencies  []ModDependency               `json:"dependencies,omitempty"`
@@ -81,7 +82,7 @@ func (m ModVersion) IsCompatible(launcherType aumgr.LauncherType, binaryType aum
 	if version, ok := m.TargetVersion[launcherType]; ok && version != "" && version != gameVersion {
 		return false
 	}
-	return m.CompatibleFilesCount(binaryType) > 0 || (len(m.Dependencies) > 0 && len(m.Files) == 0)
+	return m.CompatibleFilesCount(binaryType) > 0 || (len(m.Mods) > 0 && len(m.Files) == 0)
 }
 
 func (m ModVersion) CompatibleFilesCount(binaryType aumgr.BinaryType) int {

@@ -32,9 +32,6 @@ func Main(w fyne.Window, version string, cfg ...func(*Config)) error {
 		return err
 	}
 
-	if err := state.FetchMods(); err != nil {
-		return err
-	}
 	state.CheckInstalled()
 
 	i := installer.NewInstallerTab(state)

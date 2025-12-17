@@ -4,23 +4,44 @@ import (
 	"flag"
 	"log/slog"
 	"os"
+	"path/filepath"
 
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/lang"
 	"github.com/ikafly144/au_mod_installer/client/rest"
 	"github.com/ikafly144/au_mod_installer/client/ui"
 	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
+	"github.com/nightlyone/lockfile"
 	"github.com/sqweek/dialog"
 )
 
+var DefaultServer = "http://modofus.sabafly.net"
+
 func main() {
+	lock, err := lockfile.New(filepath.Join(os.Getenv("PROGRAMDATA"), "au_mod_installer.lock"))
+	if err != nil {
+		slog.Error("Failed to create lockfile", "error", err)
+		os.Exit(1)
+	}
+	err = lock.TryLock()
+	if err != nil {
+		slog.Error("Another instance is already running", "error", err)
+		//ignore:printf
+		(&dialog.MsgBuilder{Msg: lang.LocalizeKey("app.already_running", "Another instance of Among Us Mod Installer is already running.")}).Title(lang.LocalizeKey("app.error", "Error")).Error()
+		os.Exit(1)
+	}
+	defer func() {
+		if err := lock.Unlock(); err != nil {
+			slog.Error("Failed to unlock lockfile", "error", err)
+		}
+	}()
 	var (
 		localMode string
 		server    string
 	)
 
 	flag.StringVar(&localMode, "local", "", "Path to local mods.json file for local mode")
-	flag.StringVar(&server, "server", "http://localhost:8080", "URL of the mod server")
+	flag.StringVar(&server, "server", DefaultServer, "URL of the mod server")
 	flag.Parse()
 
 	a := app.New()

@@ -120,7 +120,7 @@ func SaveInstallationInfo(gameRoot *os.Root, installation *ModInstallation) erro
 	return nil
 }
 
-func InstallMod(modId string, modInstallLocation *os.Root, gameManifest aumgr.Manifest, launcherType aumgr.LauncherType, binaryType aumgr.BinaryType, modVersions []ModVersion, progress progress.Progress) (*ModInstallation, error) {
+func InstallMod(modInstallLocation *os.Root, gameManifest aumgr.Manifest, launcherType aumgr.LauncherType, binaryType aumgr.BinaryType, modVersions []ModVersion, progress progress.Progress) (*ModInstallation, error) {
 	slog.Info("Starting mod installation", "mods", modVersions)
 	if progress != nil {
 		progress.SetValue(0.0)
@@ -151,7 +151,7 @@ func InstallMod(modId string, modInstallLocation *os.Root, gameManifest aumgr.Ma
 	var installedMods []InstalledModInfo
 	for _, modVersion := range modVersions {
 		installedMods = append(installedMods, InstalledModInfo{
-			ModID:      modId,
+			ModID:      modVersion.ModID_,
 			ModVersion: modVersion,
 			Paths:      nil,
 		})
