@@ -2,8 +2,9 @@ services:
   # Valkey (Redis互換) データベース
   valkey:
     image: valkey/valkey:8-alpine
-    container_name: au-mod-installer-valkey
     restart: unless-stopped
+    networks:
+      - default
     volumes:
       - valkey-data:/data
     command: ["valkey-server", "--appendonly", "yes", "--save", "60", "1", "--loglevel", "warning"]
@@ -20,12 +21,14 @@ services:
         max-file: "3"
 
   # API Server
-  server:
+  au-mod-installer-server:
     build:
       context: .
       dockerfile: server/Dockerfile
-    container_name: au-mod-installer-server
     restart: unless-stopped
+    networks:
+      - default
+      - cloudflared
     ports:
       - "8180:8180"
     environment:
@@ -59,8 +62,9 @@ services:
     build:
       context: .
       dockerfile: server-admin/Dockerfile
-    container_name: au-mod-installer-admin
     restart: unless-stopped
+    networks:
+      - default
     ports:
       - "8181:8181"
     environment:
@@ -101,3 +105,9 @@ services:
 
 volumes:
   valkey-data:
+
+networks:
+  default:
+    driver: bridge
+  cloudflared:
+    external: true
