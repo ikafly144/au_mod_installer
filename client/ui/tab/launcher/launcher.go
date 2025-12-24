@@ -129,6 +129,10 @@ func (l *Launcher) runLaunch() {
 			})
 			slog.Warn("Failed to launch Among Us", "error", err)
 			return
+		} else {
+			fyne.Do(func() {
+				l.state.ErrorText.Hide()
+			})
 		}
 		_ = l.state.CanLaunch.Set(true)
 		_ = l.state.CanInstall.Set(true)
