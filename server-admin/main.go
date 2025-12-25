@@ -79,6 +79,8 @@ func main() {
 	mux.HandleFunc("DELETE /api/mods/{modID}/versions/{versionID}", h.HandleDeleteVersion)
 	mux.HandleFunc("POST /api/mods/{modID}/versions/{versionID}/latest", h.HandleSetLatestVersion)
 
+	mux.HandleFunc("GET /api/github/releases", h.HandleListGitHubReleases)
+	mux.HandleFunc("GET /api/github/releases/info", h.HandleGetGitHubRelease)
 	mux.HandleFunc("GET /api/github/releases/latest", h.HandleGetGitHubRelease)
 
 	mux.HandleFunc("POST /api/import", h.HandleImport)

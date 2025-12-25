@@ -520,8 +520,8 @@ func (h *Handler) HandleSetLatestVersion(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "latest_version": versionID})
 }
 
-// HandleGetGitHubRelease fetches release info from GitHub
-func (h *Handler) HandleGetGitHubRelease(w http.ResponseWriter, r *http.Request) {
+// HandleListGitHubReleases fetches release list from GitHub
+func (h *Handler) HandleListGitHubReleases(w http.ResponseWriter, r *http.Request) {
 	repoParam := r.URL.Query().Get("repo")
 	if repoParam == "" {
 		writeError(w, http.StatusBadRequest, "repo is required")
@@ -536,7 +536,58 @@ func (h *Handler) HandleGetGitHubRelease(w http.ResponseWriter, r *http.Request)
 	owner, repo := parts[0], parts[1]
 
 	client := github.NewClient(nil)
-	release, _, err := client.Repositories.GetLatestRelease(r.Context(), owner, repo)
+	releases, _, err := client.Repositories.ListReleases(r.Context(), owner, repo, nil)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to fetch from github: "+err.Error())
+		return
+	}
+
+	type ReleaseItem struct {
+		TagName     string `json:"tag_name"`
+		Name        string `json:"name"`
+		PublishedAt string `json:"published_at"`
+		Prerelease  bool   `json:"prerelease"`
+	}
+
+	resp := make([]ReleaseItem, 0, len(releases))
+	for _, release := range releases {
+		resp = append(resp, ReleaseItem{
+			TagName:     release.GetTagName(),
+			Name:        release.GetName(),
+			PublishedAt: release.GetPublishedAt().Format(time.RFC3339),
+			Prerelease:  release.GetPrerelease(),
+		})
+	}
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// HandleGetGitHubRelease fetches release info from GitHub
+func (h *Handler) HandleGetGitHubRelease(w http.ResponseWriter, r *http.Request) {
+	repoParam := r.URL.Query().Get("repo")
+	tagParam := r.URL.Query().Get("tag")
+	if repoParam == "" {
+		writeError(w, http.StatusBadRequest, "repo is required")
+		return
+	}
+
+	parts := strings.Split(repoParam, "/")
+	if len(parts) != 2 {
+		writeError(w, http.StatusBadRequest, "invalid repo format (expected owner/repo)")
+		return
+	}
+	owner, repo := parts[0], parts[1]
+
+	client := github.NewClient(nil)
+	var release *github.RepositoryRelease
+	var err error
+
+	if tagParam != "" {
+		release, _, err = client.Repositories.GetReleaseByTag(r.Context(), owner, repo, tagParam)
+	} else {
+		release, _, err = client.Repositories.GetLatestRelease(r.Context(), owner, repo)
+	}
+
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to fetch from github: "+err.Error())
 		return
