@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 	"github.com/ikafly144/au_mod_installer/server/service"
@@ -167,27 +166,4 @@ func writeJSON(w http.ResponseWriter, status int, data any) {
 
 func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, errorResponse{Error: message})
-}
-
-// extractPathParams extracts path parameters from URL pattern matching
-// e.g., for pattern "/mods/{modID}/versions/{versionID}" and path "/mods/123/versions/456"
-// returns map[string]string{"modID": "123", "versionID": "456"}
-func extractPathParams(pattern, path string) map[string]string {
-	params := make(map[string]string)
-
-	patternParts := strings.Split(strings.Trim(pattern, "/"), "/")
-	pathParts := strings.Split(strings.Trim(path, "/"), "/")
-
-	if len(patternParts) != len(pathParts) {
-		return params
-	}
-
-	for i, part := range patternParts {
-		if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") {
-			paramName := part[1 : len(part)-1]
-			params[paramName] = pathParts[i]
-		}
-	}
-
-	return params
 }

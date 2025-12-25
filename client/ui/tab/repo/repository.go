@@ -77,18 +77,17 @@ func NewRepository(state *uicommon.State) *Repository {
 			}
 
 			versionSelect := newVersionSelectMenu(nil)
-			versionSelect.SupplyMods(func() ([]modmgr.ModVersion, error) {
-				versions, err := repo.state.Rest.GetModVersions(mod.ID, 10, "")
-				if err != nil {
-					slog.Error("Failed to get mod versions", "modId", mod.ID, "error", err)
-					return nil, err
-				}
-				return versions, nil
-			},
-				func() {
-					versionSelect.SetSelected(mod.LatestVersion)
-				},
-			)
+			go func() {
+				versionSelect.SupplyMods(func() ([]modmgr.ModVersion, error) {
+					versions, err := repo.state.Rest.GetModVersions(mod.ID, 10, "")
+					if err != nil {
+						slog.Error("Failed to get mod versions", "modId", mod.ID, "error", err)
+						return nil, err
+					}
+					return versions, nil
+				})
+				versionSelect.SetSelected(mod.LatestVersion)
+			}()
 			repo.versionSelects = append(repo.versionSelects, versionSelect)
 
 			img := canvas.NewSquare(theme.Color(theme.ColorNameDisabled))
@@ -100,17 +99,16 @@ func NewRepository(state *uicommon.State) *Repository {
 					version = v
 				}
 
-				versionData, err := repo.state.Rest.GetModVersion(mod.ID, version)
-				if err != nil {
-					slog.Error("Failed to get mod version for installation", "modId", mod.ID, "versionId", version, "error", err)
-					repo.state.SetError(err)
-					return
-				}
-
 				repo.state.ClearError()
 				_ = repo.state.CanInstall.Set(false)
 				_ = repo.state.CanLaunch.Set(false)
 				go func() {
+					versionData, err := repo.state.Rest.GetModVersion(mod.ID, version)
+					if err != nil {
+						slog.Error("Failed to get mod version for installation", "modId", mod.ID, "versionId", version, "error", err)
+						repo.state.SetError(err)
+						return
+					}
 					if err := repo.state.InstallMods(mod.ID, *versionData, repo.progressBar); err != nil {
 						slog.Error("Mod installation failed", "error", err)
 						repo.state.SetError(err)

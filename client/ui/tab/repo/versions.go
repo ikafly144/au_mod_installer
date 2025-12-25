@@ -40,25 +40,20 @@ func (v *versionSelectMenu) GetVersions() []string {
 	return v.versions
 }
 
-func (v *versionSelectMenu) SupplyMods(s func() ([]modmgr.ModVersion, error), after func()) {
-	go func() {
-		mods, err := s()
-		if err != nil {
-			slog.Error("Failed to supply mod versions", "error", err)
-			return
-		}
-		var vers []string
-		for _, m := range mods {
-			vers = append(vers, m.ID)
-		}
-		v.versions = vers
-		fyne.DoAndWait(func() {
-			v.selectMenu.SetOptions(v.GetVersions())
-			if after != nil {
-				after()
-			}
-		})
-	}()
+func (v *versionSelectMenu) SupplyMods(s func() ([]modmgr.ModVersion, error)) {
+	mods, err := s()
+	if err != nil {
+		slog.Error("Failed to supply mod versions", "error", err)
+		return
+	}
+	var vers []string
+	for _, m := range mods {
+		vers = append(vers, m.ID)
+	}
+	v.versions = vers
+	fyne.DoAndWait(func() {
+		v.selectMenu.SetOptions(v.GetVersions())
+	})
 }
 
 func (v *versionSelectMenu) Canvas() fyne.CanvasObject {
