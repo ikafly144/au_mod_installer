@@ -183,6 +183,13 @@ func InstallMod(modInstallLocation *os.Root, gameManifest aumgr.Manifest, launch
 		}
 	}(installation)
 
+	totalDownloadCount := func() int {
+		count := 0
+		for i := range modVersions {
+			count += modVersions[i].CompatibleFilesCount(binaryType)
+		}
+		return count
+	}()
 	hClient := http.DefaultClient
 	for i := range modVersions {
 		if remainMods != nil {
@@ -198,6 +205,7 @@ func InstallMod(modInstallLocation *os.Root, gameManifest aumgr.Manifest, launch
 			if shouldSkip {
 				slog.Info("Skipping already installed mod", "modId", modVersions[i].ModID_, "versionId", modVersions[i].ID)
 				installation.InstalledMods[i] = remainModInfo
+				progress.SetValue(progress.GetValue() + (1.0 / float64(totalDownloadCount)))
 				continue
 			}
 		}
@@ -219,7 +227,7 @@ func InstallMod(modInstallLocation *os.Root, gameManifest aumgr.Manifest, launch
 			slog.Info("Downloading mod", "url", file.URL, "contentLength", contentLength)
 			switch file.FileType {
 			case FileTypeZip:
-				extractFiles, err := extractZip(resp.Body, contentLength, modInstallLocation, progress, modVersions[i].CompatibleFilesCount(binaryType)*len(modVersions))
+				extractFiles, err := extractZip(resp.Body, contentLength, modInstallLocation, progress, totalDownloadCount)
 				installation.InstalledMods[i].Paths = append(installation.InstalledMods[i].Paths, extractFiles...)
 				if err != nil {
 					if e := SaveInstallationInfo(modInstallLocation, installation); e != nil {
@@ -238,7 +246,7 @@ func InstallMod(modInstallLocation *os.Root, gameManifest aumgr.Manifest, launch
 				buf := &ProgressWrapper{
 					start:    progress.GetValue(),
 					goal:     uint64(contentLength),
-					scale:    (1.0 / float64(modVersions[i].CompatibleFilesCount(binaryType)*len(modVersions))),
+					scale:    (1.0 / float64(totalDownloadCount)),
 					progress: progress,
 					buf:      destFile,
 				}
