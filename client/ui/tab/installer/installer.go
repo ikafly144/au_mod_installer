@@ -282,7 +282,7 @@ func (i *Installer) runUninstall() {
 		return
 	}
 	go func() {
-		if err := modmgr.UninstallMod(modInstallLocation, i.progressBar); err != nil {
+		if err := modmgr.UninstallMod(modInstallLocation, i.progressBar, nil); err != nil {
 			fyne.Do(func() {
 				i.state.ErrorText.Segments = []widget.RichTextSegment{
 					&widget.TextSegment{Text: lang.LocalizeKey("installation.error.failed_to_uninstall", "Modのアンインストールに失敗しました: ") + err.Error(), Style: widget.RichTextStyle{ColorName: theme.ColorNameError}},

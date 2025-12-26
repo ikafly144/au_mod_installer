@@ -32,6 +32,8 @@ func launchDefault(amongUsDir string, dllDir string, args ...string) error {
 	// 		return fmt.Errorf("SetDllDirectory failed: %v", err)
 	// 	}
 	// }
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to start Among Us: %w", err)

@@ -140,12 +140,23 @@ func InstallMod(modInstallLocation *os.Root, gameManifest aumgr.Manifest, launch
 		}
 	}
 
+	var remainMods []InstalledModInfo
 	// Remove old installation if exists
 	if _, err := modInstallLocation.Stat(InstallationInfoFileName); err == nil || !os.IsNotExist(err) {
-		if err := UninstallMod(modInstallLocation, progress); err != nil {
+		remainModInfos, err := UninstallRemainingMods(modInstallLocation, progress, modVersions)
+		if err != nil {
 			return nil, fmt.Errorf("failed to remove old mod installation: %w", err)
 		}
 		progress.SetValue(0.0)
+		slog.Info("Filtered remaining mods after uninstallation", "remainMods", remainModInfos)
+		for _, remainModInfo := range remainModInfos {
+			for _, modVersion := range modVersions {
+				if remainModInfo.ModID == modVersion.ModID_ && remainModInfo.ModVersion.ID == modVersion.ID {
+					remainMods = append(remainMods, remainModInfo)
+					break
+				}
+			}
+		}
 	}
 
 	var installedMods []InstalledModInfo
@@ -174,6 +185,23 @@ func InstallMod(modInstallLocation *os.Root, gameManifest aumgr.Manifest, launch
 
 	hClient := http.DefaultClient
 	for i := range modVersions {
+		if remainMods != nil {
+			shouldSkip := false
+			var remainModInfo InstalledModInfo
+			for _, remainMod := range remainMods {
+				if modVersions[i].ModID_ == remainMod.ModID && modVersions[i].ID == remainMod.ID {
+					shouldSkip = true
+					remainModInfo = remainMod
+					break
+				}
+			}
+			if shouldSkip {
+				slog.Info("Skipping already installed mod", "modId", modVersions[i].ModID_, "versionId", modVersions[i].ID)
+				installation.InstalledMods[i] = remainModInfo
+				continue
+			}
+		}
+		slog.Info("Installing mod", "modId", modVersions[i].ModID_, "versionId", modVersions[i].ID)
 		for file := range modVersions[i].Downloads(binaryType) {
 			req, err := http.NewRequest(http.MethodGet, file.URL, nil)
 			if err != nil {
@@ -226,8 +254,8 @@ func InstallMod(modInstallLocation *os.Root, gameManifest aumgr.Manifest, launch
 	return installation, nil
 }
 
-func UninstallMod(modInstallLocation *os.Root, progress progress.Progress) error {
-	if err := uninstallMod(modInstallLocation, progress); err != nil {
+func UninstallMod(modInstallLocation *os.Root, progress progress.Progress, remainMods []ModVersion) error {
+	if _, err := uninstallMod(modInstallLocation, progress, remainMods); err != nil {
 		return fmt.Errorf("failed to uninstall mod: %w", err)
 	}
 	if err := modInstallLocation.Remove(InstallationInfoFileName); err != nil {
@@ -236,7 +264,15 @@ func UninstallMod(modInstallLocation *os.Root, progress progress.Progress) error
 	return nil
 }
 
-func uninstallMod(modInstallLocation *os.Root, progress progress.Progress) error {
+func UninstallRemainingMods(modInstallLocation *os.Root, progress progress.Progress, remainMods []ModVersion) ([]InstalledModInfo, error) {
+	remainModInfos, err := uninstallMod(modInstallLocation, progress, remainMods)
+	if err != nil {
+		return nil, fmt.Errorf("failed to uninstall remaining mods: %w", err)
+	}
+	return remainModInfos, nil
+}
+
+func uninstallMod(modInstallLocation *os.Root, progress progress.Progress, remainMods []ModVersion) ([]InstalledModInfo, error) {
 	if progress != nil {
 		progress.SetValue(0.0)
 		progress.Start()
@@ -244,19 +280,20 @@ func uninstallMod(modInstallLocation *os.Root, progress progress.Progress) error
 	}
 	installation, err := LoadInstallationInfo(modInstallLocation)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	dirInfo, err := modInstallLocation.Open(".")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer dirInfo.Close()
 	fileCount, err := dirInfo.Readdirnames(-1)
 	if err != nil && err != io.EOF {
-		return err
+		return nil, err
 	}
 
+	var remainModInfos []InstalledModInfo
 	switch installation.FileVersion {
 	case 0, 1:
 		i := 0
@@ -287,11 +324,24 @@ func uninstallMod(modInstallLocation *os.Root, progress progress.Progress) error
 			}
 			return nil
 		}); err != nil {
-			return err
+			return nil, err
 		}
 	case 2:
 		var paths []string
 		for _, mod := range installation.InstalledMods {
+			if remainMods != nil {
+				shouldRemain := false
+				for _, remainMod := range remainMods {
+					if mod.ModID == remainMod.ModID_ && mod.ModVersion.ID == remainMod.ID {
+						shouldRemain = true
+						break
+					}
+				}
+				if shouldRemain {
+					remainModInfos = append(remainModInfos, mod)
+					continue
+				}
+			}
 			paths = append(paths, mod.Paths...)
 		}
 		sort.SliceStable(paths, func(i, j int) bool {
@@ -306,7 +356,7 @@ func uninstallMod(modInstallLocation *os.Root, progress progress.Progress) error
 			}
 		}
 	}
-	return nil
+	return remainModInfos, nil
 }
 
 func removeEmptyDirs(root *os.Root, dir string) error {
