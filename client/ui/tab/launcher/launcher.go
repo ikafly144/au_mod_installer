@@ -2,6 +2,8 @@ package launcher
 
 import (
 	"log/slog"
+	"os"
+	"path/filepath"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -120,6 +122,17 @@ func (l *Launcher) runLaunch() {
 			l.state.ErrorText.Refresh()
 			l.state.ErrorText.Show()
 		})
+		if _, err := os.Stat(filepath.Join(path, "Among Us.exe")); os.IsNotExist(err) {
+			fyne.Do(func() {
+				l.state.ErrorText.Segments = []widget.RichTextSegment{
+					&widget.TextSegment{Text: "Among Usの実行ファイルが見つかりません: " + err.Error(), Style: widget.RichTextStyle{ColorName: theme.ColorNameError}},
+					&widget.TextSegment{Text: "MODをアンインストールしてから、Among Usを再インストールしてください。"},
+				}
+				l.state.ErrorText.Refresh()
+			})
+			slog.Warn("Among Us executable not found", "error", err)
+			return
+		}
 		if err := aumgr.LaunchAmongUs(aumgr.DetectLauncherType(path), path, l.state.ModInstallDir()); err != nil {
 			fyne.Do(func() {
 				l.state.ErrorText.Segments = []widget.RichTextSegment{

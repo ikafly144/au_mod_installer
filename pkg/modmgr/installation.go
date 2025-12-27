@@ -236,6 +236,9 @@ func InstallMod(modInstallLocation *os.Root, gameManifest aumgr.Manifest, launch
 					return nil, err
 				}
 			case FileTypeNormal:
+				if file.Path == "" {
+					return nil, fmt.Errorf("file path is empty for normal file type")
+				}
 				installation.InstalledMods[i].Paths = append(installation.InstalledMods[i].Paths, file.Path)
 				_ = modInstallLocation.MkdirAll(filepath.Dir(file.Path), 0755)
 				destFile, err := modInstallLocation.OpenFile(file.Path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
@@ -346,6 +349,7 @@ func uninstallMod(modInstallLocation *os.Root, progress progress.Progress, remai
 					}
 				}
 				if shouldRemain {
+					slog.Info("Keeping mod during uninstallation", "modId", mod.ModID, "versionId", mod.ModVersion.ID)
 					remainModInfos = append(remainModInfos, mod)
 					continue
 				}
@@ -356,6 +360,7 @@ func uninstallMod(modInstallLocation *os.Root, progress progress.Progress, remai
 			return len(paths[i]) > len(paths[j])
 		})
 		for _, path := range paths {
+			slog.Info("Removing mod file during uninstallation", "file", path)
 			if err := modInstallLocation.RemoveAll(path); err != nil {
 				slog.Warn("Failed to remove mod file during uninstallation", "file", path, "error", err)
 			}

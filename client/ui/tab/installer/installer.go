@@ -42,18 +42,25 @@ func (i *Installer) init() {
 	i.uninstallButton.Importance = widget.DangerImportance
 	i.uninstallButton.Disable()
 	if i.installationListener == nil {
-		i.installationListener = binding.NewDataListener(func() {
-			if ok, err := i.state.ModInstalled.Get(); ok && err == nil {
-				i.uninstallButton.Enable()
-			} else if err == nil {
-				i.uninstallButton.Disable()
-			} else {
-				slog.Warn("Failed to get modInstalled", "error", err)
-			}
-		})
+		i.installationListener = binding.NewDataListener(i.checkUninstallState)
 		i.state.ModInstalled.AddListener(i.installationListener)
 		i.state.SelectedGamePath.AddListener(i.installationListener)
+		i.state.CanInstall.AddListener(i.installationListener)
 		i.state.RefreshModInstallation()
+	}
+}
+
+func (i *Installer) checkUninstallState() {
+	if ok, err := i.state.CanInstall.Get(); !ok || err != nil {
+		i.uninstallButton.Disable()
+		return
+	}
+	if ok, err := i.state.ModInstalled.Get(); ok && err == nil {
+		i.uninstallButton.Enable()
+	} else if err == nil {
+		i.uninstallButton.Disable()
+	} else {
+		slog.Warn("Failed to get modInstalled", "error", err)
 	}
 }
 
