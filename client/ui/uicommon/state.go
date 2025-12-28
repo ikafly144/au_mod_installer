@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -89,6 +90,17 @@ func NewState(w fyne.Window, version string, options ...Option) (*State, error) 
 	if err := s.SelectedGamePath.Set(detectedPath); err != nil {
 		return nil, err
 	}
+
+	go func() {
+		for {
+			if s.checkPlayingProcess() {
+				slog.Info("Among Us is running, disabling installation and launch")
+			}
+			// Check every 5 seconds
+			<-time.After(5 * time.Second)
+		}
+	}()
+
 	return &s, nil
 }
 
@@ -229,4 +241,29 @@ func (i *State) RefreshModInstallation() {
 	} else {
 		slog.Warn("Failed to get mod installed", "error", err)
 	}
+}
+
+func (s *State) checkPlayingProcess() bool {
+	closed := false
+	if ok, err := s.CanInstall.Get(); err == nil && !ok {
+		closed = true
+	}
+	pid, err := aumgr.IsAmongUsRunning()
+	if err != nil {
+		slog.Error("Failed to check Among Us process", "error", err)
+		return false
+	}
+	if pid != 0 {
+		slog.Info("Among Us is currently running", "pid", pid)
+
+		_ = s.CanInstall.Set(false)
+		_ = s.CanLaunch.Set(false)
+
+		return true
+	} else if closed {
+		slog.Info("Among Us is not running, re-enabling installation")
+		_ = s.CanInstall.Set(true)
+		s.RefreshModInstallation()
+	}
+	return false
 }
