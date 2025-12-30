@@ -68,6 +68,7 @@ func (i *Installer) Tab() (*container.TabItem, error) {
 	bottom := container.NewVBox(
 		i.state.ErrorText,
 	)
+	entry := widget.NewLabelWithData(i.state.SelectedGamePath)
 	content := container.New(
 		layout.NewBorderLayout(nil, bottom, nil, nil),
 		container.NewVScroll(container.NewVBox(
@@ -75,7 +76,7 @@ func (i *Installer) Tab() (*container.TabItem, error) {
 			i.state.InstallSelect,
 			widget.NewSeparator(),
 			widget.NewAccordion(
-				widget.NewAccordionItem(lang.LocalizeKey("installation.selected_install", "選択されたインストールパス"), widget.NewLabelWithData(i.state.SelectedGamePath)),
+				widget.NewAccordionItem(lang.LocalizeKey("installation.selected_install", "選択されたインストールパス"), container.NewHScroll(container.New(layout.NewCustomPaddedLayout(0, 10, 0, 0), entry))),
 			),
 			widget.NewSeparator(),
 			widget.NewRichTextFromMarkdown("### "+lang.LocalizeKey("installation.installation_status", "インストール状況")), i.state.ModInstalledInfo,

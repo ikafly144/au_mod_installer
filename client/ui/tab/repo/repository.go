@@ -25,6 +25,7 @@ type Repository struct {
 	lastModID    string
 	modsBind     binding.List[modmgr.Mod]
 	modContainer *fyne.Container
+	modScroll    *container.Scroll
 	progressBar  *progress.FyneProgress
 	searchBar    *widget.Entry
 	reloadBtn    *widget.Button
@@ -56,6 +57,8 @@ func NewRepository(state *uicommon.State) *Repository {
 		progressBar:  progress.NewFyneProgress(widget.NewProgressBar()),
 		stateLabel:   widget.NewLabel(""),
 	}
+	repo.modScroll = container.NewVScroll(repo.modContainer)
+
 	repo.stateLabel.Hide()
 	repo.stateLabel.Wrapping = fyne.TextWrapWord
 
@@ -194,9 +197,7 @@ func (r *Repository) Tab() (*container.TabItem, error) {
 		r.progressBar.Canvas(),
 	)
 	content := container.New(layout.NewBorderLayout(top, bottom, nil, nil),
-		container.NewScroll(
-			r.modContainer,
-		),
+		r.modScroll,
 		top,
 		bottom,
 	)
@@ -259,6 +260,7 @@ func (r *Repository) fetchMods() (error, bool) {
 func (r *Repository) reloadMods() {
 	slog.Info("Reloading repository mods")
 	r.lastModID = ""
+	fyne.DoAndWait(r.modScroll.ScrollToTop)
 	_ = r.modsBind.Set([]modmgr.Mod{})
 	if err, _ := r.fetchMods(); err != nil {
 		slog.Error("Failed to reload mods in repository tab", "error", err)

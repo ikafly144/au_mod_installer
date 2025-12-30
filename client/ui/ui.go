@@ -59,7 +59,7 @@ func Main(w fyne.Window, version string, cfg ...func(*Config)) error {
 	)
 	w.SetContent(canvas)
 	w.CenterOnScreen()
-	w.Resize(fyne.NewSize(400, 600))
+	w.Resize(fyne.NewSize(440, 720))
 	w.SetFixedSize(true)
 	w.ShowAndRun()
 	return nil

@@ -1,7 +1,10 @@
+//go:build windows
+
 package main
 
 import (
 	"flag"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -15,7 +18,7 @@ import (
 	"github.com/sqweek/dialog"
 )
 
-var DefaultServer = "http://modofus.sabafly.net"
+var DefaultServer = "https://modofus.sabafly.net"
 
 func main() {
 	lock, err := lockfile.New(filepath.Join(os.Getenv("PROGRAMDATA"), "au_mod_installer.lock"))
@@ -45,7 +48,7 @@ func main() {
 	flag.Parse()
 
 	a := app.New()
-	w := a.NewWindow(lang.LocalizeKey("app.name", "Among Us Mod ランチャー"))
+	w := a.NewWindow(lang.LocalizeKey("app.name", "Mod of Us"))
 
 	var client rest.Client
 	if localMode != "" {
@@ -66,7 +69,7 @@ func main() {
 		slog.Info("Running in server mode", "server", server)
 		client = rest.NewClient(server)
 	}
-	if err := ui.Main(w, a.Metadata().Version,
+	if err := ui.Main(w, fmt.Sprintf("%s (%d)", a.Metadata().Version, a.Metadata().Build),
 		ui.WithStateOptions(
 			uicommon.WithRestClient(client),
 		),

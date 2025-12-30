@@ -92,6 +92,7 @@ func NewState(w fyne.Window, version string, options ...Option) (*State, error) 
 	}
 
 	go func() {
+		time.Sleep(time.Second)
 		for {
 			if s.checkPlayingProcess() {
 				slog.Info("Among Us is running, disabling installation and launch")
@@ -244,26 +245,26 @@ func (i *State) RefreshModInstallation() {
 }
 
 func (s *State) checkPlayingProcess() bool {
-	closed := false
+	canInstall := false
 	if ok, err := s.CanInstall.Get(); err == nil && !ok {
-		closed = true
+		canInstall = true
 	}
 	pid, err := aumgr.IsAmongUsRunning()
 	if err != nil {
 		slog.Error("Failed to check Among Us process", "error", err)
 		return false
 	}
-	if pid != 0 {
+	if pid != 0 && !canInstall {
 		slog.Info("Among Us is currently running", "pid", pid)
 
 		_ = s.CanInstall.Set(false)
 		_ = s.CanLaunch.Set(false)
 
 		return true
-	} else if closed {
+	} else if canInstall && pid == 0 {
 		slog.Info("Among Us is not running, re-enabling installation")
 		_ = s.CanInstall.Set(true)
-		s.RefreshModInstallation()
+		fyne.Do(s.RefreshModInstallation)
 	}
 	return false
 }

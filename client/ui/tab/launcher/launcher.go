@@ -1,6 +1,7 @@
 package launcher
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -9,7 +10,6 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/lang"
-	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
@@ -31,7 +31,7 @@ func NewLauncherTab(s *uicommon.State) uicommon.Tab {
 	l = Launcher{
 		state:           s,
 		launchButton:    widget.NewButtonWithIcon(lang.LocalizeKey("launcher.launch", "起動"), theme.MediaPlayIcon(), l.runLaunch),
-		greetingContent: widget.NewLabelWithStyle("現在開発中！", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+		greetingContent: widget.NewLabelWithStyle(fmt.Sprintf("バージョン：%s", s.Version), fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 	}
 
 	l.init()
@@ -46,28 +46,18 @@ func (l *Launcher) init() {
 		l.checkLaunchState()
 	}
 	l.greetingContent.Wrapping = fyne.TextWrapWord
-	l.greetingContent.Importance = widget.HighImportance
 
 	l.launchButton.Importance = widget.HighImportance
 }
 
 func (l *Launcher) Tab() (*container.TabItem, error) {
-	bottom := container.NewVBox(
-		l.state.ErrorText,
+	content := container.NewPadded(container.NewVBox(
+		widget.NewCard("Mod of Us", "Among UsのModマネージャー", l.greetingContent),
+		widget.NewRichTextFromMarkdown("### "+lang.LocalizeKey("installation.installation_status", "インストール状況")), l.state.ModInstalledInfo,
 		widget.NewSeparator(),
 		l.launchButton,
-	)
-	content := container.New(
-		layout.NewBorderLayout(nil, bottom, nil, nil),
-		container.NewVBox(
-			widget.NewRichTextFromMarkdown("## "+lang.LocalizeKey("installer.select_install_path", "Among Usのインストール先を選択")),
-			l.state.InstallSelect,
-			widget.NewSeparator(),
-			widget.NewCard("Among Us Mod Launcher", "バージョン："+l.state.Version, l.greetingContent),
-			widget.NewRichTextFromMarkdown("### "+lang.LocalizeKey("installation.installation_status", "インストール状況")), l.state.ModInstalledInfo,
-		),
-		bottom,
-	)
+		l.state.ErrorText,
+	))
 	return container.NewTabItem(lang.LocalizeKey("launcher.tab_name", "ランチャー"), content), nil
 }
 
