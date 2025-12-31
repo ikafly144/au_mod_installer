@@ -168,6 +168,7 @@ func (i *State) RefreshModInstallation() {
 	if ok, err := i.ModInstalled.Get(); ok && err == nil {
 		defer i.ModInstalledInfo.Refresh()
 		detectedLauncher := aumgr.DetectLauncherType(path)
+		slog.Info("Detected launcher type", "type", detectedLauncher.String())
 		manifest, err := aumgr.GetManifest(detectedLauncher, path)
 		if err != nil {
 			slog.Warn("Failed to get game manifest", "error", err)

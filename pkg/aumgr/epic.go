@@ -1,7 +1,5 @@
 package aumgr
 
-const epicManifestID = "4AD6AD0447626FA05A0648B2A5D8C66A"
-
 type epicManifest struct {
 	FormatVersion               int      `json:"FormatVersion"`
 	BIsIncompleteInstall        bool     `json:"bIsIncompleteInstall"`

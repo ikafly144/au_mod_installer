@@ -4,6 +4,9 @@ package aumgr
 
 import (
 	"encoding/json"
+	"errors"
+	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -15,20 +18,43 @@ func getEpicManifest() (Manifest, error) {
 	if err != nil {
 		return nil, err
 	}
-	path := filepath.Join(pd, "Epic", "EpicGamesLauncher", "Data", "Manifests", epicManifestID+".item")
-	osInfo, err := os.Stat(path)
-	if err != nil || osInfo.IsDir() {
+	manifestDirPath := filepath.Join(pd, "Epic", "EpicGamesLauncher", "Data", "Manifests")
+	slog.Info("Looking for Epic Games manifests", "path", manifestDirPath)
+	var amongUsManifest *epicManifest
+
+	if err := filepath.WalkDir(manifestDirPath, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if d.Name()[len(d.Name())-5:] != ".item" {
+			return nil
+		}
+		slog.Info("checking epic manifest file", "path", path)
+		file, err := os.Open(path)
+		if err != nil {
+			slog.Error("failed to open epic manifest file", "path", path, "error", err)
+			return err
+		}
+		defer file.Close()
+		var manifest epicManifest
+		decoder := json.NewDecoder(file)
+		if err := decoder.Decode(&manifest); err != nil {
+			return err
+		}
+		if manifest.AppName == epicArtifactId {
+			amongUsManifest = &manifest
+			return fs.SkipAll
+		}
+		return nil
+	}); err != nil && !errors.Is(err, fs.SkipAll) {
+		slog.Error("failed to walk epic manifest directory", "error", err)
 		return nil, err
 	}
-	file, err := os.OpenFile(path, os.O_RDONLY, 0644)
-	if err != nil {
-		return nil, err
+	if amongUsManifest == nil {
+		return nil, errors.New("Among Us manifest not found in Epic Games launcher")
 	}
-	defer file.Close()
-	var manifest epicManifest
-	decoder := json.NewDecoder(file)
-	if err := decoder.Decode(&manifest); err != nil {
-		return nil, err
-	}
-	return manifest, nil
+	return amongUsManifest, nil
 }
