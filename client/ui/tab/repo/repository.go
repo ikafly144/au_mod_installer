@@ -1,8 +1,10 @@
 package repo
 
 import (
+	"fmt"
 	"log/slog"
 	"slices"
+	"sync"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -47,9 +49,6 @@ func NewRepository(state *uicommon.State) *Repository {
 			repo.reloadBtn.Disable()
 			go func() {
 				repo.reloadMods()
-				fyne.DoAndWait(func() {
-					repo.reloadBtn.Enable()
-				})
 			}()
 		}),
 		modsBind:     bind,
@@ -65,93 +64,6 @@ func NewRepository(state *uicommon.State) *Repository {
 	repo.searchBar.SetPlaceHolder(lang.LocalizeKey("repository.search_placeholder", "Modを名前で絞り込む（未実装）"))
 	repo.searchBar.Disable()
 
-	bind.AddListener(binding.NewDataListener(func() {
-		var objs []fyne.CanvasObject
-		mods, err := repo.modsBind.Get()
-		if err != nil {
-			slog.Error("Failed to get mods from binding", "error", err)
-			return
-		}
-		repo.installBtns = nil
-		repo.versionSelects = nil
-		for _, mod := range mods {
-			if !mod.Type.IsVisible() {
-				continue
-			}
-
-			versionSelect := newVersionSelectMenu(nil)
-			go func() {
-				versionSelect.SupplyMods(func() ([]modmgr.ModVersion, error) {
-					versions, err := repo.state.Rest.GetModVersions(mod.ID, 10, "")
-					if err != nil {
-						slog.Error("Failed to get mod versions", "modId", mod.ID, "error", err)
-						return nil, err
-					}
-					return versions, nil
-				})
-				versionSelect.SetSelected(mod.LatestVersion)
-			}()
-			repo.versionSelects = append(repo.versionSelects, versionSelect)
-
-			img := canvas.NewSquare(theme.Color(theme.ColorNameDisabled))
-			img.SetMinSize(fyne.NewSize(64, 64))
-			installBtn := widget.NewButton("インストール", func() {
-				repo.stateLabel.Hide()
-				version := mod.LatestVersion
-				if v, err := versionSelect.GetSelected(); err == nil && v != "" {
-					version = v
-				}
-
-				repo.state.ClearError()
-				_ = repo.state.CanInstall.Set(false)
-				_ = repo.state.CanLaunch.Set(false)
-				go func() {
-					versionData, err := repo.state.Rest.GetModVersion(mod.ID, version)
-					if err != nil {
-						slog.Error("Failed to get mod version for installation", "modId", mod.ID, "versionId", version, "error", err)
-						repo.state.SetError(err)
-						return
-					}
-					if err := repo.state.InstallMods(mod.ID, *versionData, repo.progressBar); err != nil {
-						slog.Error("Mod installation failed", "error", err)
-						repo.state.SetError(err)
-					} else {
-						slog.Info("Mod installation succeeded", "modId", mod.ID, "versionId", version)
-						repo.state.ClearError()
-						_ = repo.state.CanLaunch.Set(true)
-						fyne.DoAndWait(func() {
-							repo.stateLabel.SetText("インストールが完了しました: " + mod.Name + " (" + version + ")")
-							repo.stateLabel.Show()
-						})
-					}
-					_ = repo.state.CanInstall.Set(true)
-					repo.state.CheckInstalled()
-				}()
-			})
-
-			repo.installBtns = append(repo.installBtns, installBtn)
-
-			bottom := container.NewHBox(
-				versionSelect.Canvas(), installBtn,
-			)
-			item := container.New(layout.NewBorderLayout(nil, nil, img, nil),
-				container.New(layout.NewBorderLayout(nil, bottom, nil, nil),
-					container.NewHBox(
-						widget.NewLabel(mod.Name+" ("+mod.Author+")"),
-					),
-					bottom,
-				),
-				img,
-			)
-
-			objs = append(objs, item, widget.NewSeparator())
-		}
-		objs = append(objs, widget.NewButton(lang.LocalizeKey("repository.load_next", "さらに読み込む…"), repo.LoadNext))
-		fyne.Do(func() {
-			repo.modContainer.Objects = objs
-			repo.modContainer.Refresh()
-		})
-	}))
 	repo.init()
 	return &repo
 }
@@ -162,28 +74,137 @@ func (r *Repository) init() {
 	}
 
 	r.state.CanInstall.AddListener(binding.NewDataListener(func() {
-		ok, err := r.state.CanInstall.Get()
-		if err != nil {
-			slog.Warn("Failed to get install state", "error", err)
-			return
+		r.updateInstallState(true)
+	}))
+}
+
+func (r *Repository) updateModList() {
+	defer r.updateInstallState(true)
+	var objs []fyne.CanvasObject
+	mods, err := r.modsBind.Get()
+	if err != nil {
+		slog.Error("Failed to get mods from binding", "error", err)
+		return
+	}
+	if len(mods) == 0 {
+		return
+	}
+	r.installBtns = nil
+	r.versionSelects = nil
+	wg := sync.WaitGroup{}
+	for _, mod := range mods {
+		if !mod.Type.IsVisible() {
+			continue
 		}
-		for _, btn := range r.installBtns {
-			if ok {
-				btn.Enable()
-			} else {
-				btn.Disable()
+
+		versionSelect := newVersionSelectMenu(nil)
+		wg.Go(func() {
+			versionSelect.SupplyMods(func() ([]modmgr.ModVersion, error) {
+				versions, err := r.state.Rest.GetModVersions(mod.ID, 10, "")
+				if err != nil {
+					slog.Error("Failed to get mod versions", "modId", mod.ID, "error", err)
+					return nil, err
+				}
+				return versions, nil
+			})
+			versionSelect.SetSelected(mod.LatestVersion)
+		})
+		r.versionSelects = append(r.versionSelects, versionSelect)
+
+		img := canvas.NewSquare(theme.Color(theme.ColorNameDisabled))
+		img.SetMinSize(fyne.NewSize(64, 64))
+		installBtn := widget.NewButton("インストール", func() {
+			r.stateLabel.Hide()
+			version := mod.LatestVersion
+			if v, err := versionSelect.GetSelected(); err == nil && v != "" {
+				version = v
 			}
-			btn.Refresh()
+
+			if version == "" {
+				slog.Error("No version selected for installation", "modId", mod.ID)
+				r.state.SetError(fmt.Errorf("インストールするバージョンが選択されていません: %s", mod.Name))
+				return
+			}
+
+			r.state.ClearError()
+			_ = r.state.CanInstall.Set(false)
+			_ = r.state.CanLaunch.Set(false)
+			go func() {
+				versionData, err := r.state.Rest.GetModVersion(mod.ID, version)
+				if err != nil {
+					slog.Error("Failed to get mod version for installation", "modId", mod.ID, "versionId", version, "error", err)
+					r.state.SetError(err)
+					return
+				}
+				if err := r.state.InstallMods(mod.ID, *versionData, r.progressBar); err != nil {
+					slog.Error("Mod installation failed", "error", err)
+					r.state.SetError(err)
+				} else {
+					slog.Info("Mod installation succeeded", "modId", mod.ID, "versionId", version)
+					r.state.ClearError()
+					_ = r.state.CanLaunch.Set(true)
+					fyne.DoAndWait(func() {
+						r.stateLabel.SetText("インストールが完了しました: " + mod.Name + " (" + version + ")")
+						r.stateLabel.Show()
+					})
+				}
+				_ = r.state.CanInstall.Set(true)
+				r.state.CheckInstalled()
+			}()
+		})
+
+		r.installBtns = append(r.installBtns, installBtn)
+
+		bottom := container.NewHBox(
+			versionSelect.Canvas(), installBtn,
+		)
+		item := container.New(layout.NewBorderLayout(nil, nil, img, nil),
+			container.New(layout.NewBorderLayout(nil, bottom, nil, nil),
+				container.NewHBox(
+					widget.NewLabel(mod.Name+" ("+mod.Author+")"),
+				),
+				bottom,
+			),
+			img,
+		)
+
+		objs = append(objs, item, widget.NewSeparator())
+	}
+	objs = append(objs, widget.NewButton(lang.LocalizeKey("repository.load_next", "さらに読み込む…"), r.LoadNext))
+	fyne.Do(func() {
+		r.modContainer.Objects = objs
+		r.modContainer.Refresh()
+	})
+	go func() {
+		wg.Wait()
+		fyne.Do(r.reloadBtn.Enable)
+	}()
+}
+
+func (r *Repository) updateInstallState(update bool) {
+	ok, err := r.state.CanInstall.Get()
+	if err != nil {
+		slog.Warn("Failed to get install state", "error", err)
+		return
+	}
+	for _, btn := range r.installBtns {
+		if ok {
+			btn.Enable()
+		} else {
+			btn.Disable()
 		}
-		for _, selectWidget := range r.versionSelects {
-			if ok {
-				selectWidget.Enable()
-			} else {
-				selectWidget.Disable()
-			}
+		btn.Refresh()
+	}
+	for _, selectWidget := range r.versionSelects {
+		if ok {
+			selectWidget.Enable()
+		} else {
+			selectWidget.Disable()
+		}
+		if update {
 			selectWidget.Refresh()
 		}
-	}))
+	}
 }
 
 func (r *Repository) Tab() (*container.TabItem, error) {
@@ -218,6 +239,8 @@ func (r *Repository) LoadNext() {
 }
 
 func (r *Repository) fetchMods() (error, bool) {
+	defer r.updateInstallState(true)
+	defer r.updateModList()
 	if r.state.Rest != nil {
 		mods, err := r.modsBind.Get()
 		if err != nil {

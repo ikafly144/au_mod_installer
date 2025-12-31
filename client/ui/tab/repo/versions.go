@@ -52,7 +52,14 @@ func (v *versionSelectMenu) SupplyMods(s func() ([]modmgr.ModVersion, error)) {
 	}
 	v.versions = vers
 	fyne.DoAndWait(func() {
+		disabled := v.Disabled()
+		v.Disable()
 		v.selectMenu.SetOptions(v.GetVersions())
+		if disabled {
+			v.Disable()
+		} else {
+			v.Enable()
+		}
 	})
 }
 
