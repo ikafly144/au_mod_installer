@@ -1,6 +1,6 @@
 [Details]
-Icon = "icon.png"
-Name = "Mod of Us"
-ID = "com.github.ikafly144.au_mod_installer"
-Version = "0.5.6"
-Build = 17
+  Icon = "icon.png"
+  Name = "Mod of Us"
+  ID = "com.github.ikafly144.au_mod_installer"
+  Version = "0.5.6"
+  Build = 18
