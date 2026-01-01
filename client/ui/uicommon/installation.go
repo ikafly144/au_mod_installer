@@ -5,9 +5,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"fyne.io/fyne/v2/lang"
-	"fyne.io/fyne/v2/theme"
-	"fyne.io/fyne/v2/widget"
 	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 )
@@ -58,15 +55,8 @@ func (i *State) selectLauncher(s string) {
 			i.InstallSelect.Selected = beforeType.String()
 			return
 		}
+		slog.Info("User selected game path", "path", path)
 		l := aumgr.DetectLauncherType(path)
-		if l == aumgr.LauncherUnknown {
-			i.ErrorText.Segments = []widget.RichTextSegment{
-				&widget.TextSegment{Text: lang.LocalizeKey("installer.error.no_executable_selected", "Among Usの実行ファイルが選択されませんでした。"), Style: widget.RichTextStyle{ColorName: theme.ColorNameError}},
-			}
-			i.ErrorText.Refresh()
-			i.ErrorText.Show()
-			return
-		}
 		_ = i.SelectedGamePath.Set(filepath.Dir(path))
 		i.InstallSelect.Selected = l.String()
 	}

@@ -30,6 +30,11 @@ func (s *State) ModVersion(modId, versionId string) (*modmgr.ModVersion, error) 
 }
 
 func (s *State) InstallMods(modId string, versionData modmgr.ModVersion, progress progress.Progress) error {
+	if !s.installLock.TryLock() {
+		slog.Warn("Mod installation already in progress")
+		return nil
+	}
+	defer s.installLock.Unlock()
 	slog.Info("Starting mod installation", "modId", modId, "versionId", versionData.ID)
 
 	var versions []modmgr.ModVersion

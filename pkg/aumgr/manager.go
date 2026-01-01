@@ -1,6 +1,7 @@
 package aumgr
 
 import (
+	"path/filepath"
 	"strings"
 )
 
@@ -32,10 +33,13 @@ func LauncherFromString(s string) LauncherType {
 }
 
 func DetectLauncherType(amongUsDir string) LauncherType {
-	if strings.Contains(amongUsDir, "Steam") || strings.Contains(amongUsDir, "steamapps") {
+	if filepath.Base(amongUsDir) == "Among Us.exe" {
+		amongUsDir = filepath.Dir(amongUsDir)
+	}
+	if filepath.Base(amongUsDir) == "Among Us" && (strings.Contains(amongUsDir, "Steam") || strings.Contains(amongUsDir, "steamapps")) {
 		return LauncherSteam
 	}
-	if strings.Contains(amongUsDir, "Epic Games") {
+	if filepath.Base(amongUsDir) == "AmongUs" && strings.Contains(amongUsDir, "Epic Games") {
 		return LauncherEpicGames
 	}
 	return LauncherUnknown

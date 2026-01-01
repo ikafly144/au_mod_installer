@@ -1,10 +1,10 @@
 package uicommon
 
 import (
-	"errors"
 	"log/slog"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -34,9 +34,6 @@ func NewState(w fyne.Window, version string, options ...Option) (*State, error) 
 	detectedPath, err := aumgr.GetAmongUsDir()
 	if err != nil {
 		return nil, err
-	}
-	if aumgr.DetectLauncherType(detectedPath) == aumgr.LauncherUnknown {
-		return nil, errors.New("Among Us detected but launcher type is unknown")
 	}
 
 	// execPath, err := os.Executable()
@@ -114,6 +111,7 @@ type State struct {
 	ModInstalled     binding.Bool
 	CanLaunch        binding.Bool
 	CanInstall       binding.Bool
+	installLock      sync.Mutex
 
 	Rest rest.Client
 

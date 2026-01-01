@@ -221,9 +221,6 @@ func InstallMod(modInstallLocation *os.Root, gameManifest aumgr.Manifest, launch
 			}
 			defer resp.Body.Close()
 			contentLength := resp.ContentLength
-			if contentLength <= 0 {
-				return nil, fmt.Errorf("invalid content length: %d", contentLength)
-			}
 			slog.Info("Downloading mod", "url", file.URL, "contentLength", contentLength)
 			switch file.FileType {
 			case FileTypeZip:
@@ -253,7 +250,11 @@ func InstallMod(modInstallLocation *os.Root, gameManifest aumgr.Manifest, launch
 					progress: progress,
 					buf:      destFile,
 				}
+				installation.InstalledMods[i].Paths = append(installation.InstalledMods[i].Paths, file.Path)
 				if _, err := io.Copy(buf, resp.Body); err != nil {
+					if e := SaveInstallationInfo(modInstallLocation, installation); e != nil {
+						return nil, fmt.Errorf("failed to install mod: %w (%v)", err, e)
+					}
 					return nil, err
 				}
 			default:
@@ -339,22 +340,28 @@ func uninstallMod(modInstallLocation *os.Root, progress progress.Progress, remai
 		}
 	case 2:
 		var paths []string
-		for _, mod := range installation.InstalledMods {
-			if remainMods != nil {
-				shouldRemain := false
-				for _, remainMod := range remainMods {
-					if mod.ModID == remainMod.ModID_ && mod.ModVersion.ID == remainMod.ID {
-						shouldRemain = true
-						break
+		if installation.Status == InstallStatusCompatible {
+			for _, mod := range installation.InstalledMods {
+				if remainMods != nil {
+					shouldRemain := false
+					for _, remainMod := range remainMods {
+						if mod.ModID == remainMod.ModID_ && mod.ModVersion.ID == remainMod.ID {
+							shouldRemain = true
+							break
+						}
+					}
+					if shouldRemain {
+						slog.Info("Keeping mod during uninstallation", "modId", mod.ModID, "versionId", mod.ModVersion.ID)
+						remainModInfos = append(remainModInfos, mod)
+						continue
 					}
 				}
-				if shouldRemain {
-					slog.Info("Keeping mod during uninstallation", "modId", mod.ModID, "versionId", mod.ModVersion.ID)
-					remainModInfos = append(remainModInfos, mod)
-					continue
-				}
+				paths = append(paths, mod.Paths...)
 			}
-			paths = append(paths, mod.Paths...)
+		} else {
+			for _, mod := range installation.InstalledMods {
+				paths = append(paths, mod.Paths...)
+			}
 		}
 		sort.SliceStable(paths, func(i, j int) bool {
 			return len(paths[i]) > len(paths[j])
@@ -447,10 +454,21 @@ func extractZip(reader io.Reader, contentLength int64, destRoot *os.Root, progre
 		progress: progress,
 		buf:      new(bytes.Buffer),
 	}
-	if _, err := io.CopyN(buf, reader, contentLength); err != nil {
-		return nil, err
+	var written int64
+	if contentLength <= 0 {
+		w, err := io.Copy(buf, reader)
+		if err != nil {
+			return nil, err
+		}
+		written = w
+	} else {
+		w, err := io.CopyN(buf, reader, contentLength)
+		if err != nil {
+			return nil, err
+		}
+		written = w
 	}
-	zipReader, err := zip.NewReader(bytes.NewReader(buf.buf.Bytes()), contentLength)
+	zipReader, err := zip.NewReader(bytes.NewReader(buf.buf.Bytes()), written)
 	if err != nil {
 		return nil, err
 	}
