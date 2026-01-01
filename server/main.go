@@ -24,13 +24,13 @@ func main() {
 		addr       string
 		modsFile   string
 		valkeyAddr string
-		rootPath   string
+		pathPrefix string
 	)
 
 	flag.StringVar(&addr, "addr", ":8080", "HTTP server address")
 	flag.StringVar(&modsFile, "mods", "mods.json", "Path to mods.json file")
 	flag.StringVar(&valkeyAddr, "valkey", "", "Valkey server address (e.g., localhost:6379). If empty, uses file-based storage")
-	flag.StringVar(&rootPath, "root", "/", "Root path for the server")
+	flag.StringVar(&pathPrefix, "path-prefix", "", "URL path prefix (e.g. /api)")
 	flag.Parse()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
@@ -87,14 +87,18 @@ func main() {
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 
-	// Apply middlewares
-	httpHandler := middleware.Chain(mux, middleware.Logging, middleware.CORS)
+	var rootHandler http.Handler = mux
+	if pathPrefix != "" {
+		slog.Info("enabling path prefix", "prefix", pathPrefix)
+		rootHandler = http.StripPrefix(pathPrefix, mux)
+	}
 
-	root := http.NewServeMux()
-	root.Handle(rootPath, httpHandler)
+	// Apply middlewares
+	httpHandler := middleware.Chain(rootHandler, middleware.Logging, middleware.CORS)
+
 	server := &http.Server{
 		Addr:    addr,
-		Handler: root,
+		Handler: httpHandler,
 	}
 
 	// Start server in a goroutine
