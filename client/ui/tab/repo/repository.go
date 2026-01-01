@@ -23,6 +23,7 @@ const ModsPerPage = 10
 
 type Repository struct {
 	state *uicommon.State
+	mu    sync.Mutex
 
 	lastModID    string
 	modsBind     binding.List[modmgr.Mod]
@@ -69,9 +70,11 @@ func NewRepository(state *uicommon.State) *Repository {
 }
 
 func (r *Repository) init() {
-	if err, _ := r.fetchMods(); err != nil {
-		slog.Error("Failed to refresh mods in repository tab", "error", err)
-	}
+	go func() {
+		if err, _ := r.fetchMods(); err != nil {
+			slog.Error("Failed to refresh mods in repository tab", "error", err)
+		}
+	}()
 
 	r.state.CanInstall.AddListener(binding.NewDataListener(func() {
 		r.updateInstallState(true)
@@ -80,6 +83,7 @@ func (r *Repository) init() {
 
 func (r *Repository) updateModList() {
 	defer r.updateInstallState(true)
+	defer fyne.Do(r.reloadBtn.Enable)
 	var objs []fyne.CanvasObject
 	mods, err := r.modsBind.Get()
 	if err != nil {
@@ -89,8 +93,8 @@ func (r *Repository) updateModList() {
 	if len(mods) == 0 {
 		return
 	}
-	r.installBtns = nil
-	r.versionSelects = nil
+	var newInstallBtns []*widget.Button
+	var newVersionSelects []*versionSelectMenu
 	wg := sync.WaitGroup{}
 	for _, mod := range mods {
 		if !mod.Type.IsVisible() {
@@ -98,7 +102,9 @@ func (r *Repository) updateModList() {
 		}
 
 		versionSelect := newVersionSelectMenu(nil)
-		wg.Go(func() {
+		wg.Add(1)
+		go func(mod modmgr.Mod) {
+			defer wg.Done()
 			versionSelect.SupplyMods(func() ([]modmgr.ModVersion, error) {
 				versions, err := r.state.Rest.GetModVersions(mod.ID, 10, "")
 				if err != nil {
@@ -108,8 +114,8 @@ func (r *Repository) updateModList() {
 				return versions, nil
 			})
 			versionSelect.SetSelected(mod.LatestVersion)
-		})
-		r.versionSelects = append(r.versionSelects, versionSelect)
+		}(mod)
+		newVersionSelects = append(newVersionSelects, versionSelect)
 
 		img := canvas.NewSquare(theme.Color(theme.ColorNameDisabled))
 		img.SetMinSize(fyne.NewSize(64, 64))
@@ -153,7 +159,7 @@ func (r *Repository) updateModList() {
 			}()
 		})
 
-		r.installBtns = append(r.installBtns, installBtn)
+		newInstallBtns = append(newInstallBtns, installBtn)
 
 		bottom := container.NewHBox(
 			versionSelect.Canvas(), installBtn,
@@ -171,40 +177,47 @@ func (r *Repository) updateModList() {
 		objs = append(objs, item, widget.NewSeparator())
 	}
 	objs = append(objs, widget.NewButton(lang.LocalizeKey("repository.load_next", "さらに読み込む…"), r.LoadNext))
+
+	wg.Wait()
+	r.mu.Lock()
+	r.installBtns = newInstallBtns
+	r.versionSelects = newVersionSelects
+	r.mu.Unlock()
+
 	fyne.Do(func() {
 		r.modContainer.Objects = objs
 		r.modContainer.Refresh()
 	})
-	go func() {
-		wg.Wait()
-		fyne.Do(r.reloadBtn.Enable)
-	}()
 }
 
 func (r *Repository) updateInstallState(update bool) {
-	ok, err := r.state.CanInstall.Get()
-	if err != nil {
-		slog.Warn("Failed to get install state", "error", err)
-		return
-	}
-	for _, btn := range r.installBtns {
-		if ok {
-			btn.Enable()
-		} else {
-			btn.Disable()
+	fyne.Do(func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		ok, err := r.state.CanInstall.Get()
+		if err != nil {
+			slog.Warn("Failed to get install state", "error", err)
+			return
 		}
-		btn.Refresh()
-	}
-	for _, selectWidget := range r.versionSelects {
-		if ok {
-			selectWidget.Enable()
-		} else {
-			selectWidget.Disable()
+		for _, btn := range r.installBtns {
+			if ok {
+				btn.Enable()
+			} else {
+				btn.Disable()
+			}
+			btn.Refresh()
 		}
-		if update {
-			selectWidget.Refresh()
+		for _, selectWidget := range r.versionSelects {
+			if ok {
+				selectWidget.Enable()
+			} else {
+				selectWidget.Disable()
+			}
+			if update {
+				selectWidget.Refresh()
+			}
 		}
-	}
+	})
 }
 
 func (r *Repository) Tab() (*container.TabItem, error) {
@@ -226,16 +239,18 @@ func (r *Repository) Tab() (*container.TabItem, error) {
 }
 
 func (r *Repository) LoadNext() {
-	mods, _ := r.modsBind.Get()
-	slog.Info("Loading next mods in repository tab", "current_mods", mods)
-	if err, ok := r.fetchMods(); err != nil {
-		slog.Error("Failed to load next mods in repository tab", "error", err)
-	} else {
-		if !ok {
-			slog.Info("No more mods to load in repository tab")
-			return
+	go func() {
+		mods, _ := r.modsBind.Get()
+		slog.Info("Loading next mods in repository tab", "current_mods", mods)
+		if err, ok := r.fetchMods(); err != nil {
+			slog.Error("Failed to load next mods in repository tab", "error", err)
+		} else {
+			if !ok {
+				slog.Info("No more mods to load in repository tab")
+				return
+			}
 		}
-	}
+	}()
 }
 
 func (r *Repository) fetchMods() (error, bool) {
@@ -247,9 +262,11 @@ func (r *Repository) fetchMods() (error, bool) {
 			return err, false
 		}
 		var afterId, lastId string
+		r.mu.Lock()
 		if r.lastModID != "" && len(mods) > 0 {
 			afterId = r.lastModID
 		}
+		r.mu.Unlock()
 
 		slog.Info("Refreshing mods", "firstId", afterId, "lastId", lastId)
 
@@ -261,7 +278,9 @@ func (r *Repository) fetchMods() (error, bool) {
 					return err, false
 				}
 			}
+			r.mu.Lock()
 			r.lastModID = mods[len(mods)-1].ID
+			r.mu.Unlock()
 
 			if !slices.ContainsFunc(mods, func(m modmgr.Mod) bool {
 				return m.Type.IsVisible()
@@ -282,7 +301,9 @@ func (r *Repository) fetchMods() (error, bool) {
 
 func (r *Repository) reloadMods() {
 	slog.Info("Reloading repository mods")
+	r.mu.Lock()
 	r.lastModID = ""
+	r.mu.Unlock()
 	fyne.DoAndWait(r.modScroll.ScrollToTop)
 	_ = r.modsBind.Set([]modmgr.Mod{})
 	if err, _ := r.fetchMods(); err != nil {
