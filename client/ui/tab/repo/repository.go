@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"strings"
 	"sync"
 
 	"fyne.io/fyne/v2"
@@ -62,8 +63,10 @@ func NewRepository(state *uicommon.State) *Repository {
 	repo.stateLabel.Hide()
 	repo.stateLabel.Wrapping = fyne.TextWrapWord
 
-	repo.searchBar.SetPlaceHolder(lang.LocalizeKey("repository.search_placeholder", "Modを名前で絞り込む（未実装）"))
-	repo.searchBar.Disable()
+	repo.searchBar.SetPlaceHolder(lang.LocalizeKey("repository.search_placeholder", "Modを名前で絞り込む"))
+	repo.searchBar.OnChanged = func(s string) {
+		go repo.updateModList(s)
+	}
 
 	repo.init()
 	return &repo
@@ -81,7 +84,7 @@ func (r *Repository) init() {
 	}))
 }
 
-func (r *Repository) updateModList() {
+func (r *Repository) updateModList(filter string) {
 	defer r.updateInstallState(true)
 	defer fyne.Do(r.reloadBtn.Enable)
 	var objs []fyne.CanvasObject
@@ -96,8 +99,12 @@ func (r *Repository) updateModList() {
 	var newInstallBtns []*widget.Button
 	var newVersionSelects []*versionSelectMenu
 	wg := sync.WaitGroup{}
+	searchText := strings.ToLower(filter)
 	for _, mod := range mods {
 		if !mod.Type.IsVisible() {
+			continue
+		}
+		if searchText != "" && !strings.Contains(strings.ToLower(mod.Name), searchText) {
 			continue
 		}
 
@@ -255,7 +262,13 @@ func (r *Repository) LoadNext() {
 
 func (r *Repository) fetchMods() (error, bool) {
 	defer r.updateInstallState(true)
-	defer r.updateModList()
+	defer func() {
+		var text string
+		fyne.DoAndWait(func() {
+			text = r.searchBar.Text
+		})
+		r.updateModList(text)
+	}()
 	if r.state.Rest != nil {
 		mods, err := r.modsBind.Get()
 		if err != nil {
