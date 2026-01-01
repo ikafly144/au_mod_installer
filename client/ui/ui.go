@@ -1,6 +1,10 @@
 package ui
 
 import (
+	"fmt"
+	"runtime/debug"
+	"slices"
+
 	"github.com/ikafly144/au_mod_installer/client/ui/tab/installer"
 	"github.com/ikafly144/au_mod_installer/client/ui/tab/launcher"
 	"github.com/ikafly144/au_mod_installer/client/ui/tab/repo"
@@ -25,6 +29,19 @@ func Main(w fyne.Window, version string, cfg ...func(*Config)) error {
 
 	for _, c := range cfg {
 		c(&config)
+	}
+
+	info, ok := debug.ReadBuildInfo()
+	if ok {
+		fmt.Println(info)
+	}
+	vscIdx := slices.IndexFunc(info.Settings, func(b debug.BuildSetting) bool {
+		return b.Key == "vcs.revision"
+	})
+	if vscIdx != -1 {
+		version += " (" + info.Settings[vscIdx].Value[:min(len(info.Settings[vscIdx].Value), 7)] + ")"
+	} else {
+		version = "(devel)"
 	}
 
 	state, err := uicommon.NewState(w, version, config.stateOptions...)

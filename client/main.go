@@ -18,7 +18,7 @@ import (
 	"github.com/sqweek/dialog"
 )
 
-var DefaultServer = "https://modofus.sabafly.net"
+var DefaultServer = "https://modofus.sabafly.net/v0"
 
 func main() {
 	lock, err := lockfile.New(filepath.Join(os.Getenv("PROGRAMDATA"), "au_mod_installer.lock"))
@@ -33,11 +33,16 @@ func main() {
 		(&dialog.MsgBuilder{Msg: lang.LocalizeKey("app.already_running", "Another instance of Among Us Mod Installer is already running.")}).Title(lang.LocalizeKey("app.error", "Error")).Error()
 		os.Exit(1)
 	}
-	defer func() {
-		if err := lock.Unlock(); err != nil {
-			slog.Error("Failed to unlock lockfile", "error", err)
-		}
-	}()
+	mainErr := realMain()
+	if err := lock.Unlock(); err != nil {
+		slog.Error("Failed to unlock lockfile", "error", err)
+	}
+	if mainErr != nil {
+		os.Exit(1)
+	}
+}
+
+func realMain() error {
 	var (
 		localMode string
 		server    string
@@ -57,12 +62,12 @@ func main() {
 		if err != nil {
 			slog.Error("Failed to create local file client", "error", err)
 			dialog.Message("ローカルファイルクライアントの作成に失敗しました: %s", err.Error()).Title("エラーが発生しました").Error()
-			os.Exit(1)
+			return err
 		}
 		if err := f.LoadData(); err != nil {
 			slog.Error("Failed to load data from local file", "error", err)
 			dialog.Message("ローカルファイルからのデータの読み込みに失敗しました: %s", err.Error()).Title("エラーが発生しました").Error()
-			os.Exit(1)
+			return err
 		}
 		client = f
 	} else {
@@ -76,6 +81,7 @@ func main() {
 	); err != nil {
 		slog.Error("Failed to initialize UI", "error", err)
 		dialog.Message("UIの初期化に失敗しました: %s", err.Error()).Title("エラーが発生しました").Error()
-		os.Exit(1)
+		return err
 	}
+	return nil
 }

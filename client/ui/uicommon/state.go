@@ -209,7 +209,7 @@ func (i *State) RefreshModInstallation() {
 							"version": mod.ModVersion.ID,
 							"latest":  remoteMod.LatestVersion,
 						}) + "\n"
-					canLaunch = false
+					canLaunch = false // TODO: allow launching with outdated mods
 					break
 				}
 			}
@@ -220,18 +220,17 @@ func (i *State) RefreshModInstallation() {
 			if err := modmgr.SaveInstallationInfo(modInstallLocation, installationInfo); err != nil {
 				slog.Warn("Failed to save installation info", "error", err)
 			}
+			canLaunch = false
 		}
-		var modNames string
-		idx := 0
+		var modNames []string
 		for _, mod := range installationInfo.InstalledMods {
-			if idx > 0 {
-				modNames += ", "
-			}
-			modNames += mod.ModID + " (" + mod.ModVersion.ID + ")"
-			idx++
+			modNames = append(modNames, mod.ModID+" ("+mod.ModVersion.ID+")")
 		}
-		info += lang.LocalizeKey("installer.info.mod_name", "Mod: ") + modNames + "\n"
+		info += lang.LocalizeKey("installer.info.mod_name", "Mod: ") + strings.Join(modNames, ", ") + "\n"
 		i.ModInstalledInfo.SetText(strings.TrimSpace(info))
+		if i.Version == "(devel)" {
+			canLaunch = true
+		}
 		if err := i.CanLaunch.Set(canLaunch); err != nil {
 			slog.Warn("Failed to set launchable", "error", err)
 		}
