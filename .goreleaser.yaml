@@ -74,10 +74,17 @@ changelog:
       - "^test:"
 
 release:
-  draft: true
   replace_existing_draft: true
   prerelease: "{{ .IsSnapshot }}"
   make_latest: "{{ .IsSnapshot == false }}"
   github:
     name: au_mod_installer
     owner: ikafly144
+
+announce:
+  skip: "{{ .IsSnapshot }}"
+  discord:
+    enabled: true
+    message_template: |-
+      {{ .ProjectName }} {{ .Tag }} がリリースされました！
+      ダウンロードリンク: <{{ .ReleaseURL }}>

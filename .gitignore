@@ -18,3 +18,8 @@
 local/
 # Added by goreleaser init:
 dist/
+
+# Version info file
+versioninfo.json
+*.syso
+
