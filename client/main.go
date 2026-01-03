@@ -18,7 +18,7 @@ import (
 	"github.com/sqweek/dialog"
 )
 
-var DefaultServer = "https://modofus.sabafly.net/v0"
+var DefaultServer = "https://modofus.sabafly.net/v1"
 
 func main() {
 	lock, err := lockfile.New(filepath.Join(os.Getenv("PROGRAMDATA"), "au_mod_installer.lock"))

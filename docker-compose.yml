@@ -33,7 +33,7 @@ services:
       - "8180:8180"
     environment:
       - TZ=Asia/Tokyo
-    command: ["-addr", ":8180", "-valkey", "valkey:6379", "-path-prefix", "/v0"]
+    command: ["-addr", ":8180", "-valkey", "valkey:6379", "-path-prefix", "/v1"]
     depends_on:
       valkey:
         condition: service_healthy
