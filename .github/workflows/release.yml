@@ -18,6 +18,9 @@ jobs:
   goreleaser:
     runs-on: windows-latest
     steps:
+      - name: Configure Git
+        run: |
+          git config --local core.autocrlf false
       - name: Checkout
         uses: actions/checkout@v6
         with:
