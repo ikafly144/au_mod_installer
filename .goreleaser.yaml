@@ -19,12 +19,13 @@ before:
     - git diff --exit-code HEAD --
 
 builds:
-  - env:
-      - CGO_ENABLED=1
-    goos:
+  - goos:
       - windows
     goarch:
       - amd64
+    env:
+      - CGO_ENABLED=1
+      - CC=x86_64-w64-mingw32-gcc
     main: ./client
     ldflags:
       - -s -w -H=windowsgui
