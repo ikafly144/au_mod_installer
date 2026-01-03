@@ -31,6 +31,7 @@ func main() {
 		slog.Error("Another instance is already running", "error", err)
 		//ignore:printf
 		(&dialog.MsgBuilder{Msg: lang.LocalizeKey("app.already_running", "Another instance of Among Us Mod Installer is already running.")}).Title(lang.LocalizeKey("app.error", "Error")).Error()
+		_ = lock.Unlock()
 		os.Exit(1)
 	}
 	mainErr := realMain()
