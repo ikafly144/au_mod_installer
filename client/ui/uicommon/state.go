@@ -228,7 +228,7 @@ func (i *State) RefreshModInstallation() {
 		}
 		info += lang.LocalizeKey("installer.info.mod_name", "Mod: ") + strings.Join(modNames, ", ") + "\n"
 		i.ModInstalledInfo.SetText(strings.TrimSpace(info))
-		if i.Version == "(devel)" {
+		if strings.Contains(i.Version, "(devel)") { // NOTE: allow launching in development mode
 			canLaunch = true
 		}
 		if err := i.CanLaunch.Set(canLaunch); err != nil {

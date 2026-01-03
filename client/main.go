@@ -4,7 +4,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -74,7 +73,8 @@ func realMain() error {
 		slog.Info("Running in server mode", "server", server)
 		client = rest.NewClient(server)
 	}
-	if err := ui.Main(w, fmt.Sprintf("%s (%d)", a.Metadata().Version, a.Metadata().Build),
+
+	if err := ui.Main(w, version,
 		ui.WithStateOptions(
 			uicommon.WithRestClient(client),
 		),

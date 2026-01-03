@@ -15,3 +15,5 @@
 # vendor/
 
 local/
+# Added by goreleaser init:
+dist/
