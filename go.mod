@@ -6,6 +6,7 @@ require (
 	fyne.io/fyne/v2 v2.7.1
 	github.com/TheTitanrain/w32 v0.0.0-20200114052255-2654d97dbd3d
 	github.com/google/go-github/v80 v80.0.0
+	github.com/minio/selfupdate v0.6.0
 	github.com/nightlyone/lockfile v1.0.0
 	github.com/sqweek/dialog v0.0.0-20240226140203-065105509627
 	github.com/valkey-io/valkey-go v1.0.69
@@ -14,6 +15,7 @@ require (
 )
 
 require (
+	aead.dev/minisign v0.3.0 // indirect
 	fyne.io/systray v1.11.1-0.20250603113521-ca66a66d8b58 // indirect
 	fyne.io/tools v1.6.2 // indirect
 	github.com/BurntSushi/toml v1.5.0 // indirect
@@ -55,6 +57,7 @@ require (
 	github.com/urfave/cli/v2 v2.27.1 // indirect
 	github.com/xrash/smetrics v0.0.0-20201216005158-039620a65673 // indirect
 	github.com/yuin/goldmark v1.7.13 // indirect
+	golang.org/x/crypto v0.46.0 // indirect
 	golang.org/x/image v0.32.0 // indirect
 	golang.org/x/mod v0.31.0 // indirect
 	golang.org/x/net v0.48.0 // indirect

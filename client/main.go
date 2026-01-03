@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log/slog"
 	"os"
@@ -42,6 +43,18 @@ func main() {
 }
 
 func realMain() error {
+	tag, err := checkForUpdates(context.Background())
+	if err != nil {
+		slog.Error("Failed to check for updates", "error", err)
+	} else if tag != "" {
+		slog.Info("Update available", "version", tag)
+		yes := dialog.Message(lang.LocalizeKey("update.available", "新しいバージョンが利用可能です。「はい」をクリックすると更新します。")+":%s", tag).Title(lang.LocalizeKey("update.title", "Update Available")).YesNo()
+		if yes {
+			if err := update(context.Background(), tag); err != nil {
+				slog.Error("Failed to update", "error", err)
+			}
+		}
+	}
 	var (
 		localMode string
 		server    string
