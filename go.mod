@@ -69,3 +69,7 @@ require (
 )
 
 tool fyne.io/tools/cmd/fyne
+
+ignore (
+	dist/
+)

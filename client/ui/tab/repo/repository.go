@@ -59,6 +59,11 @@ func NewRepository(state *uicommon.State) *Repository {
 		stateLabel:   widget.NewLabel(""),
 	}
 	repo.modScroll = container.NewVScroll(repo.modContainer)
+	repo.modScroll.OnScrolled = func(pos fyne.Position) {
+		if pos.Y >= repo.modContainer.Size().Height-repo.modScroll.Size().Height {
+			repo.LoadNext()
+		}
+	}
 
 	repo.stateLabel.Hide()
 	repo.stateLabel.Wrapping = fyne.TextWrapWord

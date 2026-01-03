@@ -111,6 +111,7 @@ type State struct {
 	ModInstalled     binding.Bool
 	CanLaunch        binding.Bool
 	CanInstall       binding.Bool
+	launchLock       sync.Mutex
 	installLock      sync.Mutex
 
 	Rest rest.Client
@@ -243,6 +244,8 @@ func (i *State) RefreshModInstallation() {
 }
 
 func (s *State) checkPlayingProcess() bool {
+	s.launchLock.Lock()
+	defer s.launchLock.Unlock()
 	canInstall := false
 	if ok, err := s.CanInstall.Get(); err == nil && !ok {
 		canInstall = true

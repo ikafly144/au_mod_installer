@@ -3,8 +3,6 @@ package launcher
 import (
 	"fmt"
 	"log/slog"
-	"os"
-	"path/filepath"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -13,7 +11,6 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
-	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
 )
 
 type Launcher struct {
@@ -104,42 +101,7 @@ func (l *Launcher) runLaunch() {
 	// }
 	_ = l.state.CanLaunch.Set(false)
 	_ = l.state.CanInstall.Set(false)
-	go func() {
-		fyne.Do(func() {
-			l.state.ErrorText.Segments = []widget.RichTextSegment{
-				&widget.TextSegment{Text: "現在Among Usを実行中です…"},
-			}
-			l.state.ErrorText.Refresh()
-			l.state.ErrorText.Show()
-		})
-		if _, err := os.Stat(filepath.Join(path, "Among Us.exe")); os.IsNotExist(err) {
-			fyne.Do(func() {
-				l.state.ErrorText.Segments = []widget.RichTextSegment{
-					&widget.TextSegment{Text: "Among Usの実行ファイルが見つかりません: " + err.Error(), Style: widget.RichTextStyle{ColorName: theme.ColorNameError}},
-					&widget.TextSegment{Text: "MODをアンインストールしてから、Among Usを再インストールしてください。"},
-				}
-				l.state.ErrorText.Refresh()
-			})
-			slog.Warn("Among Us executable not found", "error", err)
-			return
-		}
-		if err := aumgr.LaunchAmongUs(aumgr.DetectLauncherType(path), path, l.state.ModInstallDir()); err != nil {
-			fyne.Do(func() {
-				l.state.ErrorText.Segments = []widget.RichTextSegment{
-					&widget.TextSegment{Text: "Among Usの起動に失敗しました: " + err.Error(), Style: widget.RichTextStyle{ColorName: theme.ColorNameError}},
-				}
-				l.state.ErrorText.Refresh()
-			})
-			slog.Warn("Failed to launch Among Us", "error", err)
-			return
-		} else {
-			fyne.Do(func() {
-				l.state.ErrorText.Hide()
-			})
-		}
-		_ = l.state.CanLaunch.Set(true)
-		_ = l.state.CanInstall.Set(true)
-	}()
+	go l.state.Launch(path)
 }
 
 func (l *Launcher) checkLaunchState() {
