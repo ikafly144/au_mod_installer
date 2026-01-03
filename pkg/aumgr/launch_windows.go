@@ -11,12 +11,14 @@ import (
 	"time"
 )
 
-func LaunchAmongUs(launcherType LauncherType, amongUsDir string, dllDir string, args ...string) error {
+func LaunchAmongUs(launcherType LauncherType, amongUsDir string, dllDir string) error {
 	switch launcherType {
+	case LauncherSteam:
+		return launchSteam(amongUsDir, dllDir)
 	case LauncherEpicGames:
-		return launchEpicGames(amongUsDir, dllDir, args...)
+		return launchEpicGames(amongUsDir, dllDir)
 	default:
-		return launchDefault(amongUsDir, dllDir, args...)
+		return launchDefault(amongUsDir, dllDir)
 	}
 }
 
@@ -37,6 +39,10 @@ func launchDefault(amongUsDir string, dllDir string, args ...string) error {
 	return nil
 }
 
+func launchSteam(amongUsDir string, dllDir string) error {
+	return launchFromUrl("steam://rungameid/945360")
+}
+
 // const (
 // 	EglVersion = "11.0.1-14907503+++Portal+Release-Live"
 
@@ -53,10 +59,14 @@ func launchDefault(amongUsDir string, dllDir string, args ...string) error {
 // 	TokenEndpoint    = "https://" + OAuthHost + "/account/api/oauth/token"
 // )
 
-func launchEpicGames(amongUsDir string, dllDir string, args ...string) error {
-	cmd := exec.Command("rundll32.exe", "url.dll,FileProtocolHandler", "com.epicgames.launcher://apps/"+epicNamespace+"%3A"+epicCatalogId+"%3A"+epicArtifactId+"?action=launch&silent=true")
+func launchEpicGames(amongUsDir string, dllDir string) error {
+	return launchFromUrl("com.epicgames.launcher://apps/" + epicNamespace + "%3A" + epicCatalogId + "%3A" + epicArtifactId + "?action=launch&silent=true")
+}
+
+func launchFromUrl(url string) error {
+	cmd := exec.Command("rundll32.exe", "url.dll,FileProtocolHandler", url)
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("failed to start Epic Games Launcher: %w", err)
+		return fmt.Errorf("failed to start Among Us from url: %s error: %w", url, err)
 	}
 	for range 100 {
 		time.Sleep(500 * time.Millisecond)
