@@ -64,7 +64,7 @@ func realMain() error {
 
 	a := app.New()
 
-	branch := versioning.Branch(a.Preferences().StringWithFallback("core.update_branch", "stable"))
+	branch := versioning.BranchFromString(a.Preferences().StringWithFallback("core.update_branch", "stable"))
 
 	tag, err := versioning.CheckForUpdates(context.Background(), branch, version)
 	if err != nil {

@@ -35,7 +35,7 @@ func CheckForUpdates(ctx context.Context, branch Branch, currentVersion string) 
 	}
 	for _, tag := range tags {
 		slog.Info("found tag", "tag", tag.GetName())
-		if before, _, _ := strings.Cut(strings.TrimPrefix(semver.Prerelease(tag.GetName()), "-"), "."); before != "" && before != branch.Prerelease() {
+		if before, _, _ := strings.Cut(strings.TrimPrefix(semver.Prerelease(tag.GetName()), "-"), "."); before != "" && !branch.match(before) {
 			slog.Info("skipping tag due to prerelease branch mismatch", "tag", tag.GetName(), "branch", branch)
 			continue
 		}
@@ -142,28 +142,47 @@ func replaceOSAndArch(name string) string {
 	return name
 }
 
-type Branch string
-
-const (
-	BranchStable  Branch = "stable"
-	BranchDev     Branch = "dev"
-	BranchCanary  Branch = "canary"
-	BranchBeta    Branch = "beta"
-	BranchPreview Branch = "preview"
-)
-
-var branchToPrerelease = map[Branch]string{
-	BranchStable:  "",
-	BranchDev:     "alpha",
-	BranchCanary:  "beta",
-	BranchBeta:    "pre",
-	BranchPreview: "rc",
+func BranchFromString(s string) Branch {
+	for str, b := range prereleaseToBranch {
+		if str == s {
+			return b
+		}
+	}
+	return BranchStable
 }
 
-func (b Branch) Prerelease() string {
-	return branchToPrerelease[b]
+type Branch int
+
+const (
+	BranchStable Branch = iota
+	BranchPreview
+	BranchBeta
+	BranchCanary
+	BranchDev
+)
+
+var branchString = map[Branch]string{
+	BranchStable:  "stable",
+	BranchPreview: "preview",
+	BranchBeta:    "beta",
+	BranchCanary:  "canary",
+	BranchDev:     "dev",
+}
+
+var prereleaseToBranch = map[string]Branch{
+	"rc":    BranchPreview,
+	"pre":   BranchBeta,
+	"beta":  BranchCanary,
+	"alpha": BranchDev,
+}
+
+func (b Branch) match(prerelease string) bool {
+	if p, ok := prereleaseToBranch[prerelease]; (ok && p <= b) || prerelease == "" {
+		return true
+	}
+	return false
 }
 
 func (b Branch) String() string {
-	return string(b)
+	return branchString[b]
 }
