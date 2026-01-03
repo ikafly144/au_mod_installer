@@ -16,7 +16,7 @@ RUN go mod download
 COPY . .
 
 # Build the server binary
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /server ./server
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -trimpath -o /server ./server
 
 # Runtime stage
 FROM alpine:latest
