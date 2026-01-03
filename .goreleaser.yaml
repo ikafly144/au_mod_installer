@@ -25,7 +25,11 @@ builds:
       - amd64
     env:
       - CGO_ENABLED=1
-      - CC=x86_64-w64-mingw32-gcc
+      - >-
+        {{ if eq .Os "windows" }}
+          {{ if eq .Arch "amd64" }}CC=x86_64-w64-mingw32-gcc{{ end }}
+          {{ if eq .Arch "386" }}CC=i686-w64-mingw32-gcc{{ end }}
+        {{ end }}
     main: ./client
     ldflags:
       - -s -w -H=windowsgui
