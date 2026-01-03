@@ -27,7 +27,7 @@ var jsonTemplate = `{
 			"Build": %d
 		},
 		"FileFlagsMask": "3f",
-		"FileFlags ": "00",
+		"FileFlags ": "10",
 		"FileOS": "040004",
 		"FileType": "01",
 		"FileSubType": "00"
