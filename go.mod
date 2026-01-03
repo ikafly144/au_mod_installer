@@ -6,6 +6,7 @@ require (
 	fyne.io/fyne/v2 v2.7.1
 	github.com/TheTitanrain/w32 v0.0.0-20200114052255-2654d97dbd3d
 	github.com/google/go-github/v80 v80.0.0
+	github.com/josephspurrier/goversioninfo v1.4.0
 	github.com/minio/selfupdate v0.6.0
 	github.com/nightlyone/lockfile v1.0.0
 	github.com/sqweek/dialog v0.0.0-20240226140203-065105509627
@@ -42,7 +43,6 @@ require (
 	github.com/hack-pad/safejs v0.1.1 // indirect
 	github.com/jackmordaunt/icns/v2 v2.2.6 // indirect
 	github.com/jeandeaual/go-locale v0.0.0-20250612000132-0ef82f21eade // indirect
-	github.com/josephspurrier/goversioninfo v1.4.0 // indirect
 	github.com/jsummers/gobmp v0.0.0-20230614200233-a9de23ed2e25 // indirect
 	github.com/lucor/goinfo v0.9.0 // indirect
 	github.com/mcuadros/go-version v0.0.0-20190830083331-035f6764e8d2 // indirect

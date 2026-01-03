@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"os/exec"
@@ -8,6 +9,7 @@ import (
 	"strings"
 	_ "unsafe"
 
+	"github.com/josephspurrier/goversioninfo"
 	_ "golang.org/x/mod/semver"
 )
 
@@ -88,6 +90,9 @@ func versionStrToNum(versionString string) ([]int, error) {
 	}
 	// Build number is unused in semver, so we set it to 0
 	vn[3] = 0
+	if vn[0] == 0 && vn[1] == 0 && vn[2] == 0 {
+		vn[3] = 1
+	}
 	return vn[:], nil
 }
 
@@ -101,22 +106,61 @@ func getVersionData() (string, []int, error) {
 	return str, num, err
 }
 
+var (
+	iconFlag   = flag.String("icon", "icon.ico", "Path to the icon file")
+	archFlag   = flag.String("arch", "64", "Architecture (32 or 64)")
+	outputFlag = flag.String("o", "mod-of-us.syso", "Output .syso file path")
+)
+
 func main() {
+	flag.Parse()
 	fileVerStr, fileVerNum, err := getVersionData()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
 		os.Exit(1)
 	}
 
-	fmt.Printf(jsonTemplate,
-		fileVerNum[0],
-		fileVerNum[1],
-		fileVerNum[2],
-		fileVerNum[3],
-		fileVerNum[0],
-		fileVerNum[1],
-		fileVerNum[2],
-		fileVerNum[3],
-		fileVerStr,
-		fileVerStr)
+	if iconFlag == nil || *iconFlag == "" {
+		fmt.Fprintln(os.Stderr, "Icon path is required")
+		os.Exit(1)
+	}
+
+	if archFlag == nil {
+		fmt.Fprintln(os.Stderr, "Architecture must be either 32 or 64")
+		os.Exit(1)
+	}
+	vi := &goversioninfo.VersionInfo{
+		IconPath: *iconFlag,
+		FixedFileInfo: goversioninfo.FixedFileInfo{
+			FileVersion:    goversioninfo.FileVersion{Major: fileVerNum[0], Minor: fileVerNum[1], Patch: fileVerNum[2], Build: fileVerNum[3]},
+			ProductVersion: goversioninfo.FileVersion{Major: fileVerNum[0], Minor: fileVerNum[1], Patch: fileVerNum[2], Build: fileVerNum[3]},
+			FileFlagsMask:  "3f",
+			FileFlags:      "10",
+			FileOS:         "040004",
+			FileType:       "01",
+			FileSubType:    "00",
+		},
+		StringFileInfo: goversioninfo.StringFileInfo{
+			CompanyName:      "ikafly144",
+			FileVersion:      fileVerStr,
+			LegalCopyright:   "Copyright (C) 2026 ikafly144.",
+			OriginalFilename: "MOD-OF-US.EXE",
+			ProductName:      "Mod of Us - Among Us Mod Manager",
+			ProductVersion:   fileVerStr,
+		},
+		VarFileInfo: goversioninfo.VarFileInfo{
+			Translation: goversioninfo.Translation{
+				LangID:    goversioninfo.LngJapanese,
+				CharsetID: goversioninfo.CsMultilingual,
+			},
+		},
+	}
+
+	vi.Build()
+	vi.Walk()
+
+	if err := vi.WriteSyso(*outputFlag, *archFlag); err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+		os.Exit(1)
+	}
 }

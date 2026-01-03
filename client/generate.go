@@ -1,3 +1,3 @@
 package main
 
-//go:generate cmd /c go run ../cmd/gen_version/main.go > versioninfo.json && go run github.com/hymkor/goversioninfo/cmd/goversioninfo@latest -icon=icon.ico -o mod-of-us.syso -64 versioninfo.json && del versioninfo.json
+//go:generate go run ../cmd/gen_syso/ -o version.syso -icon icon.ico -arch amd64
