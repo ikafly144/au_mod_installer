@@ -8,12 +8,14 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"runtime"
 	"strings"
 
 	"github.com/google/go-github/v80/github"
 	"github.com/minio/selfupdate"
+	"golang.org/x/mod/semver"
 )
 
 // repository information
@@ -23,15 +25,28 @@ var (
 	artifactName = "mod-of-us_${OS}_${ARCH}"
 )
 
-func checkForUpdates(ctx context.Context) (newVersion string, err error) {
+func checkForUpdates(ctx context.Context, branch string) (newVersion string, err error) {
 	client := github.NewClient(http.DefaultClient)
-	release, _, err := client.Repositories.GetLatestRelease(ctx, repoOwner, repoName)
-	if err != nil {
-		return "", err
+	opt := &github.ListOptions{
+		PerPage: 100,
+		Page:    1,
 	}
-	if release.GetTagName() != version {
-		return release.GetTagName(), nil
+	tags, _, err := client.Repositories.ListTags(ctx, repoOwner, repoName, opt)
+	for _, tag := range tags {
+		slog.Info("found tag", "tag", tag.GetName())
+		if before, _, _ := strings.Cut(strings.TrimPrefix(semver.Prerelease(tag.GetName()), "-"), "."); before != "" && before != prereleaseFromBranch(branch) {
+			slog.Info("skipping tag due to prerelease branch mismatch", "tag", tag.GetName(), "branch", branch)
+			continue
+		}
+		release, _, err := client.Repositories.GetReleaseByTag(ctx, repoOwner, repoName, "stable")
+		if err != nil {
+			return "", err
+		}
+		if release.GetTagName() != version {
+			return release.GetTagName(), nil
+		}
 	}
+
 	return "", nil
 }
 
@@ -120,4 +135,19 @@ func replaceOSAndArch(name string) string {
 	}
 
 	return name
+}
+
+var branchToPrerelease = map[string]string{
+	"stable":  "",
+	"dev":     "alpha",
+	"canary":  "beta",
+	"beta":    "pre",
+	"preview": "rc",
+}
+
+func prereleaseFromBranch(branch string) string {
+	if pre, ok := branchToPrerelease[branch]; ok {
+		return pre
+	}
+	return ""
 }

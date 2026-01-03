@@ -34,6 +34,13 @@ func main() {
 		_ = lock.Unlock()
 		os.Exit(1)
 	}
+	defer func() {
+		if p := recover(); p != nil {
+			slog.Error("Application panicked", "panic", p)
+			_ = lock.Unlock()
+			os.Exit(1)
+		}
+	}()
 	mainErr := realMain()
 	if err := lock.Unlock(); err != nil {
 		slog.Error("Failed to unlock lockfile", "error", err)
@@ -44,7 +51,20 @@ func main() {
 }
 
 func realMain() error {
-	tag, err := checkForUpdates(context.Background())
+	var (
+		localMode string
+		server    string
+	)
+
+	flag.StringVar(&localMode, "local", "", "Path to local mods.json file for local mode")
+	flag.StringVar(&server, "server", DefaultServer, "URL of the mod server")
+	flag.Parse()
+
+	a := app.New()
+
+	branch := a.Preferences().StringWithFallback("core.update_branch", "stable")
+
+	tag, err := checkForUpdates(context.Background(), branch)
 	if err != nil {
 		slog.Error("Failed to check for updates", "error", err)
 	} else if tag != "" {
@@ -56,16 +76,7 @@ func realMain() error {
 			}
 		}
 	}
-	var (
-		localMode string
-		server    string
-	)
 
-	flag.StringVar(&localMode, "local", "", "Path to local mods.json file for local mode")
-	flag.StringVar(&server, "server", DefaultServer, "URL of the mod server")
-	flag.Parse()
-
-	a := app.New()
 	w := a.NewWindow(lang.LocalizeKey("app.name", "Mod of Us"))
 
 	var client rest.Client
