@@ -7,6 +7,7 @@ import (
 	"flag"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"fyne.io/fyne/v2/app"
@@ -14,6 +15,7 @@ import (
 	"github.com/ikafly144/au_mod_installer/client/rest"
 	"github.com/ikafly144/au_mod_installer/client/ui"
 	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
+	"github.com/ikafly144/au_mod_installer/common/versioning"
 	"github.com/nightlyone/lockfile"
 	"github.com/sqweek/dialog"
 )
@@ -62,19 +64,26 @@ func realMain() error {
 
 	a := app.New()
 
-	branch := a.Preferences().StringWithFallback("core.update_branch", "stable")
+	branch := versioning.Branch(a.Preferences().StringWithFallback("core.update_branch", "stable"))
 
-	tag, err := checkForUpdates(context.Background(), branch)
+	tag, err := versioning.CheckForUpdates(context.Background(), branch, version)
 	if err != nil {
 		slog.Error("Failed to check for updates", "error", err)
 	} else if tag != "" {
 		slog.Info("Update available", "version", tag)
-		yes := dialog.Message(lang.LocalizeKey("update.available", "新しいバージョンが利用可能です。「はい」をクリックすると更新します。")+":%s", tag).Title(lang.LocalizeKey("update.title", "Update Available")).YesNo()
+		yes := (&dialog.MsgBuilder{Msg: lang.LocalizeKey("update.available", "新しいバージョン\"{{.Version}}\"が利用可能です。「はい」をクリックすると更新します。", map[string]any{"Version": tag})}).Title(lang.LocalizeKey("update.title", "Update Available")).YesNo()
 		if yes {
-			if err := update(context.Background(), tag); err != nil {
+			slog.Info("Updating to new version", "version", tag)
+			if err := versioning.Update(context.Background(), tag); err != nil {
 				slog.Error("Failed to update", "error", err)
+				(&dialog.MsgBuilder{Msg: lang.LocalizeKey("update.failed", "更新に失敗しました: %s", map[string]any{"Error": err.Error()})}).Title(lang.LocalizeKey("app.error", "Error")).Error()
+				return err
 			}
+			execCmd := exec.Command(os.Args[0], os.Args[1:]...)
+			return execCmd.Start()
 		}
+	} else {
+		slog.Info("No updates available")
 	}
 
 	w := a.NewWindow(lang.LocalizeKey("app.name", "Mod of Us"))

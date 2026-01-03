@@ -6,6 +6,7 @@ import (
 	"github.com/ikafly144/au_mod_installer/client/ui/tab/installer"
 	"github.com/ikafly144/au_mod_installer/client/ui/tab/launcher"
 	"github.com/ikafly144/au_mod_installer/client/ui/tab/repo"
+	"github.com/ikafly144/au_mod_installer/client/ui/tab/settings"
 	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
 
 	"fyne.io/fyne/v2"
@@ -54,10 +55,17 @@ func Main(w fyne.Window, version string, cfg ...func(*Config)) error {
 		return err
 	}
 
+	s := settings.NewSettings(state)
+	settingsTab, err := s.Tab()
+	if err != nil {
+		return err
+	}
+
 	canvas := container.NewAppTabs(
 		launcherTab,
 		installerTab,
 		repoTab,
+		settingsTab,
 	)
 	w.SetContent(canvas)
 	w.CenterOnScreen()

@@ -1,7 +1,6 @@
-//go:build windows
+package versioning
 
-package main
-
+// repository information
 import (
 	"context"
 	"crypto"
@@ -18,31 +17,37 @@ import (
 	"golang.org/x/mod/semver"
 )
 
-// repository information
 var (
 	repoOwner    = "ikafly144"
 	repoName     = "au_mod_installer"
 	artifactName = "mod-of-us_${OS}_${ARCH}"
 )
 
-func checkForUpdates(ctx context.Context, branch string) (newVersion string, err error) {
+func CheckForUpdates(ctx context.Context, branch Branch, currentVersion string) (releaseTag string, err error) {
 	client := github.NewClient(http.DefaultClient)
 	opt := &github.ListOptions{
 		PerPage: 100,
 		Page:    1,
 	}
 	tags, _, err := client.Repositories.ListTags(ctx, repoOwner, repoName, opt)
+	if err != nil {
+		return "", err
+	}
 	for _, tag := range tags {
 		slog.Info("found tag", "tag", tag.GetName())
-		if before, _, _ := strings.Cut(strings.TrimPrefix(semver.Prerelease(tag.GetName()), "-"), "."); before != "" && before != prereleaseFromBranch(branch) {
+		if before, _, _ := strings.Cut(strings.TrimPrefix(semver.Prerelease(tag.GetName()), "-"), "."); before != "" && before != branch.Prerelease() {
 			slog.Info("skipping tag due to prerelease branch mismatch", "tag", tag.GetName(), "branch", branch)
 			continue
 		}
-		release, _, err := client.Repositories.GetReleaseByTag(ctx, repoOwner, repoName, "stable")
+		release, _, err := client.Repositories.GetReleaseByTag(ctx, repoOwner, repoName, tag.GetName())
 		if err != nil {
 			return "", err
 		}
-		if release.GetTagName() != version {
+		if semver.Compare(release.GetTagName(), currentVersion) <= 0 {
+			slog.Info("skipping tag due to not greater than current version", "tag", tag.GetName(), "current", currentVersion)
+			continue
+		}
+		if release.GetTagName() != currentVersion {
 			return release.GetTagName(), nil
 		}
 	}
@@ -50,7 +55,7 @@ func checkForUpdates(ctx context.Context, branch string) (newVersion string, err
 	return "", nil
 }
 
-func update(ctx context.Context, tag string) error {
+func Update(ctx context.Context, tag string) error {
 	client := github.NewClient(http.DefaultClient)
 	release, _, err := client.Repositories.GetReleaseByTag(ctx, repoOwner, repoName, tag)
 	if err != nil {
@@ -137,17 +142,28 @@ func replaceOSAndArch(name string) string {
 	return name
 }
 
-var branchToPrerelease = map[string]string{
-	"stable":  "",
-	"dev":     "alpha",
-	"canary":  "beta",
-	"beta":    "pre",
-	"preview": "rc",
+type Branch string
+
+const (
+	BranchStable  Branch = "stable"
+	BranchDev     Branch = "dev"
+	BranchCanary  Branch = "canary"
+	BranchBeta    Branch = "beta"
+	BranchPreview Branch = "preview"
+)
+
+var branchToPrerelease = map[Branch]string{
+	BranchStable:  "",
+	BranchDev:     "alpha",
+	BranchCanary:  "beta",
+	BranchBeta:    "pre",
+	BranchPreview: "rc",
 }
 
-func prereleaseFromBranch(branch string) string {
-	if pre, ok := branchToPrerelease[branch]; ok {
-		return pre
-	}
-	return ""
+func (b Branch) Prerelease() string {
+	return branchToPrerelease[b]
+}
+
+func (b Branch) String() string {
+	return string(b)
 }

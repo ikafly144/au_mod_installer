@@ -28,7 +28,7 @@ func NewLauncherTab(s *uicommon.State) uicommon.Tab {
 	l = Launcher{
 		state:           s,
 		launchButton:    widget.NewButtonWithIcon(lang.LocalizeKey("launcher.launch", "起動"), theme.MediaPlayIcon(), l.runLaunch),
-		greetingContent: widget.NewLabelWithStyle(fmt.Sprintf("バージョン：%s", s.Version), fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+		greetingContent: widget.NewLabelWithStyle(fmt.Sprintf("バージョン：%s (%s)", s.Version, fyne.CurrentApp().Metadata().Custom["revision"]), fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 	}
 
 	l.init()

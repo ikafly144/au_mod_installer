@@ -15,6 +15,7 @@ import (
 var icon []byte
 
 var version string
+var revision string
 
 func init() {
 	info, ok := debug.ReadBuildInfo()
@@ -29,8 +30,13 @@ func init() {
 			}
 		}
 		if vscIdx != -1 {
-			version += " (" + info.Settings[vscIdx].Value[:min(7, len(info.Settings[vscIdx].Value))] + ")"
+			revision = info.Settings[vscIdx].Value
+		} else {
+			revision = "unknown"
 		}
+	} else {
+		version = "unknown"
+		revision = "unknown"
 	}
 
 	app.SetMetadata(fyne.AppMetadata{
@@ -39,5 +45,8 @@ func init() {
 		Version: version,
 		Build:   1,
 		Icon:    fyne.NewStaticResource("icon.png", icon),
+		Custom: map[string]string{
+			"revision": revision,
+		},
 	})
 }
