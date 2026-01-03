@@ -16,7 +16,7 @@ before:
     - go mod tidy
     # you may remove this if you don't need go generate
     - go generate ./...
-    - git diff-index --exit-code HEAD --
+    - git diff --exit-code HEAD --
 
 builds:
   - env:
