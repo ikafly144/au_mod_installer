@@ -80,13 +80,13 @@ changelog:
 release:
   replace_existing_draft: true
   prerelease: auto
-  make_latest: "{{ eq .IsSnapshot false }}"
+  make_latest: '{{ or ( not .IsSnapshot) ( nq .Prerelease "" ) }}'
   github:
     name: au_mod_installer
     owner: ikafly144
 
 announce:
-  skip: "{{ .IsSnapshot }}"
+  skip: '{{ or .IsSnapshot ( nq .Prerelease "" ) }}'
   discord:
     enabled: true
     message_template: |-
