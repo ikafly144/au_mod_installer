@@ -79,7 +79,7 @@ changelog:
 
 release:
   replace_existing_draft: true
-  prerelease: '{{ ne .Prerelease "" }}'
+  prerelease: auto
   make_latest: '{{ eq .Prerelease "" }}'
   github:
     name: au_mod_installer
