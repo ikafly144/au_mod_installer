@@ -29,10 +29,10 @@ services:
       - cloudflared
     ports:
       - "8180:8180"
+    env_file:
+      - .env
     environment:
       - TZ=Asia/Tokyo
-      - VERSION=v1
-      - PATH_PREFIX=/${VERSION}
     command: ["-addr", ":8180", "-valkey", "valkey:6379", "-path-prefix", "${PATH_PREFIX}"]
     depends_on:
       valkey:

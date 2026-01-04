@@ -23,3 +23,5 @@ dist/
 versioninfo.json
 *.syso
 
+# env file
+*.env

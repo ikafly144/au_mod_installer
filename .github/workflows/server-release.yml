@@ -7,6 +7,9 @@ on:
     paths:
       - server/**
       - server-admin/**
+      - .dockerignore
+    tags:
+      - "v*"
   workflow_dispatch:
 
 env:
