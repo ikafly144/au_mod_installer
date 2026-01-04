@@ -1,4 +1,4 @@
-name: build
+name: build server image
 run-name: building server image ${{ github.ref_name }}
 on:
   push:
