@@ -143,7 +143,7 @@ func replaceOSAndArch(name string) string {
 }
 
 func BranchFromString(s string) Branch {
-	for str, b := range prereleaseToBranch {
+	for b, str := range branchString {
 		if str == s {
 			return b
 		}

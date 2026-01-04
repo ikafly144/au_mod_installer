@@ -18,8 +18,10 @@ type Settings struct {
 func NewSettings(state *uicommon.State) *Settings {
 	branchOptions := []string{
 		versioning.BranchStable.String(),
+		versioning.BranchPreview.String(),
 		versioning.BranchBeta.String(),
 		versioning.BranchCanary.String(),
+		versioning.BranchDev.String(),
 	}
 	branchSelect := widget.NewSelect(branchOptions, nil)
 	branchSelect.PlaceHolder = "Select Update Channel"
