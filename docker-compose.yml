@@ -22,9 +22,7 @@ services:
 
   # API Server
   au-mod-installer-server:
-    build:
-      context: .
-      dockerfile: server/Dockerfile
+    image: ghcr.io/ikafly144/au_mod_installer-server:latest
     restart: unless-stopped
     networks:
       - default
@@ -61,9 +59,7 @@ services:
 
   # Admin Panel
   admin:
-    build:
-      context: .
-      dockerfile: server-admin/Dockerfile
+    image: ghcr.io/ikafly144/au_mod_installer-server-admin:latest
     restart: unless-stopped
     networks:
       - default
