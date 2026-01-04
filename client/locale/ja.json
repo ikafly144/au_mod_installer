@@ -1,5 +1,5 @@
 {
-    "app.already_running": "Among Us Mod Installerはすでに起動しています。",
+    "app.error.already_running": "別のMod of Usのインスタンスがすでに実行中でしたが、強制終了しました。アプリケーションを再起動してください。",
     "app.error": "エラー",
     "update.available": "新しいバージョン\"{{.Version}}\"が利用可能です。「はい」をクリックすると更新します。",
     "update.title": "アップデート利用可能",
