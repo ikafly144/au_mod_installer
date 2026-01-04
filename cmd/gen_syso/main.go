@@ -13,52 +13,6 @@ import (
 	_ "golang.org/x/mod/semver"
 )
 
-var jsonTemplate = `{
-	"FixedFileInfo":
-	{
-		"FileVersion": {
-			"Major": %d,
-			"Minor": %d,
-			"Patch": %d,
-			"Build": %d
-		},
-		"ProductVersion": {
-			"Major": %d,
-			"Minor": %d,
-			"Patch": %d,
-			"Build": %d
-		},
-		"FileFlagsMask": "3f",
-		"FileFlags ": "10",
-		"FileOS": "040004",
-		"FileType": "01",
-		"FileSubType": "00"
-	},
-	"StringFileInfo":
-	{
-		"Comments": "",
-		"CompanyName": "ikafly144",
-		"FileDescription": "Mod of Us - Among Us Mod Manager",
-		"FileVersion": "%s",
-		"InternalName": "",
-		"LegalCopyright": "Copyright (C) 2026 ikafly144.",
-		"LegalTrademarks": "",
-		"OriginalFilename": "MOD-OF-US.EXE",
-		"PrivateBuild": "",
-		"ProductName": "Mod of Us - Among Us Mod Manager",
-		"ProductVersion": "%s",
-		"SpecialBuild": ""
-	},
-	"VarFileInfo":
-	{
-		"Translation": {
-			"LangID": "0411",
-			"CharsetID": "04E4"
-		}
-	}
-}
-`
-
 //nolint:unused
 type parsed struct {
 	major      string
