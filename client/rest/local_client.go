@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/ikafly144/au_mod_installer/common/rest"
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 )
 
@@ -54,6 +55,12 @@ func (f *FileClient) LoadData() error {
 }
 
 var _ Client = (*FileClient)(nil)
+
+func (f *FileClient) GetHealthStatus() (*rest.HealthStatus, error) {
+	return &rest.HealthStatus{
+		Status: "OK",
+	}, nil
+}
 
 func (f *FileClient) GetModList(limit int, after string, before string) ([]modmgr.Mod, error) {
 	var mods []modmgr.Mod

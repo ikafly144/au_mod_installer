@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -20,18 +21,35 @@ import (
 )
 
 func main() {
+	slog.Info("Starting Among Us Mod Installer server", "version", version, "revision", revision)
 	var (
-		addr       string
-		modsFile   string
-		valkeyAddr string
-		pathPrefix string
+		addr                string
+		modsFile            string
+		valkeyAddr          string
+		pathPrefix          string
+		disabledVersionsStr string
 	)
 
 	flag.StringVar(&addr, "addr", ":8080", "HTTP server address")
 	flag.StringVar(&modsFile, "mods", "mods.json", "Path to mods.json file")
 	flag.StringVar(&valkeyAddr, "valkey", "", "Valkey server address (e.g., localhost:6379). If empty, uses file-based storage")
 	flag.StringVar(&pathPrefix, "path-prefix", "", "URL path prefix (e.g. /api)")
+	flag.StringVar(&disabledVersionsStr, "disabled-versions", "", "Comma-separated list of disabled versions")
 	flag.Parse()
+
+	if disabledVersionsStr == "" {
+		disabledVersionsStr = os.Getenv("DISABLED_VERSIONS")
+	}
+
+	var disabledVersions []string
+	if disabledVersionsStr != "" {
+		parts := strings.Split(disabledVersionsStr, ",")
+		for _, p := range parts {
+			if v := strings.TrimSpace(p); v != "" {
+				disabledVersions = append(disabledVersions, v)
+			}
+		}
+	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
@@ -83,7 +101,7 @@ func main() {
 		slog.Info("using file-based storage", "file", modsFile)
 	}
 
-	h := handler.NewHandler(modService)
+	h := handler.NewHandler(modService, version, disabledVersions)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 

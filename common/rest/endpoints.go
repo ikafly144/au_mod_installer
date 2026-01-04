@@ -7,6 +7,7 @@ import (
 )
 
 var (
+	EndpointHealth         = NewEndpoint("GET", "/health")
 	EndpointGetModList     = NewEndpoint("GET", "/mods")
 	EndpointGetModDetails  = NewEndpoint("GET", "/mods/{modID}")
 	EndpointGetModVersions = NewEndpoint("GET", "/mods/{modID}/versions")

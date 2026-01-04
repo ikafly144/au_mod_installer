@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/ikafly144/au_mod_installer/common/rest"
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 	"github.com/ikafly144/au_mod_installer/server/service"
 )
@@ -21,20 +22,33 @@ type ModServiceInterface interface {
 }
 
 type Handler struct {
-	modService ModServiceInterface
+	modService       ModServiceInterface
+	version          string
+	disabledVersions []string
 }
 
-func NewHandler(modService ModServiceInterface) *Handler {
+func NewHandler(modService ModServiceInterface, version string, disabledVersions []string) *Handler {
 	return &Handler{
-		modService: modService,
+		modService:       modService,
+		version:          version,
+		disabledVersions: disabledVersions,
 	}
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("GET /health", h.handleHealth)
 	mux.HandleFunc("GET /mods", h.handleGetMods)
 	mux.HandleFunc("GET /mods/{modID}", h.handleGetMod)
 	mux.HandleFunc("GET /mods/{modID}/versions", h.handleGetModVersions)
 	mux.HandleFunc("GET /mods/{modID}/versions/{versionID}", h.handleGetModVersion)
+}
+
+func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, rest.HealthStatus{
+		Status:           "OK",
+		WorkingVersion:   h.version,
+		DisabledVersions: h.disabledVersions,
+	})
 }
 
 func (h *Handler) handleGetMods(w http.ResponseWriter, r *http.Request) {

@@ -108,6 +108,13 @@ func realMain() error {
 		client = rest.NewClient(server)
 	}
 
+	// TODO: オフラインモードの実装（アンインストール・インストール済みモッドの管理のみ可能）
+	// if _, err := client.GetHealthStatus(); err != nil {
+	// 	slog.Error("Failed to connect to server", "error", err)
+	// 	dialog.Message("サーバーへの接続に失敗しました: %s", err.Error()).Title("エラーが発生しました").Error()
+	// 	return err
+	// }
+
 	if err := ui.Main(w, version,
 		ui.WithStateOptions(
 			uicommon.WithRestClient(client),

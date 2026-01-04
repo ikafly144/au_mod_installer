@@ -81,3 +81,12 @@ func (c *clientImpl) do(endpoint *rest.CompiledEndpoint, rqBody any, rsBody any,
 	}
 	return nil
 }
+
+func (c *clientImpl) GetHealthStatus() (*rest.HealthStatus, error) {
+	var status rest.HealthStatus
+	err := c.do(rest.EndpointHealth.Compile(nil), nil, &status, 1)
+	if err != nil {
+		return nil, err
+	}
+	return &status, nil
+}
