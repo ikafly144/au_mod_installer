@@ -33,7 +33,7 @@
     "launcher.error.no_path": "ゲームパスが指定されていません。",
     "error.local_client_creation_failed": "ローカルファイルクライアントの作成に失敗しました: %s",
     "error.local_data_load_failed": "ローカルファイルからのデータの読み込みに失敗しました: %s",
-    "error.server_connection_failed_offline_prompt": "サーバーへの接続に失敗しました: %s\nオフラインモードで続行しますか？\n(アンインストール・インストール済みモッドの管理のみ可能です)",
+    "error.server_connection_failed_offline_prompt": "サーバーへの接続に失敗しました: {{.Error}}\nオフラインモードで続行しますか？\n(アンインストール・インストール済みモッドの管理のみ可能です)",
     "error.connection_error": "接続エラー",
     "error.ui_initialization_failed": "UIの初期化に失敗しました: %s",
     "repository.install": "インストール",

@@ -37,16 +37,11 @@ func main() {
 		os.Exit(1)
 	}
 	defer func() {
-		if p := recover(); p != nil {
-			slog.Error("Application panicked", "panic", p)
-			_ = lock.Unlock()
-			os.Exit(1)
+		if err := lock.Unlock(); err != nil {
+			slog.Error("Failed to unlock lockfile", "error", err)
 		}
 	}()
 	mainErr := realMain()
-	if err := lock.Unlock(); err != nil {
-		slog.Error("Failed to unlock lockfile", "error", err)
-	}
 	if mainErr != nil {
 		os.Exit(1)
 	}
@@ -56,10 +51,12 @@ func realMain() error {
 	var (
 		localMode string
 		server    string
+		offline   bool
 	)
 
 	flag.StringVar(&localMode, "local", "", "Path to local mods.json file for local mode")
 	flag.StringVar(&server, "server", DefaultServer, "URL of the mod server")
+	flag.BoolVar(&offline, "offline", false, "Run in offline mode (only uninstallation and management of installed mods are available)")
 	flag.Parse()
 
 	a := app.New()
@@ -108,9 +105,9 @@ func realMain() error {
 		client = rest.NewClient(server)
 	}
 
-	if _, err := client.GetHealthStatus(); err != nil {
+	if _, err := client.GetHealthStatus(); err != nil || offline {
 		slog.Error("Failed to connect to server", "error", err)
-		yes := dialog.Message(lang.LocalizeKey("error.server_connection_failed_offline_prompt", "Failed to connect to server: %s\nDo you want to continue in offline mode?\n(Only uninstallation and management of installed mods are available)"), err.Error()).Title(lang.LocalizeKey("error.connection_error", "Connection Error")).YesNo()
+		yes := (&dialog.MsgBuilder{Msg: lang.LocalizeKey("error.server_connection_failed_offline_prompt", "Failed to connect to server: {{.Error}}\nDo you want to continue in offline mode?\n(Only uninstallation and management of installed mods are available)", map[string]any{"Error": err})}).Title(lang.LocalizeKey("error.connection_error", "Connection Error")).YesNo()
 		if yes {
 			slog.Info("Continuing in offline mode")
 			client = rest.NewOfflineClient()

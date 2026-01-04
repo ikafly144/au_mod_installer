@@ -1,6 +1,8 @@
 package rest
 
 import (
+	"errors"
+
 	"github.com/ikafly144/au_mod_installer/common/rest"
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 )
@@ -20,17 +22,17 @@ func (c *OfflineClient) GetHealthStatus() (*rest.HealthStatus, error) {
 }
 
 func (c *OfflineClient) GetModList(limit int, after string, before string) ([]modmgr.Mod, error) {
-	return []modmgr.Mod{}, nil
+	return nil, errors.New("offline mode: mod list not available")
 }
 
 func (c *OfflineClient) GetMod(modID string) (*modmgr.Mod, error) {
-	return nil, nil
+	return nil, errors.New("offline mode: mod details not available")
 }
 
 func (c *OfflineClient) GetModVersions(modID string, limit int, after string) ([]modmgr.ModVersion, error) {
-	return []modmgr.ModVersion{}, nil
+	return nil, errors.New("offline mode: mod versions not available")
 }
 
 func (c *OfflineClient) GetModVersion(modID string, versionID string) (*modmgr.ModVersion, error) {
-	return nil, nil
+	return nil, errors.New("offline mode: mod version details not available")
 }
