@@ -16,7 +16,7 @@ before:
     - go mod tidy
     # you may remove this if you don't need go generate
     - go generate ./...
-    - git diff --exit-code HEAD --
+    - "{{ if not .IsSnapshot }}git diff --exit-code HEAD --{{ end }}"
 
 builds:
   - goos:
