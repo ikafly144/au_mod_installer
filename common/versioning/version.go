@@ -42,7 +42,8 @@ func CheckForUpdates(ctx context.Context, branch Branch, currentVersion string) 
 			}
 			release, _, err := client.Repositories.GetReleaseByTag(ctx, repoOwner, repoName, tag.GetName())
 			if err != nil {
-				return "", err
+				slog.Error("failed to get release by tag", "tag", tag.GetName(), "error", err)
+				continue
 			}
 			if semver.Compare(release.GetTagName(), currentVersion) <= 0 {
 				slog.Info("no newer version found", "current", currentVersion, "found", release.GetTagName())
