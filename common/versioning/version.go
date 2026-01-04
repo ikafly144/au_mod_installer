@@ -26,30 +26,36 @@ var (
 func CheckForUpdates(ctx context.Context, branch Branch, currentVersion string) (releaseTag string, err error) {
 	client := github.NewClient(http.DefaultClient)
 	opt := &github.ListOptions{
-		PerPage: 100,
+		PerPage: 10,
 		Page:    1,
 	}
-	tags, _, err := client.Repositories.ListTags(ctx, repoOwner, repoName, opt)
-	if err != nil {
-		return "", err
-	}
-	for _, tag := range tags {
-		slog.Info("found tag", "tag", tag.GetName())
-		if before, _, _ := strings.Cut(strings.TrimPrefix(semver.Prerelease(tag.GetName()), "-"), "."); before != "" && !branch.match(before) {
-			slog.Info("skipping tag due to prerelease branch mismatch", "tag", tag.GetName(), "branch", branch)
-			continue
-		}
-		release, _, err := client.Repositories.GetReleaseByTag(ctx, repoOwner, repoName, tag.GetName())
+	for {
+		tags, resp, err := client.Repositories.ListTags(ctx, repoOwner, repoName, opt)
 		if err != nil {
 			return "", err
 		}
-		if semver.Compare(release.GetTagName(), currentVersion) <= 0 {
-			slog.Info("skipping tag due to not greater than current version", "tag", tag.GetName(), "current", currentVersion)
-			continue
+		for _, tag := range tags {
+			slog.Info("found tag", "tag", tag.GetName())
+			if before, _, _ := strings.Cut(strings.TrimPrefix(semver.Prerelease(tag.GetName()), "-"), "."); before != "" && !branch.match(before) {
+				slog.Info("skipping tag due to prerelease branch mismatch", "tag", tag.GetName(), "branch", branch)
+				continue
+			}
+			release, _, err := client.Repositories.GetReleaseByTag(ctx, repoOwner, repoName, tag.GetName())
+			if err != nil {
+				return "", err
+			}
+			if semver.Compare(release.GetTagName(), currentVersion) <= 0 {
+				slog.Info("no newer version found", "current", currentVersion, "found", release.GetTagName())
+				return "", nil
+			}
+			if release.GetTagName() != currentVersion {
+				return release.GetTagName(), nil
+			}
 		}
-		if release.GetTagName() != currentVersion {
-			return release.GetTagName(), nil
+		if resp.NextPage == 0 {
+			break
 		}
+		opt.Page = resp.NextPage
 	}
 
 	return "", nil
