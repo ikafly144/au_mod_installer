@@ -79,8 +79,8 @@ changelog:
 
 release:
   replace_existing_draft: true
-  prerelease: auto
-  make_latest: '{{ or ( not .IsSnapshot) ( ne .Prerelease "" ) }}'
+  prerelease: '{{ ne .Prerelease "" }}'
+  make_latest: '{{ eq .Prerelease "" }}'
   github:
     name: au_mod_installer
     owner: ikafly144
