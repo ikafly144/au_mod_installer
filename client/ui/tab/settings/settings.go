@@ -24,7 +24,7 @@ func NewSettings(state *uicommon.State) *Settings {
 		versioning.BranchDev.String(),
 	}
 	branchSelect := widget.NewSelect(branchOptions, nil)
-	branchSelect.PlaceHolder = "Select Update Channel"
+	branchSelect.PlaceHolder = lang.LocalizeKey("settings.select_update_channel", "Select Update Channel")
 	branchSelect.OnChanged = func(s string) {
 		fyne.CurrentApp().Preferences().SetString("core.update_branch", s)
 	}

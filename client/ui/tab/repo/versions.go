@@ -21,7 +21,7 @@ func newVersionSelectMenu(versions []modmgr.ModVersion) *versionSelectMenu {
 		selected:   bind,
 		selectMenu: widget.NewSelectWithData(versionStr, bind),
 	}
-	version.selectMenu.PlaceHolder = lang.LocalizeKey("repository.select_version", "バージョンを選択")
+	version.selectMenu.PlaceHolder = lang.LocalizeKey("repository.select_version", "Select Version")
 	return &version
 }
 

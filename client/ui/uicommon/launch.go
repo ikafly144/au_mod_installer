@@ -15,13 +15,13 @@ import (
 
 func (s *State) Launch(path string) {
 	if !s.launchLock.TryLock() {
-		s.SetError(errors.New(lang.LocalizeKey("error.game_already_running", "すでに実行中です。")))
+		s.SetError(errors.New(lang.LocalizeKey("error.game_already_running", "Already running.")))
 		return
 	}
 	defer s.launchLock.Unlock()
 	fyne.Do(func() {
 		s.ErrorText.Segments = []widget.RichTextSegment{
-			&widget.TextSegment{Text: "現在Among Usを実行中です…"},
+			&widget.TextSegment{Text: lang.LocalizeKey("launch.running", "Among Us is currently running...")},
 		}
 		s.ErrorText.Refresh()
 		s.ErrorText.Show()
@@ -29,8 +29,8 @@ func (s *State) Launch(path string) {
 	if _, err := os.Stat(filepath.Join(path, "Among Us.exe")); os.IsNotExist(err) {
 		fyne.Do(func() {
 			s.ErrorText.Segments = []widget.RichTextSegment{
-				&widget.TextSegment{Text: "Among Usの実行ファイルが見つかりません: " + err.Error(), Style: widget.RichTextStyle{ColorName: theme.ColorNameError}},
-				&widget.TextSegment{Text: "MODをアンインストールしてから、Among Usを再インストールしてください。"},
+				&widget.TextSegment{Text: lang.LocalizeKey("launch.error.executable_not_found", "Among Us executable not found: ") + err.Error(), Style: widget.RichTextStyle{ColorName: theme.ColorNameError}},
+				&widget.TextSegment{Text: lang.LocalizeKey("launch.error.reinstall_instruction", "Please uninstall the mod and reinstall Among Us.")},
 			}
 			s.ErrorText.Refresh()
 		})
@@ -40,7 +40,7 @@ func (s *State) Launch(path string) {
 	if err := aumgr.LaunchAmongUs(aumgr.DetectLauncherType(path), path, s.ModInstallDir()); err != nil {
 		fyne.Do(func() {
 			s.ErrorText.Segments = []widget.RichTextSegment{
-				&widget.TextSegment{Text: "Among Usの起動に失敗しました: " + err.Error(), Style: widget.RichTextStyle{ColorName: theme.ColorNameError}},
+				&widget.TextSegment{Text: lang.LocalizeKey("launch.error.launch_failed", "Failed to launch Among Us: ") + err.Error(), Style: widget.RichTextStyle{ColorName: theme.ColorNameError}},
 			}
 			s.ErrorText.Refresh()
 		})

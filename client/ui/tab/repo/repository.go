@@ -47,7 +47,7 @@ func NewRepository(state *uicommon.State) *Repository {
 		state:     state,
 		lastModID: "",
 		searchBar: widget.NewEntry(),
-		reloadBtn: widget.NewButtonWithIcon(lang.LocalizeKey("repository.reload", "リロード"), theme.ViewRefreshIcon(), func() {
+		reloadBtn: widget.NewButtonWithIcon(lang.LocalizeKey("repository.reload", "Reload"), theme.ViewRefreshIcon(), func() {
 			repo.reloadBtn.Disable()
 			go func() {
 				repo.reloadMods()
@@ -68,7 +68,7 @@ func NewRepository(state *uicommon.State) *Repository {
 	repo.stateLabel.Hide()
 	repo.stateLabel.Wrapping = fyne.TextWrapWord
 
-	repo.searchBar.SetPlaceHolder(lang.LocalizeKey("repository.search_placeholder", "Modを名前で絞り込む"))
+	repo.searchBar.SetPlaceHolder(lang.LocalizeKey("repository.search_placeholder", "Filter mods by name"))
 	repo.searchBar.OnChanged = func(s string) {
 		go repo.updateModList(s)
 	}
@@ -131,7 +131,7 @@ func (r *Repository) updateModList(filter string) {
 
 		img := canvas.NewSquare(theme.Color(theme.ColorNameDisabled))
 		img.SetMinSize(fyne.NewSize(64, 64))
-		installBtn := widget.NewButton("インストール", func() {
+		installBtn := widget.NewButton(lang.LocalizeKey("repository.install", "Install"), func() {
 			r.stateLabel.Hide()
 			version := mod.LatestVersion
 			if v, err := versionSelect.GetSelected(); err == nil && v != "" {
@@ -140,7 +140,7 @@ func (r *Repository) updateModList(filter string) {
 
 			if version == "" {
 				slog.Error("No version selected for installation", "modId", mod.ID)
-				r.state.SetError(fmt.Errorf("インストールするバージョンが選択されていません: %s", mod.Name))
+				r.state.SetError(fmt.Errorf(lang.LocalizeKey("repository.error.no_version_selected", "No version selected for installation: %s"), mod.Name))
 				return
 			}
 
@@ -162,7 +162,7 @@ func (r *Repository) updateModList(filter string) {
 					r.state.ClearError()
 					_ = r.state.CanLaunch.Set(true)
 					fyne.DoAndWait(func() {
-						r.stateLabel.SetText("インストールが完了しました: " + mod.Name + " (" + version + ")")
+						r.stateLabel.SetText(lang.LocalizeKey("repository.installation_complete", "Installation complete: {{.ModName}} ({{.Version}})", map[string]any{"ModName": mod.Name, "Version": version}))
 						r.stateLabel.Show()
 					})
 				}
@@ -188,7 +188,7 @@ func (r *Repository) updateModList(filter string) {
 
 		objs = append(objs, item, widget.NewSeparator())
 	}
-	objs = append(objs, widget.NewButton(lang.LocalizeKey("repository.load_next", "さらに読み込む…"), r.LoadNext))
+	objs = append(objs, widget.NewButton(lang.LocalizeKey("repository.load_next", "Load more..."), r.LoadNext))
 
 	wg.Wait()
 	r.mu.Lock()
@@ -247,7 +247,7 @@ func (r *Repository) Tab() (*container.TabItem, error) {
 		top,
 		bottom,
 	)
-	return container.NewTabItem(lang.LocalizeKey("repository.tab_name", "リポジトリ"), content), nil
+	return container.NewTabItem(lang.LocalizeKey("repository.tab_name", "Repository"), content), nil
 }
 
 func (r *Repository) LoadNext() {

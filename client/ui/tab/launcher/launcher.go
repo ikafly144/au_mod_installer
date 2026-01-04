@@ -29,7 +29,7 @@ func NewLauncherTab(s *uicommon.State) uicommon.Tab {
 	revision = revision[:min(7, len(revision))]
 	l = Launcher{
 		state:           s,
-		launchButton:    widget.NewButtonWithIcon(lang.LocalizeKey("launcher.launch", "起動"), theme.MediaPlayIcon(), l.runLaunch),
+		launchButton:    widget.NewButtonWithIcon(lang.LocalizeKey("launcher.launch", "Launch"), theme.MediaPlayIcon(), l.runLaunch),
 		greetingContent: widget.NewLabelWithStyle(fmt.Sprintf("バージョン：%s (%s)", s.Version, revision), fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 	}
 
@@ -51,13 +51,13 @@ func (l *Launcher) init() {
 
 func (l *Launcher) Tab() (*container.TabItem, error) {
 	content := container.NewPadded(container.NewVBox(
-		widget.NewCard("Mod of Us", "Among UsのModマネージャー", l.greetingContent),
-		widget.NewRichTextFromMarkdown("### "+lang.LocalizeKey("installation.installation_status", "インストール状況")), l.state.ModInstalledInfo,
+		widget.NewCard(lang.LocalizeKey("launcher.card_title", "Mod of Us"), lang.LocalizeKey("launcher.card_subtitle", "Among Us Mod Manager"), l.greetingContent),
+		widget.NewRichTextFromMarkdown("### "+lang.LocalizeKey("installation.installation_status", "Installation Status")), l.state.ModInstalledInfo,
 		widget.NewSeparator(),
 		l.launchButton,
 		l.state.ErrorText,
 	))
-	return container.NewTabItem(lang.LocalizeKey("launcher.tab_name", "ランチャー"), content), nil
+	return container.NewTabItem(lang.LocalizeKey("launcher.tab_name", "Launcher"), content), nil
 }
 
 func (l *Launcher) runLaunch() {
@@ -65,7 +65,7 @@ func (l *Launcher) runLaunch() {
 	path, err := l.state.SelectedGamePath.Get()
 	if err != nil || path == "" {
 		l.state.ErrorText.Segments = []widget.RichTextSegment{
-			&widget.TextSegment{Text: lang.LocalizeKey("launcher.error.no_path", "ゲームパスが指定されていません。"), Style: widget.RichTextStyle{ColorName: theme.ColorNameError}},
+			&widget.TextSegment{Text: lang.LocalizeKey("launcher.error.no_path", "Game path is not specified."), Style: widget.RichTextStyle{ColorName: theme.ColorNameError}},
 		}
 		l.state.ErrorText.Refresh()
 		l.state.ErrorText.Show()

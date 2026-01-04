@@ -9,6 +9,7 @@ import (
 	"unsafe"
 
 	"fyne.io/fyne/v2/driver"
+	"fyne.io/fyne/v2/lang"
 	"github.com/TheTitanrain/w32"
 )
 
@@ -23,7 +24,7 @@ func (s *State) ExplorerOpenFile(fileType, ext string) (path string, err error) 
 	}
 	buf := make([]uint16, w32.MAX_PATH)
 	filter := unsafe.SliceData(utf16.Encode([]rune(fileType + " (" + ext + ")\000" + ext + "\000\000")))
-	title, err := syscall.UTF16PtrFromString(fileType + "を選択")
+	title, err := syscall.UTF16PtrFromString(lang.LocalizeKey("common.select_file", "Select {{.FileType}}", map[string]any{"FileType": fileType}))
 	if err != nil {
 		return "", err
 	}

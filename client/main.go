@@ -71,12 +71,12 @@ func realMain() error {
 		slog.Error("Failed to check for updates", "error", err)
 	} else if tag != "" {
 		slog.Info("Update available", "version", tag)
-		yes := (&dialog.MsgBuilder{Msg: lang.LocalizeKey("update.available", "新しいバージョン\"{{.Version}}\"が利用可能です。「はい」をクリックすると更新します。", map[string]any{"Version": tag})}).Title(lang.LocalizeKey("update.title", "Update Available")).YesNo()
+		yes := (&dialog.MsgBuilder{Msg: lang.LocalizeKey("update.available", "New version \"{{.Version}}\" is available. Click 'Yes' to update.", map[string]any{"Version": tag})}).Title(lang.LocalizeKey("update.title", "Update Available")).YesNo()
 		if yes {
 			slog.Info("Updating to new version", "version", tag)
 			if err := versioning.Update(context.Background(), tag); err != nil {
 				slog.Error("Failed to update", "error", err)
-				(&dialog.MsgBuilder{Msg: lang.LocalizeKey("update.failed", "更新に失敗しました: %s", map[string]any{"Error": err.Error()})}).Title(lang.LocalizeKey("app.error", "Error")).Error()
+				(&dialog.MsgBuilder{Msg: lang.LocalizeKey("update.failed", "Update failed: {{.Error}}", map[string]any{"Error": err.Error()})}).Title(lang.LocalizeKey("app.error", "Error")).Error()
 				return err
 			}
 			execCmd := exec.Command(os.Args[0], os.Args[1:]...)
@@ -94,12 +94,12 @@ func realMain() error {
 		f, err := rest.NewFileClient(localMode)
 		if err != nil {
 			slog.Error("Failed to create local file client", "error", err)
-			dialog.Message("ローカルファイルクライアントの作成に失敗しました: %s", err.Error()).Title("エラーが発生しました").Error()
+			dialog.Message(lang.LocalizeKey("error.local_client_creation_failed", "Failed to create local file client: %s"), err.Error()).Title(lang.LocalizeKey("app.error", "Error")).Error()
 			return err
 		}
 		if err := f.LoadData(); err != nil {
 			slog.Error("Failed to load data from local file", "error", err)
-			dialog.Message("ローカルファイルからのデータの読み込みに失敗しました: %s", err.Error()).Title("エラーが発生しました").Error()
+			dialog.Message(lang.LocalizeKey("error.local_data_load_failed", "Failed to load data from local file: %s"), err.Error()).Title(lang.LocalizeKey("app.error", "Error")).Error()
 			return err
 		}
 		client = f
@@ -110,7 +110,7 @@ func realMain() error {
 
 	if _, err := client.GetHealthStatus(); err != nil {
 		slog.Error("Failed to connect to server", "error", err)
-		yes := dialog.Message("サーバーへの接続に失敗しました: %s\nオフラインモードで続行しますか？\n(アンインストール・インストール済みモッドの管理のみ可能です)", err.Error()).Title("接続エラー").YesNo()
+		yes := dialog.Message(lang.LocalizeKey("error.server_connection_failed_offline_prompt", "Failed to connect to server: %s\nDo you want to continue in offline mode?\n(Only uninstallation and management of installed mods are available)"), err.Error()).Title(lang.LocalizeKey("error.connection_error", "Connection Error")).YesNo()
 		if yes {
 			slog.Info("Continuing in offline mode")
 			client = rest.NewOfflineClient()
@@ -125,7 +125,7 @@ func realMain() error {
 		),
 	); err != nil {
 		slog.Error("Failed to initialize UI", "error", err)
-		dialog.Message("UIの初期化に失敗しました: %s", err.Error()).Title("エラーが発生しました").Error()
+		dialog.Message(lang.LocalizeKey("error.ui_initialization_failed", "Failed to initialize UI: %s"), err.Error()).Title(lang.LocalizeKey("app.error", "Error")).Error()
 		return err
 	}
 	return nil

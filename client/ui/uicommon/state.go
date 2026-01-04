@@ -65,7 +65,7 @@ func NewState(w fyne.Window, version string, options ...Option) (*State, error) 
 		InstallSelect:    widget.NewSelect([]string{}, s.selectLauncher),
 		ErrorText:        widget.NewRichTextFromMarkdown(""),
 
-		ModInstalledInfo: widget.NewLabel(lang.LocalizeKey("installer.select_install_path", "インストール先を選択してください。")),
+		ModInstalledInfo: widget.NewLabel(lang.LocalizeKey("installer.select_install_path", "Please select the installation path.")),
 		Rest:             cfg.rest,
 	}
 
@@ -80,9 +80,9 @@ func NewState(w fyne.Window, version string, options ...Option) (*State, error) 
 	s.ModInstalledInfo.TextStyle.Symbol = true
 	s.ErrorText.Wrapping = fyne.TextWrapWord
 	s.ErrorText.Hide()
-	s.InstallSelect.PlaceHolder = lang.LocalizeKey("installer.select_install", "（Among Usを選択）")
+	s.InstallSelect.PlaceHolder = lang.LocalizeKey("installer.select_install", "(Select Among Us)")
 	detectedLauncher := aumgr.DetectLauncherType(detectedPath)
-	s.InstallSelect.Options = []string{detectedLauncher.String(), lang.LocalizeKey("installer.manual_select", "手動選択")}
+	s.InstallSelect.Options = []string{detectedLauncher.String(), lang.LocalizeKey("installer.manual_select", "Manual Selection")}
 	s.InstallSelect.Selected = detectedLauncher.String()
 	if err := s.SelectedGamePath.Set(detectedPath); err != nil {
 		return nil, err
@@ -140,7 +140,7 @@ func (s *State) SetError(err error) {
 	}
 	s.ErrorText.Segments = []widget.RichTextSegment{
 		&widget.TextSegment{
-			Text:  lang.LocalizeKey("common.error_occurred", "エラーが発生しました: ") + err.Error(),
+			Text:  lang.LocalizeKey("common.error_occurred", "An error occurred: ") + err.Error(),
 			Style: widget.RichTextStyle{ColorName: theme.ColorNameError},
 		},
 	}
@@ -161,7 +161,7 @@ func (i *State) RefreshModInstallation() {
 	path, err := i.SelectedGamePath.Get()
 	if err != nil || path == "" {
 		defer i.ModInstalledInfo.Refresh()
-		i.ModInstalledInfo.SetText(lang.LocalizeKey("installer.info.select_path", "インストール先を選択してください。"))
+		i.ModInstalledInfo.SetText(lang.LocalizeKey("installer.info.select_path", "Please select the installation path."))
 		return
 	}
 	if ok, err := i.ModInstalled.Get(); ok && err == nil {
@@ -171,31 +171,31 @@ func (i *State) RefreshModInstallation() {
 		manifest, err := aumgr.GetManifest(detectedLauncher, path)
 		if err != nil {
 			slog.Warn("Failed to get game manifest", "error", err)
-			i.ModInstalledInfo.SetText(lang.LocalizeKey("installer.error.failed_to_get_version", "Modがインストールされていますが、ゲームのバージョン情報の取得に失敗しました。"))
+			i.ModInstalledInfo.SetText(lang.LocalizeKey("installer.error.failed_to_get_version", "Mod is installed, but failed to get game version information."))
 			return
 		}
 
 		modInstallLocation, err := os.OpenRoot(i.ModInstallDir())
 		if err != nil {
 			slog.Warn("Failed to open game root", "error", err)
-			i.ModInstalledInfo.SetText(lang.LocalizeKey("installer.error.failed_to_open_path", "Modがインストールされていますが、インストール先のオープンに失敗しました。"))
+			i.ModInstalledInfo.SetText(lang.LocalizeKey("installer.error.failed_to_open_path", "Mod is installed, but failed to open installation path."))
 			return
 		}
 
 		installationInfo, err := modmgr.LoadInstallationInfo(modInstallLocation)
 		if err != nil {
 			slog.Warn("Failed to load installation info", "error", err)
-			i.ModInstalledInfo.SetText(lang.LocalizeKey("installer.error.failed_to_get_installation_info", "Modがインストールされていますが、インストール情報の取得に失敗しました。"))
+			i.ModInstalledInfo.SetText(lang.LocalizeKey("installer.error.failed_to_get_installation_info", "Mod is installed, but failed to get installation info."))
 			return
 		}
 		if installationInfo.Status == modmgr.InstallStatusBroken {
-			i.ModInstalledInfo.SetText(lang.LocalizeKey("installer.error.broken_installation", "Modのインストールが壊れています。Modアンインストールしてから再インストールしてください。"))
+			i.ModInstalledInfo.SetText(lang.LocalizeKey("installer.error.broken_installation", "Mod installation is broken. Please uninstall and reinstall the mod."))
 			return
 		}
 		canLaunch := false
-		info := lang.LocalizeKey("installer.info.mod_installed", "Modがインストールされています。") + "\n"
+		info := lang.LocalizeKey("installer.info.mod_installed", "Mod is installed.") + "\n"
 		if manifest.GetVersion() == installationInfo.InstalledGameVersion {
-			info += lang.LocalizeKey("installer.info.game_version", "ゲームバージョン: ") + manifest.GetVersion() + "\n"
+			info += lang.LocalizeKey("installer.info.game_version", "Game Version: ") + manifest.GetVersion() + "\n"
 			canLaunch = true
 			for _, mod := range installationInfo.InstalledMods {
 				remoteMod, err := i.Mod(mod.ModID)
@@ -204,7 +204,7 @@ func (i *State) RefreshModInstallation() {
 					continue
 				}
 				if remoteMod.LatestVersion != mod.ModVersion.ID {
-					info += lang.LocalizeKey("installer.info.mod_version_outdated", "Modのバージョンが古くなっています: {{.mod}} (インストール済み: {{.version}}, 最新: {{.latest}})",
+					info += lang.LocalizeKey("installer.info.mod_version_outdated", "Mod version is outdated: {{.mod}} (Installed: {{.version}}, Latest: {{.latest}})",
 						map[string]any{
 							"mod":     mod.ModID,
 							"version": mod.ModVersion.ID,
@@ -215,8 +215,8 @@ func (i *State) RefreshModInstallation() {
 				}
 			}
 		} else {
-			info += lang.LocalizeKey("installer.info.game_version", "ゲームバージョン: ") + manifest.GetVersion() + " (Modインストール時: " + installationInfo.InstalledGameVersion + ")\n"
-			info += lang.LocalizeKey("installer.info.mod_incompatible", "Modは現在のゲームバージョンと互換性がありません。") + "\n"
+			info += lang.LocalizeKey("installer.info.game_version", "Game Version: ") + manifest.GetVersion() + " (Modインストール時: " + installationInfo.InstalledGameVersion + ")\n"
+			info += lang.LocalizeKey("installer.info.mod_incompatible", "Mod is incompatible with the current game version.") + "\n"
 			installationInfo.Status = modmgr.InstallStatusIncompatible
 			if err := modmgr.SaveInstallationInfo(modInstallLocation, installationInfo); err != nil {
 				slog.Warn("Failed to save installation info", "error", err)
@@ -237,7 +237,7 @@ func (i *State) RefreshModInstallation() {
 		}
 	} else if err == nil {
 		defer i.ModInstalledInfo.Refresh()
-		i.ModInstalledInfo.SetText(lang.LocalizeKey("installer.info.mod_not_installed", "Modはインストールされていません。"))
+		i.ModInstalledInfo.SetText(lang.LocalizeKey("installer.info.mod_not_installed", "Mod is not installed."))
 	} else {
 		slog.Warn("Failed to get mod installed", "error", err)
 	}
