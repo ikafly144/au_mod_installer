@@ -3,15 +3,10 @@ run-name: building server image ${{ github.ref_name }}
 on:
   push:
     branches:
-      - main
+      - master
     paths:
       - server/**
   workflow_dispatch:
-    inputs:
-      ref:
-        description: "The git ref to build the image from"
-        required: false
-        default: "main"
 
 env:
   REGISTRY: ghcr.io
