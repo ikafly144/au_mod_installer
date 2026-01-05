@@ -7,6 +7,7 @@ fyne.io/systray v1.11.1-0.20250603113521-ca66a66d8b58 h1:eA5/u2XRd8OUkoMqEv3IBlF
 fyne.io/systray v1.11.1-0.20250603113521-ca66a66d8b58/go.mod h1:RVwqP9nYMo7h5zViCBHri2FgjXF7H2cub7MAq4NSoLs=
 fyne.io/tools v1.6.2 h1:Og8jsT4B+k04KnR0Sx4XyCMQKmO+UuIaO956XLSlAog=
 fyne.io/tools v1.6.2/go.mod h1:1RHxiGXZRKRJCoiYUJmWup3kKi6Zq7Y9nawYCoOoo50=
+fyne.io/tools v1.7.0/go.mod h1:XgzXKiQ1AqDCnA927ySGHr0LMwZcErBgEju/wW2oeEQ=
 github.com/BurntSushi/toml v1.5.0 h1:W5quZX/G/csjUnuI8SUYlsHs9M38FC7znL0lIO+DvMg=
 github.com/BurntSushi/toml v1.5.0/go.mod h1:ukJfTF/6rtPPRCnwkur4qwRxa8vTRFBF0uk2lLoLwho=
 github.com/TheTitanrain/w32 v0.0.0-20180517000239-4f5cfb03fabf/go.mod h1:peYoMncQljjNS6tZwI9WVyQB3qZS6u79/N3mBOcnd3I=
