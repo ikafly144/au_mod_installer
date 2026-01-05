@@ -236,7 +236,6 @@ func InstallMod(modInstallLocation *os.Root, gameManifest aumgr.Manifest, launch
 				if file.Path == "" {
 					return nil, fmt.Errorf("file path is empty for normal file type")
 				}
-				installation.InstalledMods[i].Paths = append(installation.InstalledMods[i].Paths, file.Path)
 				_ = modInstallLocation.MkdirAll(filepath.Dir(file.Path), 0755)
 				destFile, err := modInstallLocation.OpenFile(file.Path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 				if err != nil {
