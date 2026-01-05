@@ -204,7 +204,7 @@ func (i *State) RefreshModInstallation() {
 					slog.Warn("Failed to get mod", "modID", mod.ID, "error", err)
 					continue
 				}
-				if remoteMod.LatestVersion != mod.ID {
+				if remoteMod.LatestVersion != mod.ID && remoteMod.Type != modmgr.ModTypeLibrary {
 					info += lang.LocalizeKey("installer.info.mod_version_outdated", "Mod version is outdated: {{.mod}} (Installed: {{.version}}, Latest: {{.latest}})",
 						map[string]any{
 							"mod":     mod.ModID,
