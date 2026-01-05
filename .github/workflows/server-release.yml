@@ -8,6 +8,8 @@ on:
       - server/**
       - server-admin/**
       - .dockerignore
+      - common/**
+      - pkg/**
     tags:
       - "v*"
   workflow_dispatch:

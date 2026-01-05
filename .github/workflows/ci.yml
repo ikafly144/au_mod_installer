@@ -1,9 +1,21 @@
-name: golangci-lint
+name: ci
 on:
   push:
     branches:
       - master
+    paths:
+      - "**.go"
+      - "**/go.sum"
+      - "**/go.mod"
+      - ".golangci.yml"
   pull_request:
+    branches:
+      - master
+    paths:
+      - "**.go"
+      - "**/go.sum"
+      - "**/go.mod"
+      - ".golangci.yml"
 
 permissions:
   contents: read
