@@ -6,6 +6,7 @@ import (
 	"fyne.io/fyne/v2/lang"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
+
 	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
 	"github.com/ikafly144/au_mod_installer/common/versioning"
 )

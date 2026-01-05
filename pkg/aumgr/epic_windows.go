@@ -20,7 +20,7 @@ func getEpicManifest() (Manifest, error) {
 	}
 	manifestDirPath := filepath.Join(pd, "Epic", "EpicGamesLauncher", "Data", "Manifests")
 	slog.Info("Looking for Epic Games manifests", "path", manifestDirPath)
-	var amongUsManifest *epicManifest
+	var amongUsManifest *EpicManifest
 
 	if err := filepath.WalkDir(manifestDirPath, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -39,12 +39,12 @@ func getEpicManifest() (Manifest, error) {
 			return err
 		}
 		defer file.Close()
-		var manifest epicManifest
+		var manifest EpicManifest
 		decoder := json.NewDecoder(file)
 		if err := decoder.Decode(&manifest); err != nil {
 			return err
 		}
-		if manifest.AppName == epicArtifactId {
+		if manifest.AppName == EpicArtifactId {
 			amongUsManifest = &manifest
 			return fs.SkipAll
 		}

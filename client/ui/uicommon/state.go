@@ -13,6 +13,7 @@ import (
 	"fyne.io/fyne/v2/lang"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+
 	"github.com/ikafly144/au_mod_installer/client/rest"
 	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
@@ -203,11 +204,11 @@ func (i *State) RefreshModInstallation() {
 					slog.Warn("Failed to get mod", "modID", mod.ID, "error", err)
 					continue
 				}
-				if remoteMod.LatestVersion != mod.ModVersion.ID {
+				if remoteMod.LatestVersion != mod.ID {
 					info += lang.LocalizeKey("installer.info.mod_version_outdated", "Mod version is outdated: {{.mod}} (Installed: {{.version}}, Latest: {{.latest}})",
 						map[string]any{
 							"mod":     mod.ModID,
-							"version": mod.ModVersion.ID,
+							"version": mod.ID,
 							"latest":  remoteMod.LatestVersion,
 						}) + "\n"
 					canLaunch = false // TODO: allow launching with outdated mods
@@ -225,7 +226,7 @@ func (i *State) RefreshModInstallation() {
 		}
 		var modNames []string
 		for _, mod := range installationInfo.InstalledMods {
-			modNames = append(modNames, mod.ModID+" ("+mod.ModVersion.ID+")")
+			modNames = append(modNames, mod.ModID+" ("+mod.ID+")")
 		}
 		info += lang.LocalizeKey("installer.info.mod_name", "Mod: ") + strings.Join(modNames, ", ") + "\n"
 		i.ModInstalledInfo.SetText(strings.TrimSpace(info))

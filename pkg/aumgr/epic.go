@@ -1,6 +1,8 @@
 package aumgr
 
-type epicManifest struct {
+var _ Manifest = (*EpicManifest)(nil)
+
+type EpicManifest struct {
 	FormatVersion               int      `json:"FormatVersion"`
 	BIsIncompleteInstall        bool     `json:"bIsIncompleteInstall"`
 	LaunchCommand               string   `json:"LaunchCommand"`
@@ -54,6 +56,6 @@ type epicManifest struct {
 	AllowedURIEnvVars           []any    `json:"AllowedUriEnvVars"`
 }
 
-func (e epicManifest) GetVersion() string {
+func (e EpicManifest) GetVersion() string {
 	return e.AppVersionString
 }

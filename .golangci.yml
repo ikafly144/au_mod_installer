@@ -21,10 +21,15 @@ linters:
     - ineffassign
     - staticcheck
     - unused
-  default: fast
-
   settings:
     unused:
       exported-fields-are-used: true
       generated-is-used: true
       parameters-are-used: true
+      local-variables-are-used: true
+  exclusions:
+    warn-unused: true
+    rules:
+      - linters:
+          - errcheck
+        text: "Error return value of `.+\\.Close` is not checked"

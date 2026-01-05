@@ -12,12 +12,13 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/valkey-io/valkey-go"
+
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 	"github.com/ikafly144/au_mod_installer/server/handler"
 	"github.com/ikafly144/au_mod_installer/server/middleware"
 	valkeyrepo "github.com/ikafly144/au_mod_installer/server/repository/valkey"
 	"github.com/ikafly144/au_mod_installer/server/service"
-	"github.com/valkey-io/valkey-go"
 )
 
 func main() {

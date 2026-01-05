@@ -151,7 +151,7 @@ func InstallMod(modInstallLocation *os.Root, gameManifest aumgr.Manifest, launch
 		slog.Info("Filtered remaining mods after uninstallation", "remainMods", remainModInfos)
 		for _, remainModInfo := range remainModInfos {
 			for _, modVersion := range modVersions {
-				if remainModInfo.ModID == modVersion.ModID_ && remainModInfo.ModVersion.ID == modVersion.ID {
+				if remainModInfo.ModID == modVersion.ModID_ && remainModInfo.ID == modVersion.ID {
 					remainMods = append(remainMods, remainModInfo)
 					break
 				}
@@ -345,13 +345,13 @@ func uninstallMod(modInstallLocation *os.Root, progress progress.Progress, remai
 				if remainMods != nil {
 					shouldRemain := false
 					for _, remainMod := range remainMods {
-						if mod.ModID == remainMod.ModID_ && mod.ModVersion.ID == remainMod.ID {
+						if mod.ModID == remainMod.ModID_ && mod.ID == remainMod.ID {
 							shouldRemain = true
 							break
 						}
 					}
 					if shouldRemain {
-						slog.Info("Keeping mod during uninstallation", "modId", mod.ModID, "versionId", mod.ModVersion.ID)
+						slog.Info("Keeping mod during uninstallation", "modId", mod.ModID, "versionId", mod.ID)
 						remainModInfos = append(remainModInfos, mod)
 						continue
 					}

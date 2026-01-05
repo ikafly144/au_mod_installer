@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 	"github.com/valkey-io/valkey-go"
+
+	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 )
 
 const (

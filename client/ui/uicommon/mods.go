@@ -92,6 +92,7 @@ func (s *State) InstallMods(modId string, versionData modmgr.ModVersion, progres
 		slog.Error("Failed to detect binary type", "error", err)
 		return err
 	}
+	slog.Info("Detected game binary type", "type", binaryType)
 
 	installVersions := make([]modmgr.ModVersion, 0, len(resolved))
 	for _, v := range resolved {

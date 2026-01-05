@@ -60,7 +60,7 @@ func launchSteam(amongUsDir string, dllDir string) error {
 // )
 
 func launchEpicGames(amongUsDir string, dllDir string) error {
-	return launchFromUrl("com.epicgames.launcher://apps/" + epicNamespace + "%3A" + epicCatalogId + "%3A" + epicArtifactId + "?action=launch&silent=true")
+	return launchFromUrl("com.epicgames.launcher://apps/" + EpicNamespace + "%3A" + EpicCatalogId + "%3A" + EpicArtifactId + "?action=launch&silent=true")
 }
 
 func launchFromUrl(url string) error {

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/go-github/v80/github"
+
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 	"github.com/ikafly144/au_mod_installer/server-admin/model"
 	"github.com/ikafly144/au_mod_installer/server-admin/repository"
