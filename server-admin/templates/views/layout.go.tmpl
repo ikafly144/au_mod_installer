@@ -32,7 +32,7 @@
                 @apply bg-white rounded-lg shadow-md overflow-hidden mb-6;
             }
             .card-header {
-                @apply px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50;
+                @apply px-6 py-4 border-b border-gray-200 flex flex-col sm:flex-row justify-between items-center bg-gray-50 gap-4;
             }
             .card-header h2 {
                 @apply text-xl font-semibold text-gray-800;
@@ -99,6 +99,10 @@
                 @apply bg-red-600;
             }
             
+            .table-responsive {
+                @apply overflow-x-auto;
+            }
+
             table {
                 @apply min-w-full divide-y divide-gray-200;
             }
@@ -106,13 +110,13 @@
                 @apply bg-gray-50;
             }
             th {
-                @apply px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider;
+                @apply px-3 py-2 md:px-6 md:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider;
             }
             tbody {
                 @apply bg-white divide-y divide-gray-200;
             }
             td {
-                @apply px-6 py-4 whitespace-nowrap text-sm text-gray-500;
+                @apply px-3 py-2 md:px-6 md:py-4 whitespace-nowrap text-sm text-gray-500;
             }
             .actions {
                 @apply flex gap-2;
@@ -130,13 +134,13 @@
                 @apply flex flex-col gap-2 mb-2;
             }
             .dynamic-item {
-                @apply flex gap-2 items-center bg-gray-50 p-2 rounded border border-gray-200;
+                @apply flex flex-col md:flex-row gap-2 items-stretch md:items-center bg-gray-50 p-2 rounded border border-gray-200;
             }
             .dynamic-item input, .dynamic-item select {
-                @apply flex-1 px-2 py-1 border border-gray-300 rounded text-sm;
+                @apply w-full md:w-auto md:flex-1 px-2 py-1 border border-gray-300 rounded text-sm;
             }
             .dynamic-item .btn-remove {
-                @apply bg-red-500 text-white border-none px-2 py-1 rounded cursor-pointer hover:bg-red-600 text-xs;
+                @apply bg-red-500 text-white border-none px-2 py-1 rounded cursor-pointer hover:bg-red-600 text-xs self-end md:self-center;
             }
 
             .status-badge {
@@ -150,8 +154,8 @@
                 @apply inline-block mb-4 text-indigo-600 hover:text-indigo-800;
             }
 
-            .w-100 { @apply w-[100px]; }
-            .w-150 { @apply w-[150px]; }
+            .w-100 { @apply w-full md:w-[100px]; }
+            .w-150 { @apply w-full md:w-[150px]; }
             .flex-grow { @apply grow; }
             .w-auto { @apply w-auto; }
         }
@@ -160,11 +164,11 @@
 
 <body class="bg-gray-50 text-gray-800 font-sans antialiased">
     <header class="bg-indigo-600 text-white py-4 mb-8 shadow">
-        <div class="container mx-auto px-4 flex justify-between items-center">
+        <div class="container mx-auto px-4 flex flex-col md:flex-row justify-between items-center gap-4">
             <h1 class="text-xl font-bold"><a href="/" class="hover:text-indigo-100">🎮 AU Mod Repository Admin</a></h1>
-            <div class="flex gap-2">
-                <a href="/api/export" class="btn btn-secondary">📤 エクスポート</a>
-                <button class="btn btn-secondary" onclick="showImportModal()">📥 インポート</button>
+            <div class="flex gap-2 w-full md:w-auto justify-center md:justify-end">
+                <a href="/api/export" class="btn btn-secondary w-full md:w-auto text-center">📤 エクスポート</a>
+                <button class="btn btn-secondary w-full md:w-auto" onclick="showImportModal()">📥 インポート</button>
             </div>
         </div>
     </header>

@@ -10,40 +10,42 @@
     </div>
     <div class="card-body">
         {{if .Mods}}
-        <table>
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>名前</th>
-                    <th>作者</th>
-                    <th>タイプ</th>
-                    <th>最新バージョン</th>
-                    <th>操作</th>
-                </tr>
-            </thead>
-            <tbody>
-                {{range .Mods}}
-                <tr>
-                    <td><code>{{.ID}}</code></td>
-                    <td>{{.Name}}</td>
-                    <td>{{.Author}}</td>
-                    <td>
-                        {{if .Type}}
-                        <span class="badge badge-{{.Type}}">{{.Type}}</span>
-                        {{else}}
-                        -
-                        {{end}}
-                    </td>
-                    <td>{{if .LatestVersion}}{{.LatestVersion}}{{else}}-{{end}}</td>
-                    <td class="actions">
-                        <a href="/mods/{{.ID}}/versions" class="btn btn-secondary">バージョン</a>
-                        <button class="btn btn-secondary" onclick='editMod({{json .}})'>編集</button>
-                        <button class="btn btn-danger" onclick="deleteMod('{{.ID}}')">削除</button>
-                    </td>
-                </tr>
-                {{end}}
-            </tbody>
-        </table>
+        <div class="table-responsive">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>名前</th>
+                        <th>作者</th>
+                        <th>タイプ</th>
+                        <th>最新バージョン</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .Mods}}
+                    <tr>
+                        <td><code>{{.ID}}</code></td>
+                        <td>{{.Name}}</td>
+                        <td>{{.Author}}</td>
+                        <td>
+                            {{if .Type}}
+                            <span class="badge badge-{{.Type}}">{{.Type}}</span>
+                            {{else}}
+                            -
+                            {{end}}
+                        </td>
+                        <td>{{if .LatestVersion}}{{.LatestVersion}}{{else}}-{{end}}</td>
+                        <td class="actions">
+                            <a href="/mods/{{.ID}}/versions" class="btn btn-secondary">バージョン</a>
+                            <button class="btn btn-secondary" onclick='editMod({{json .}})'>編集</button>
+                            <button class="btn btn-danger" onclick="deleteMod('{{.ID}}')">削除</button>
+                        </td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
         {{else}}
         <div class="empty-state">
             Modがありません。「新規Mod」ボタンから追加してください。

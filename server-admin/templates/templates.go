@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 )
 
-//go:embed views/*.tmpl
+//go:embed views/*.go.tmpl
 var templateFiles embed.FS
 
 //go:embed static/*
@@ -44,7 +44,7 @@ func New() *Templates {
 
 	// Load base layout template
 	tmpl := template.New("base").Funcs(funcMap)
-	tmpl = template.Must(tmpl.ParseFS(templateFiles, "views/layout.tmpl"))
+	tmpl = template.Must(tmpl.ParseFS(templateFiles, "views/layout.go.tmpl"))
 
 	return &Templates{base: tmpl}
 }
@@ -58,8 +58,8 @@ func (t *Templates) Render(w io.Writer, name string, data any) error {
 	}
 
 	// Parse the specific view template
-	// Assuming the view file is named "views/{name}.tmpl"
-	pattern := "views/" + name + ".tmpl"
+	// Assuming the view file is named "views/{name}.go.tmpl"
+	pattern := "views/" + name + ".go.tmpl"
 	if _, err := tmpl.ParseFS(templateFiles, pattern); err != nil {
 		return err
 	}
