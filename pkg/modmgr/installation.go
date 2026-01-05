@@ -21,6 +21,7 @@ import (
 
 const currentFileVersion = 2
 
+// Deprecated: Should use profile.Profile to track installed mods instead.
 type ModInstallation struct {
 	FileVersion          int                    `json:"file_version"`
 	InstalledMods        []InstalledVersionInfo `json:"installed_mods"`
@@ -75,7 +76,6 @@ func (mi *ModInstallation) OldVanillaFiles() []string {
 }
 
 type InstalledVersionInfo struct {
-	ModID      string `json:"mod_id"`
 	ModVersion `json:",inline"`
 	Paths      []string `json:"paths"`
 }
@@ -147,7 +147,7 @@ func DownloadMods(cacheDir string, modVersions []ModVersion, binaryType aumgr.Bi
 
 	hClient := http.DefaultClient
 	for i := range modVersions {
-		modCacheDir := filepath.Join(cacheDir, modVersions[i].ModID, modVersions[i].ID)
+		modCacheDir := filepath.Join(cacheDir, modVersions[i].ModID, hashId(modVersions[i].ID))
 		if _, err := os.Stat(modCacheDir); err == nil {
 			slog.Info("Mod already cached", "modId", modVersions[i].ModID, "versionId", modVersions[i].ID)
 			progress.SetValue(progress.GetValue() + (float64(modVersions[i].CompatibleFilesCount(binaryType)) / float64(totalDownloadCount)))
@@ -398,7 +398,6 @@ func InstallMod(modInstallLocation *os.Root, gameManifest aumgr.Manifest, launch
 	var installedMods []InstalledVersionInfo
 	for _, modVersion := range modVersions {
 		installedMods = append(installedMods, InstalledVersionInfo{
-			ModID:      modVersion.ModID,
 			ModVersion: modVersion,
 			Paths:      nil,
 		})

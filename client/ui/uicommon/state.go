@@ -1,8 +1,10 @@
 package uicommon
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -17,6 +19,7 @@ import (
 	"github.com/ikafly144/au_mod_installer/client/rest"
 	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
+	"github.com/ikafly144/au_mod_installer/pkg/profile"
 )
 
 type Option func(*Config)
@@ -48,6 +51,16 @@ func NewState(w fyne.Window, version string, options ...Option) (*State, error) 
 	// 	return nil, fmt.Errorf("failed to create mods directory: %w", err)
 	// }
 
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user config dir: %w", err)
+	}
+	profilePath := filepath.Join(configDir, "au_mod_installer")
+	profileManager, err := profile.NewManager(profilePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create profile manager: %w", err)
+	}
+
 	var cfg Config
 	for _, option := range options {
 		option(&cfg)
@@ -68,6 +81,8 @@ func NewState(w fyne.Window, version string, options ...Option) (*State, error) 
 
 		ModInstalledInfo: widget.NewLabel(lang.LocalizeKey("installer.select_install_path", "Please select the installation path.")),
 		Rest:             cfg.rest,
+		ProfileManager:   profileManager,
+		ActiveProfile:    binding.NewString(),
 	}
 
 	if err := s.CanInstall.Set(true); err != nil {
@@ -120,6 +135,9 @@ type State struct {
 	ModInstalledInfo *widget.Label
 	InstallSelect    *widget.Select
 	ErrorText        *widget.RichText
+
+	ProfileManager *profile.Manager
+	ActiveProfile  binding.String
 }
 
 func (s *State) ModInstallDir() string {
@@ -152,7 +170,7 @@ func (s *State) SetError(err error) {
 }
 
 func (s *State) ClearError() {
-	s.ErrorText.Hide()
+	fyne.DoAndWait(s.ErrorText.Hide)
 }
 
 func (i *State) RefreshModInstallation() {
@@ -237,8 +255,10 @@ func (i *State) RefreshModInstallation() {
 			slog.Warn("Failed to set launchable", "error", err)
 		}
 	} else if err == nil {
-		defer i.ModInstalledInfo.Refresh()
-		i.ModInstalledInfo.SetText(lang.LocalizeKey("installer.info.mod_not_installed", "Mod is not installed."))
+		fyne.Do(func() {
+			i.ModInstalledInfo.Refresh()
+			i.ModInstalledInfo.SetText(lang.LocalizeKey("installer.info.mod_not_installed", "Mod is not installed."))
+		})
 	} else {
 		slog.Warn("Failed to get mod installed", "error", err)
 	}

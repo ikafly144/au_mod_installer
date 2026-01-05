@@ -67,8 +67,9 @@ type ModPack struct {
 type ModFile struct {
 	Compatible []aumgr.BinaryType `json:"compatible"`
 	FileType   FileType           `json:"file_type"`
-	Path       string             `json:"path,omitempty"`
-	URL        string             `json:"url"`
+	// When FileType is Normal, Path is used.
+	Path string `json:"path,omitempty"`
+	URL  string `json:"url"`
 }
 
 type FileType string

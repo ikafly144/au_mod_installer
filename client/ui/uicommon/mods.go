@@ -45,7 +45,6 @@ func (s *State) InstallMods(modId string, versionData modmgr.ModVersion, progres
 				slog.Error("Failed to get mod version from mod pack", "modPackId", modPack.ID, "version", modPack.Version, "error", err)
 				return err
 			}
-			modVersion.ModID_ = modPack.ID
 			versions = append(versions, *modVersion)
 		}
 	} else {
@@ -87,7 +86,7 @@ func (s *State) InstallMods(modId string, versionData modmgr.ModVersion, progres
 		return err
 	}
 
-	binaryType, err := aumgr.DetectBinaryType(path)
+	binaryType, err := aumgr.GetBinaryType(path)
 	if err != nil {
 		slog.Error("Failed to detect binary type", "error", err)
 		return err
@@ -97,7 +96,7 @@ func (s *State) InstallMods(modId string, versionData modmgr.ModVersion, progres
 	installVersions := make([]modmgr.ModVersion, 0, len(resolved))
 	for _, v := range resolved {
 		if slices.ContainsFunc(installVersions, func(x modmgr.ModVersion) bool {
-			return x.ID == v.ID && x.ModID_ == v.ModID_
+			return x.ID == v.ID && x.ModID == v.ModID
 		}) {
 			continue
 		}
@@ -115,8 +114,8 @@ func (s *State) InstallMods(modId string, versionData modmgr.ModVersion, progres
 }
 
 func (s *State) resolveDependencies(modId string, versionData modmgr.ModVersion, resolved map[string]modmgr.ModVersion, unresolved map[string]struct{}, conflict map[string][]string) error {
-	if versionData.ModID_ == "" {
-		versionData.ModID_ = modId
+	if versionData.ModID == "" {
+		return fmt.Errorf("mod version %s has empty ModID", versionData.ID)
 	}
 	if _, ok := resolved[versionData.ID]; ok {
 		return nil

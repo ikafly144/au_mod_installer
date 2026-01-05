@@ -12,6 +12,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
+	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 )
 
 func (s *State) Launch(path string) {
@@ -38,6 +39,58 @@ func (s *State) Launch(path string) {
 		slog.Warn("Among Us executable not found", "error", err)
 		return
 	}
+
+	// Apply mods if a profile is selected
+	activeProfileID, _ := s.ActiveProfile.Get()
+	var restoreInfo *modmgr.RestoreInfo
+	if activeProfileID != "" {
+		profile, found := s.ProfileManager.Get(activeProfileID)
+		if found {
+			configDir, err := os.UserConfigDir()
+			if err != nil {
+				s.SetError(err)
+				return
+			}
+			cacheDir := filepath.Join(configDir, "au_mod_installer", "mods")
+			binaryType, err := aumgr.GetBinaryType(path)
+			if err != nil {
+				s.SetError(err)
+				return
+			}
+
+			fyne.Do(func() {
+				s.ErrorText.Segments = []widget.RichTextSegment{
+					&widget.TextSegment{Text: lang.LocalizeKey("launch.applying_mods", "Applying mods...")},
+				}
+				s.ErrorText.Refresh()
+				s.ErrorText.Show()
+			})
+
+			restoreInfo, err = modmgr.ApplyMods(path, cacheDir, profile.Versions, binaryType)
+			if err != nil {
+				s.SetError(err)
+				return
+			}
+			defer func() {
+				fyne.Do(func() {
+					s.ErrorText.Segments = []widget.RichTextSegment{
+						&widget.TextSegment{Text: lang.LocalizeKey("launch.restoring", "Restoring game files...")},
+					}
+					s.ErrorText.Refresh()
+					s.ErrorText.Show()
+				})
+				if err := modmgr.RestoreGame(path, restoreInfo); err != nil {
+					slog.Error("Failed to restore game", "error", err)
+					s.SetError(err)
+				} else {
+					fyne.Do(func() {
+						s.ErrorText.Hide()
+					})
+				}
+			}()
+		}
+	}
+
 	if err := aumgr.LaunchAmongUs(aumgr.DetectLauncherType(path), path, s.ModInstallDir()); err != nil {
 		fyne.Do(func() {
 			s.ErrorText.Segments = []widget.RichTextSegment{

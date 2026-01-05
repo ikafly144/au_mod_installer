@@ -10,7 +10,7 @@ import (
 	"github.com/zzl/go-win32api/win32"
 )
 
-func DetectBinaryType(amongUsDir string) (BinaryType, error) {
+func GetBinaryType(amongUsDir string) (BinaryType, error) {
 	path, err := syscall.UTF16PtrFromString(filepath.Join(amongUsDir, "Among Us.exe"))
 	if err != nil {
 		return BinaryTypeUnknown, err

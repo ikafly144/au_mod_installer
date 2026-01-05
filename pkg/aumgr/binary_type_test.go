@@ -19,7 +19,7 @@ func TestDetectBinaryType(t *testing.T) {
 		return
 	}
 
-	binaryType, err := DetectBinaryType(dir)
+	binaryType, err := GetBinaryType(dir)
 	if err != nil {
 		t.Errorf("Failed to detect binary type: %v", err)
 		return
@@ -36,7 +36,7 @@ func TestDetectBinaryType(t *testing.T) {
 }
 
 func TestDetectBinaryType_InvalidPath(t *testing.T) {
-	_, err := DetectBinaryType("invalid/path/that/does/not/exist")
+	_, err := GetBinaryType("invalid/path/that/does/not/exist")
 	if err == nil {
 		t.Error("Expected error for invalid path, but got nil")
 	}
