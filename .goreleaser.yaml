@@ -61,6 +61,7 @@ checksum:
   algorithm: sha256
 
 changelog:
+  use: github
   sort: asc
   groups:
     - title: Features
@@ -74,8 +75,12 @@ changelog:
 
   filters:
     exclude:
-      - "^docs:"
-      - "^test:"
+      - '^docs(\([[:word:]]+\))??!?:.+$'
+      - '^test(\([[:word:]]+\))??!?:.+$'
+      - '^ci(\([[:word:]]+\))??!?:.+$'
+      - '^chore(\([[:word:]]+\))??!?:.+$'
+      - '^refactor(\([[:word:]]+\))??!?:.+$'
+      - '^style(\([[:word:]]+\))??!?:.+$'
 
 release:
   replace_existing_draft: true
