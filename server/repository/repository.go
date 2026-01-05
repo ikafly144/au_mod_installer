@@ -6,6 +6,11 @@ import (
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 )
 
+type ModWithVersions struct {
+	modmgr.Mod
+	Versions []modmgr.ModVersion
+}
+
 // ModRepository defines the interface for mod data storage
 type ModRepository interface {
 	// GetMod retrieves a mod by ID
@@ -28,4 +33,22 @@ type ModRepository interface {
 
 	// Close closes the repository connection
 	Close()
+
+	// Admin operations can be added here
+
+	// Mod operations
+
+	// GetAllMods retrieves all mods
+	GetAllMods(ctx context.Context) ([]modmgr.Mod, error)
+
+	// DeleteMod deletes a mod by ID
+	DeleteMod(ctx context.Context, modID string) error
+
+	// Version operations
+
+	// GetAllModVersions retrieves all versions of a mod
+	GetAllModVersions(ctx context.Context, modID string) ([]modmgr.ModVersion, error)
+
+	// DeleteVersion deletes a specific version of a mod
+	DeleteVersion(ctx context.Context, modID, versionID string) error
 }

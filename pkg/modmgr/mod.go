@@ -35,8 +35,8 @@ func (mt ModType) IsVisible() bool {
 }
 
 type ModVersion struct {
-	ModID_        string                        `json:"-"` // for local use only
 	ID            string                        `json:"id"`
+	ModID         string                        `json:"mod_id"`
 	CreatedAt     time.Time                     `json:"created_at"`
 	Dependencies  []ModDependency               `json:"dependencies,omitempty"`
 	Mods          []ModPack                     `json:"mods,omitempty"`

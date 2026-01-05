@@ -14,8 +14,8 @@ import (
 	"github.com/valkey-io/valkey-go"
 
 	"github.com/ikafly144/au_mod_installer/server-admin/handler"
-	"github.com/ikafly144/au_mod_installer/server-admin/repository"
 	"github.com/ikafly144/au_mod_installer/server-admin/templates"
+	valkeyrepo "github.com/ikafly144/au_mod_installer/server/repository/valkey"
 )
 
 func main() {
@@ -49,7 +49,7 @@ func main() {
 	defer client.Close()
 
 	// Create repository and handler
-	repo := repository.NewValkeyRepository(client)
+	repo := valkeyrepo.NewRepository(client)
 	tmpl := templates.New()
 	h := handler.New(repo, tmpl)
 

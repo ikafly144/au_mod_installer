@@ -11,25 +11,24 @@ import (
 	"github.com/google/go-github/v80/github"
 
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
-	"github.com/ikafly144/au_mod_installer/server-admin/model"
-	"github.com/ikafly144/au_mod_installer/server-admin/repository"
 	"github.com/ikafly144/au_mod_installer/server-admin/templates"
+	"github.com/ikafly144/au_mod_installer/server/repository"
 )
 
 // Handler handles HTTP requests
 type Handler struct {
-	repo repository.Repository
+	repo repository.ModRepository
 	tmpl *templates.Templates
 }
 
 // New creates a new Handler
-func New(repo repository.Repository, tmpl *templates.Templates) *Handler {
+func New(repo repository.ModRepository, tmpl *templates.Templates) *Handler {
 	return &Handler{repo: repo, tmpl: tmpl}
 }
 
 // HandleList renders the mod list page
 func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
-	mods, err := h.repo.GetModList(r.Context())
+	mods, err := h.repo.GetAllMods(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -76,7 +75,7 @@ func (h *Handler) HandleVersionsPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	versions, err := h.repo.GetVersionList(ctx, modID)
+	versions, err := h.repo.GetAllModVersions(ctx, modID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -144,7 +143,7 @@ func (h *Handler) HandleVersionEdit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	version, err := h.repo.GetVersion(ctx, modID, versionID)
+	version, err := h.repo.GetModVersion(ctx, modID, versionID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -168,7 +167,7 @@ func (h *Handler) HandleVersionEdit(w http.ResponseWriter, r *http.Request) {
 
 // HandleGetMods returns all mods as JSON
 func (h *Handler) HandleGetMods(w http.ResponseWriter, r *http.Request) {
-	mods, err := h.repo.GetModList(r.Context())
+	mods, err := h.repo.GetAllMods(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -199,7 +198,7 @@ func (h *Handler) HandleGetMod(w http.ResponseWriter, r *http.Request) {
 
 // HandleCreateMod creates a new mod
 func (h *Handler) HandleCreateMod(w http.ResponseWriter, r *http.Request) {
-	var mod model.Mod
+	var mod modmgr.Mod
 	if err := json.NewDecoder(r.Body).Decode(&mod); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
@@ -239,7 +238,7 @@ func (h *Handler) HandleUpdateMod(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var mod model.Mod
+	var mod modmgr.Mod
 	if err := json.NewDecoder(r.Body).Decode(&mod); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
@@ -291,7 +290,7 @@ func (h *Handler) HandleGetVersions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	versions, err := h.repo.GetVersionList(r.Context(), modID)
+	versions, err := h.repo.GetAllModVersions(r.Context(), modID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -310,7 +309,7 @@ func (h *Handler) HandleGetVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	version, err := h.repo.GetVersion(r.Context(), modID, versionID)
+	version, err := h.repo.GetModVersion(r.Context(), modID, versionID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -331,7 +330,7 @@ func (h *Handler) HandleCreateVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var version model.ModVersion
+	var version modmgr.ModVersion
 	if err := json.NewDecoder(r.Body).Decode(&version); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
@@ -342,6 +341,7 @@ func (h *Handler) HandleCreateVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	version.ModID = modID
 	ctx := r.Context()
 
 	// Check if mod exists
@@ -359,7 +359,7 @@ func (h *Handler) HandleCreateVersion(w http.ResponseWriter, r *http.Request) {
 		version.CreatedAt = time.Now()
 	}
 
-	if err := h.repo.SetVersion(ctx, modID, version); err != nil {
+	if err := h.repo.SetModVersion(ctx, modID, version); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -377,17 +377,18 @@ func (h *Handler) HandleUpdateVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var version model.ModVersion
+	var version modmgr.ModVersion
 	if err := json.NewDecoder(r.Body).Decode(&version); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
 	version.ID = versionID
+	version.ModID = modID
 	ctx := r.Context()
 
 	// Check if version exists
-	existing, err := h.repo.GetVersion(ctx, modID, versionID)
+	existing, err := h.repo.GetModVersion(ctx, modID, versionID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -401,7 +402,7 @@ func (h *Handler) HandleUpdateVersion(w http.ResponseWriter, r *http.Request) {
 		version.CreatedAt = existing.CreatedAt
 	}
 
-	if err := h.repo.SetVersion(ctx, modID, version); err != nil {
+	if err := h.repo.SetModVersion(ctx, modID, version); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -429,7 +430,7 @@ func (h *Handler) HandleDeleteVersion(w http.ResponseWriter, r *http.Request) {
 
 // HandleImport imports mods from JSON
 func (h *Handler) HandleImport(w http.ResponseWriter, r *http.Request) {
-	var mods []model.ModWithVersions
+	var mods []repository.ModWithVersions
 	if err := json.NewDecoder(r.Body).Decode(&mods); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
@@ -445,7 +446,7 @@ func (h *Handler) HandleImport(w http.ResponseWriter, r *http.Request) {
 		}
 
 		for _, v := range m.Versions {
-			if err := h.repo.SetVersion(ctx, m.ID, v); err != nil {
+			if err := h.repo.SetModVersion(ctx, m.ID, v); err != nil {
 				writeError(w, http.StatusInternalServerError, err.Error())
 				return
 			}
@@ -460,21 +461,21 @@ func (h *Handler) HandleImport(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) HandleExport(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	mods, err := h.repo.GetModList(ctx)
+	mods, err := h.repo.GetAllMods(ctx)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	result := make([]model.ModWithVersions, 0, len(mods))
+	result := make([]repository.ModWithVersions, 0, len(mods))
 	for _, mod := range mods {
-		versions, err := h.repo.GetVersionList(ctx, mod.ID)
+		versions, err := h.repo.GetAllModVersions(ctx, mod.ID)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 
-		result = append(result, model.ModWithVersions{
+		result = append(result, repository.ModWithVersions{
 			Mod:      mod,
 			Versions: versions,
 		})
@@ -496,7 +497,7 @@ func (h *Handler) HandleSetLatestVersion(w http.ResponseWriter, r *http.Request)
 	ctx := r.Context()
 
 	// Verify version exists
-	_, err := h.repo.GetVersion(ctx, modID, versionID)
+	_, err := h.repo.GetModVersion(ctx, modID, versionID)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "version not found")
 		return
