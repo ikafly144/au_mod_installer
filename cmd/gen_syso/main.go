@@ -53,7 +53,7 @@ func versionStrToNum(versionString string) ([]int, error) {
 func getVersionData() (string, []int, error) {
 	bin, err := exec.Command("git", "describe", "--tags").Output()
 	if err != nil {
-		return "", nil, fmt.Errorf("Could not get version string from git (%w)", err)
+		return "", nil, fmt.Errorf("could not get version string from git (%w)", err)
 	}
 	str := strings.TrimSpace(string(bin))
 	num, err := versionStrToNum(str)
