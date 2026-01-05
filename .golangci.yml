@@ -1,0 +1,30 @@
+version: "2"
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    gofmt:
+      simplify: true
+      rewrite-rules:
+        - pattern: interface{}
+          replacement: any
+    goimports:
+      local-prefixes:
+        - "github.com/ikafly144/au_mod_installer"
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+  default: fast
+
+  settings:
+    unused:
+      exported-fields-are-used: true
+      generated-is-used: true
+      parameters-are-used: true
