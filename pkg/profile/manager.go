@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/google/uuid"
 )
 
 type Manager struct {
@@ -75,6 +77,10 @@ func (m *Manager) Add(p Profile) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	if p.ID == uuid.Nil {
+		return fmt.Errorf("profile ID cannot be nil")
+	}
+
 	// Check if ID exists, if so replace
 	found := false
 	for i, existing := range m.profiles {
@@ -91,7 +97,7 @@ func (m *Manager) Add(p Profile) error {
 	return m.save()
 }
 
-func (m *Manager) Remove(id string) error {
+func (m *Manager) Remove(id uuid.UUID) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -104,7 +110,7 @@ func (m *Manager) Remove(id string) error {
 	return nil
 }
 
-func (m *Manager) Get(id string) (Profile, bool) {
+func (m *Manager) Get(id uuid.UUID) (Profile, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	for _, p := range m.profiles {

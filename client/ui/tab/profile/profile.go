@@ -1,9 +1,13 @@
 package profile
 
 import (
+	"errors"
 	"fmt"
+	"image"
+	"image/color"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -15,6 +19,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/google/uuid"
 	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
 	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
@@ -30,7 +35,7 @@ type ProfileTab struct {
 	progressBar       *progress.FyneProgress
 
 	profiles          []profile.Profile
-	selectedProfileID string
+	selectedProfileID uuid.UUID
 }
 
 var _ uicommon.Tab = (*ProfileTab)(nil)
@@ -88,7 +93,7 @@ func NewProfileTab(s *uicommon.State) uicommon.Tab {
 		p.loadProfileButton.Enable()
 	}
 	p.profileList.OnUnselected = func(id widget.ListItemID) {
-		p.selectedProfileID = ""
+		p.selectedProfileID = uuid.Nil
 		p.loadProfileButton.Disable()
 	}
 	p.profileList.FocusLost()
@@ -170,6 +175,9 @@ func (p *ProfileTab) newModDetailsDialog(mod modmgr.Mod, onSelect func(modmgr.Mo
 			dialog.ShowError(err, p.state.Window)
 			return
 		}
+		sort.SliceStable(v, func(i, j int) bool {
+			return v[i].CreatedAt.After(v[j].CreatedAt)
+		})
 		versions = v
 		fyne.Do(func() {
 			versionList.Refresh()
@@ -178,8 +186,8 @@ func (p *ProfileTab) newModDetailsDialog(mod modmgr.Mod, onSelect func(modmgr.Mo
 	return d
 }
 
-func (p *ProfileTab) deleteProfile(id string) {
-	if id == "" {
+func (p *ProfileTab) deleteProfile(id uuid.UUID) {
+	if id == uuid.Nil {
 		return
 	}
 
@@ -197,8 +205,8 @@ func (p *ProfileTab) deleteProfile(id string) {
 	}, p.state.Window)
 }
 
-func (p *ProfileTab) loadProfile(id string) {
-	if id == "" {
+func (p *ProfileTab) loadProfile(id uuid.UUID) {
+	if id == uuid.Nil {
 		return
 	}
 
@@ -252,7 +260,7 @@ func (p *ProfileTab) loadProfile(id string) {
 		}
 
 		// Set active profile
-		if err := p.state.ActiveProfile.Set(targetProfile.ID); err != nil {
+		if err := p.state.ActiveProfile.Set(targetProfile.ID.String()); err != nil {
 			p.state.SetError(err)
 			return
 		}
@@ -285,7 +293,7 @@ func (p *ProfileTab) createProfile() {
 	}
 
 	prof := profile.Profile{
-		ID:          name,
+		ID:          uuid.New(),
 		Name:        name,
 		Versions:    []modmgr.ModVersion{},
 		LastUpdated: time.Now(),
@@ -316,14 +324,16 @@ func (p *ProfileTab) openProfileEditor(prof profile.Profile) {
 	nameEntry.SetText(currentProfile.Name)
 	nameEntry.Validator = func(s string) error {
 		if s == "" {
-			return os.ErrInvalid
+			return errors.New(lang.LocalizeKey("profile.error_name_empty", "Profile name cannot be empty"))
 		}
 		return nil
 	}
 
 	// Icon placeholder
-	iconPlaceholder := widget.NewIcon(theme.AccountIcon()) // Use a generic icon for now
-	// iconPlaceholder.SetMinSize(fyne.NewSize(64, 64)) // Icons don't support SetMinSize directly usually, layout handles it
+	iconPlaceholder := canvas.NewImageFromImage(image.NewPaletted(image.Rectangle{
+		Max: image.Point{64, 64},
+	}, color.Palette{theme.Color(theme.ColorNameDisabled)}))
+	iconPlaceholder.SetMinSize(fyne.NewSize(128, 128))
 
 	// Mod List
 	modList := widget.NewList(
@@ -407,7 +417,8 @@ func (p *ProfileTab) openProfileEditor(prof profile.Profile) {
 				return
 			}
 			newName := nameEntry.Text
-			if newName == "" {
+			if err := nameEntry.Validate(); err != nil {
+				dialog.ShowError(err, p.state.Window)
 				return
 			}
 
@@ -416,7 +427,6 @@ func (p *ProfileTab) openProfileEditor(prof profile.Profile) {
 			// For now assuming ID=Name
 			oldID := prof.ID
 			currentProfile.Name = newName
-			currentProfile.ID = newName
 			currentProfile.LastUpdated = time.Now()
 
 			if err := p.state.ProfileManager.Add(currentProfile); err != nil {
@@ -539,7 +549,7 @@ func (p *ProfileTab) showDuplicateDialog(prof profile.Profile) {
 		return nil
 	}
 
-	dialog.ShowForm(lang.LocalizeKey("profile.duplicate_title", "Duplicate Profile"), lang.LocalizeKey("common.save", "Save"), lang.LocalizeKey("common.cancel", "Cancel"), []*widget.FormItem{
+	d := dialog.NewForm(lang.LocalizeKey("profile.duplicate_title", "Duplicate Profile"), lang.LocalizeKey("common.save", "Save"), lang.LocalizeKey("common.cancel", "Cancel"), []*widget.FormItem{
 		widget.NewFormItem(lang.LocalizeKey("profile.name", "Profile Name"), entry),
 	}, func(confirm bool) {
 		if !confirm {
@@ -548,8 +558,8 @@ func (p *ProfileTab) showDuplicateDialog(prof profile.Profile) {
 		newName := entry.Text
 
 		newProf := prof
+		newProf.ID = uuid.New()
 		newProf.Name = newName
-		newProf.ID = newName // Assuming ID=Name strategy
 		newProf.LastUpdated = time.Now()
 
 		if err := p.state.ProfileManager.Add(newProf); err != nil {
@@ -558,4 +568,6 @@ func (p *ProfileTab) showDuplicateDialog(prof profile.Profile) {
 		}
 		p.refreshProfiles()
 	}, p.state.Window)
+	d.Resize(fyne.NewSize(400, 200))
+	d.Show()
 }

@@ -12,6 +12,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/google/uuid"
 	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
 	"github.com/ikafly144/au_mod_installer/common/versioning"
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
@@ -100,7 +101,7 @@ func (s *Settings) importProfile() {
 		}
 
 		prof := profile.Profile{
-			ID:          name, // Use name as ID for simplicity for now
+			ID:          uuid.New(),
 			Name:        name,
 			Versions:    mods,
 			LastUpdated: time.Now(),

@@ -58,7 +58,13 @@ func NewState(w fyne.Window, version string, options ...Option) (*State, error) 
 	profilePath := filepath.Join(configDir, "au_mod_installer")
 	profileManager, err := profile.NewManager(profilePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create profile manager: %w", err)
+		if err := os.RemoveAll(profilePath); err != nil {
+			return nil, fmt.Errorf("failed to remove profile path: %w", err)
+		}
+		profileManager, err = profile.NewManager(profilePath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create profile manager after removal: %w", err)
+		}
 	}
 
 	var cfg Config

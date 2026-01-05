@@ -11,6 +11,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/google/uuid"
 	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 )
@@ -41,9 +42,14 @@ func (s *State) Launch(path string) {
 	}
 
 	// Apply mods if a profile is selected
-	activeProfileID, _ := s.ActiveProfile.Get()
+	activeProfileIDStr, _ := s.ActiveProfile.Get()
+	activeProfileID, err := uuid.Parse(activeProfileIDStr)
+	if err != nil {
+		slog.Warn("Failed to parse active profile ID", "error", err)
+		activeProfileID = uuid.Nil
+	}
 	var restoreInfo *modmgr.RestoreInfo
-	if activeProfileID != "" {
+	if activeProfileID != uuid.Nil {
 		profile, found := s.ProfileManager.Get(activeProfileID)
 		if found {
 			configDir, err := os.UserConfigDir()
