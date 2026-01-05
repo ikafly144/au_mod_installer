@@ -55,7 +55,11 @@ jobs:
           # List tags, filter out pre-releases (containing '-'), exclude current tag, sort version, take last
           PREVIOUS_STABLE=$(git tag -l "v*" | grep -v "-" | grep -v "^$CURRENT_TAG$" | sort -V | tail -n 1)
           echo "Previous stable release: $PREVIOUS_STABLE"
-          echo "No previous stable release found."
+          if [[ -z "$PREVIOUS_STABLE" ]]; then
+            echo "No previous stable release found."
+            echo "previous_stable=" >> $GITHUB_OUTPUT
+            exit 0
+          fi
 
           if [[ "$CURRENT_TAG" != *"-"* ]]; then
             echo "previous_stable=$PREVIOUS_STABLE" >> $GITHUB_OUTPUT
