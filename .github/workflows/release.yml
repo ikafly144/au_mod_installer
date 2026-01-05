@@ -47,18 +47,23 @@ jobs:
         with:
           go-version: stable
       - name: Get previous stable release
-        if: "!contains(github.ref_name, '-')"
+        id: get_previous_stable
         run: |
           CURRENT_TAG=${GITHUB_REF_NAME}
           echo "Current tag: $CURRENT_TAG"
-          # List tags, filter out pre-releases (containing '-'), exclude current tag, sort version, take last
-          PREVIOUS_STABLE=$(git tag -l "v*" | grep -v "-" | grep -v "^$CURRENT_TAG$" | sort -V | tail -n 1)
 
-          if [ -z "$PREVIOUS_STABLE" ]; then
-            echo "No previous stable release found."
+          if [[ "$CURRENT_TAG" != *"-"* ]]; then
+            # List tags, filter out pre-releases (containing '-'), exclude current tag, sort version, take last
+            PREVIOUS_STABLE=$(git tag -l "v*" | grep -v "-" | grep -v "^$CURRENT_TAG$" | sort -V | tail -n 1)
+
+            if [ -z "$PREVIOUS_STABLE" ]; then
+              echo "No previous stable release found."
+            else
+              echo "Previous stable release: $PREVIOUS_STABLE"
+              echo "previous_stable=$PREVIOUS_STABLE" >> $GITHUB_OUTPUT
+            fi
           else
-            echo "Previous stable release: $PREVIOUS_STABLE"
-            echo "GORELEASER_PREVIOUS_TAG=$PREVIOUS_STABLE" >> $GITHUB_ENV
+            echo "Pre-release detected. Skipping previous stable tag detection."
           fi
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6.4.0
@@ -72,3 +77,26 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DISCORD_WEBHOOK_ID: ${{ secrets.DISCORD_WEBHOOK_ID }}
           DISCORD_WEBHOOK_TOKEN: ${{ secrets.DISCORD_WEBHOOK_TOKEN }}
+          GORELEASER_PREVIOUS_TAG: ${{ steps.get_previous_stable.outputs.previous_stable }}
+      - name: Output Release Summary
+        run: |
+          echo "## Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "Release: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          # Release notes link
+          echo "Release Notes: [View on GitHub](${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ github.ref_name }})" >> $GITHUB_STEP_SUMMARY
+          # List artifacts
+          echo "### Artifacts" >> $GITHUB_STEP_SUMMARY
+          for file in dist/*; do
+            if [ -f "$file" ]; then
+              echo "- $(basename "$file")" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+          echo "" >> $GITHUB_STEP_SUMMARY
+          # Include metadata.json content
+          if [ -f dist/metadata.json ]; then
+            echo "### Metadata" >> $GITHUB_STEP_SUMMARY
+            echo '\`\`\`json' >> $GITHUB_STEP_SUMMARY
+            cat dist/metadata.json >> $GITHUB_STEP_SUMMARY
+            echo '' >> $GITHUB_STEP_SUMMARY
+            echo '\`\`\`' >> $GITHUB_STEP_SUMMARY
+          fi
