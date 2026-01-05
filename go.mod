@@ -1,6 +1,6 @@
 module github.com/ikafly144/au_mod_installer
 
-go 1.25.4
+go 1.25.5
 
 require (
 	fyne.io/fyne/v2 v2.7.1
