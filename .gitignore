@@ -25,3 +25,8 @@ versioninfo.json
 
 # env file
 *.env
+
+# Tailwind CSS output
+**/output.css
+node_modules/
+package-lock.json

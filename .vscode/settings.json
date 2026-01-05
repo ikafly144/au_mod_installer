@@ -5,5 +5,7 @@
         "CC": "x86_64-w64-mingw32-gcc"
     },
     "go.lintTool": "golangci-lint",
-    "go.lintOnSave": "workspace"
+    "go.lintOnSave": "workspace",
+    "scss.lint.unknownAtRules": "ignore",
+    "css.lint.unknownAtRules": "ignore"
 }

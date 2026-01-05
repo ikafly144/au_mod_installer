@@ -10,7 +10,8 @@
     </div>
     <div class="card-body">
         {{if .Mods}}
-        <div class="table-responsive">
+        <!-- PC View -->
+        <div class="hidden md:block table-responsive">
             <table>
                 <thead>
                     <tr>
@@ -45,6 +46,36 @@
                     {{end}}
                 </tbody>
             </table>
+        </div>
+
+        <!-- Mobile View -->
+        <div class="md:hidden space-y-4">
+            {{range .Mods}}
+            <div class="bg-white border rounded-lg shadow-sm overflow-hidden">
+                <div class="p-4 flex justify-between items-center cursor-pointer" onclick="toggleAccordion('mod-{{.ID}}')">
+                    <div>
+                        <div class="font-bold text-lg">{{.Name}}</div>
+                        <div class="text-xs text-gray-500 font-mono">{{.ID}}</div>
+                    </div>
+                    <div id="mod-{{.ID}}-icon" class="text-gray-400 transition-transform duration-200">▼</div>
+                </div>
+                <div id="mod-{{.ID}}" class="hidden border-t bg-gray-50 p-4">
+                    <div class="grid grid-cols-2 gap-2 text-sm mb-4">
+                        <div class="text-gray-500">作者</div>
+                        <div>{{.Author}}</div>
+                        <div class="text-gray-500">タイプ</div>
+                        <div>{{if .Type}}<span class="badge badge-{{.Type}}">{{.Type}}</span>{{else}}-{{end}}</div>
+                        <div class="text-gray-500">最新Ver</div>
+                        <div>{{if .LatestVersion}}{{.LatestVersion}}{{else}}-{{end}}</div>
+                    </div>
+                    <div class="flex flex-wrap gap-2 justify-end">
+                        <a href="/mods/{{.ID}}/versions" class="btn btn-secondary btn-sm">バージョン</a>
+                        <button class="btn btn-secondary btn-sm" onclick='editMod({{json .}})'>編集</button>
+                        <button class="btn btn-danger btn-sm" onclick="deleteMod('{{.ID}}')">削除</button>
+                    </div>
+                </div>
+            </div>
+            {{end}}
         </div>
         {{else}}
         <div class="empty-state">

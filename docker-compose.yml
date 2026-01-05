@@ -59,7 +59,9 @@ services:
 
   # Admin Panel
   admin:
-    image: ghcr.io/ikafly144/au_mod_installer-server-admin:latest
+    build:
+      context: .
+      dockerfile: ./server-admin/Dockerfile
     restart: unless-stopped
     networks:
       - default

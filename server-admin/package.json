@@ -1,0 +1,12 @@
+{
+    "name": "server-admin",
+    "version": "1.0.0",
+    "description": "AU Mod Installer Admin Server",
+    "scripts": {
+        "build:css": "tailwindcss -i ./input.css -o ./templates/static/output.css --minify",
+        "watch:css": "tailwindcss -i ./input.css -o ./templates/static/output.css --watch"
+    },
+    "devDependencies": {
+        "tailwindcss": "^3.4.1"
+    }
+}

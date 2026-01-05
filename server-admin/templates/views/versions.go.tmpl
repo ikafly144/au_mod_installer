@@ -12,7 +12,8 @@
     </div>
     <div class="card-body">
         {{if .Versions}}
-        <div class="table-responsive">
+        <!-- PC View -->
+        <div class="hidden md:block table-responsive">
             <table>
                 <thead>
                     <tr>
@@ -51,6 +52,49 @@
                     {{end}}
                 </tbody>
             </table>
+        </div>
+
+        <!-- Mobile View -->
+        <div class="md:hidden space-y-4">
+            {{range .Versions}}
+            <div class="bg-white border rounded-lg shadow-sm overflow-hidden">
+                <div class="p-4 flex justify-between items-center cursor-pointer" onclick="toggleAccordion('ver-{{.ID}}')">
+                    <div>
+                        <div class="font-bold text-lg font-mono">{{.ID}}</div>
+                        <div class="text-xs text-gray-500">{{.CreatedAt.Format "2006/01/02"}}</div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        {{if eq .ID $.Mod.LatestVersion}}
+                        <span class="status-badge status-latest">Latest</span>
+                        {{end}}
+                        <div id="ver-{{.ID}}-icon" class="text-gray-400 transition-transform duration-200">▼</div>
+                    </div>
+                </div>
+                <div id="ver-{{.ID}}" class="hidden border-t bg-gray-50 p-4">
+                    <div class="grid grid-cols-2 gap-2 text-sm mb-4">
+                        <div class="text-gray-500">対象AU</div>
+                        <div>
+                            {{if .TargetVersion}}
+                            {{range $k, $v := .TargetVersion}}
+                            {{$k}}: {{$v}}<br>
+                            {{end}}
+                            {{else}}
+                            -
+                            {{end}}
+                        </div>
+                        <div class="text-gray-500">ファイル数</div>
+                        <div>{{len .Files}}</div>
+                    </div>
+                    <div class="flex flex-wrap gap-2 justify-end">
+                        {{if ne .ID $.Mod.LatestVersion}}
+                        <button class="btn btn-secondary btn-sm" onclick="setLatestVersion('{{.ID}}')">Set Latest</button>
+                        {{end}}
+                        <a href="/mods/{{$.Mod.ID}}/versions/{{.ID}}/edit" class="btn btn-secondary btn-sm">編集</a>
+                        <button class="btn btn-danger btn-sm" onclick="deleteVersion('{{.ID}}')">削除</button>
+                    </div>
+                </div>
+            </div>
+            {{end}}
         </div>
         {{else}}
         <div class="empty-state">
