@@ -33,10 +33,10 @@ jobs:
           path: |
             ~/.cache/go-build
             ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ env.cache-name }}-${{ hashFiles('**/go.sum') }}
+          key: ${{ runner.os }}-release-${{ env.cache-name }}-${{ hashFiles('**/go.sum') }}
           restore-keys: |
-            ${{ runner.os }}-go-${{ env.cache-name }}-
-            ${{ runner.os }}-go-
+            ${{ runner.os }}-release-${{ env.cache-name }}-
+            ${{ runner.os }}-release-
             ${{ runner.os }}-
       - name: Set up MinGW
         uses: egor-tensin/setup-mingw@41b837e47d7f85214629d255b9c4bc3fcbe9fd63 # v3.0
@@ -118,4 +118,4 @@ jobs:
           path: |
             ~/.cache/go-build
             ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ env.cache-name }}-${{ hashFiles('**/go.sum') }}
+          key: ${{ runner.os }}-release-${{ env.cache-name }}-${{ hashFiles('**/go.sum') }}
