@@ -12,35 +12,10 @@ import (
 	_ "embed"
 )
 
-/*
-#include <stdlib.h>
-#include <stdio.h>
-#include <windows.h>
-
-typedef int(*ReadVersionFileFn)(const char *path, char *buffer, int bufferSize);
-
-HMODULE hModule = NULL;
-
-int init(char *path) {
-	hModule = LoadLibraryA(path);
-	if (hModule == NULL) {
-		return -1;
-	}
-	return 0;
-}
-
-int ReadVersionFile(const char *path, char *buffer, int bufferSize) {
-	ReadVersionFileFn readVersionFile = (ReadVersionFileFn)GetProcAddress(hModule, "ReadVersionFile");
-	if (readVersionFile == NULL) {
-		return -2;
-	}
-	return readVersionFile(path, buffer, bufferSize);
-}
-*/
-import "C"
-
 //go:embed lib/dump-version.dll
 var dumpVersionDLL []byte
+
+var dll *syscall.LazyDLL
 
 func init() {
 	path, err := os.Executable()
@@ -55,25 +30,22 @@ func init() {
 			panic(err)
 		}
 	}
-	cPath := C.CString(filepath.Join(filepath.Dir(path), "lib", "dump-version.dll"))
-	defer C.free(unsafe.Pointer(cPath))
-	if res := C.init(cPath); res != 0 {
-		panic(fmt.Sprintf("failed to load dump-version.dll: error code %d", res))
-	}
+	dll = syscall.NewLazyDLL(filepath.Join(filepath.Dir(path), "lib", "dump-version.dll"))
 }
 
 func readVersionFile(path string) (string, error) {
 	const bufferSize = 128
-	var buffer [bufferSize]C.char
+	var buffer [bufferSize]byte
 	pathPtr, err := syscall.UTF16PtrFromString(path)
 	if err != nil {
-		return "", fmt.Errorf("failed to convert path to C string: %w", err)
+		return "", fmt.Errorf("failed to convert path to UTF16: %w", err)
 	}
-	result := C.ReadVersionFile((*C.char)(unsafe.Pointer(pathPtr)), &buffer[0], C.int(bufferSize))
-	if result != 0 {
-		return "", fmt.Errorf("failed to read version file: error code %d", result)
+	proc := dll.NewProc("ReadVersionFile")
+	ret, _, err := proc.Call(uintptr(unsafe.Pointer(pathPtr)), uintptr(unsafe.Pointer(&buffer[0])), uintptr(bufferSize))
+	if ret != 0 {
+		return "", fmt.Errorf("failed to read version file: error code %d", ret)
 	}
-	return C.GoString(&buffer[0]), nil
+	return string(buffer[:]), nil
 }
 
 func GetVersion(gamePath string) (string, error) {

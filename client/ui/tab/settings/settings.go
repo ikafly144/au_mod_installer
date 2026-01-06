@@ -95,15 +95,15 @@ func (s *Settings) importProfile() {
 			return
 		}
 		name := entry.Text
-		var mods []modmgr.ModVersion
+		mods := make(map[string]modmgr.ModVersion)
 		for _, m := range installationInfo.InstalledMods {
-			mods = append(mods, m.ModVersion)
+			mods[m.ModVersion.ID] = m.ModVersion
 		}
 
 		prof := profile.Profile{
 			ID:          uuid.New(),
 			Name:        name,
-			Versions:    mods,
+			ModVersions: mods,
 			LastUpdated: time.Now(),
 		}
 

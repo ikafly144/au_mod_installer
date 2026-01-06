@@ -72,7 +72,7 @@ func (s *State) Launch(path string) {
 				s.ErrorText.Show()
 			})
 
-			restoreInfo, err = modmgr.ApplyMods(path, cacheDir, profile.Versions, binaryType)
+			restoreInfo, err = modmgr.ApplyMods(path, cacheDir, profile.Versions(), binaryType)
 			if err != nil {
 				s.SetError(err)
 				return

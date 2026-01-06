@@ -254,7 +254,7 @@ func (p *ProfileTab) loadProfile(id uuid.UUID) {
 		}
 		cacheDir := filepath.Join(configDir, "au_mod_installer", "mods")
 
-		if err := modmgr.DownloadMods(cacheDir, targetProfile.Versions, binaryType, p.progressBar); err != nil {
+		if err := modmgr.DownloadMods(cacheDir, targetProfile.Versions(), binaryType, p.progressBar); err != nil {
 			p.state.SetError(err)
 			return
 		}
@@ -273,7 +273,7 @@ func (p *ProfileTab) loadProfile(id uuid.UUID) {
 
 func (p *ProfileTab) createProfile() {
 	// Generate unique name
-	baseName := "New Profile"
+	baseName := "New Profile" // FIXME: localization
 	name := baseName
 	counter := 1
 	existing := p.state.ProfileManager.List()
@@ -295,7 +295,7 @@ func (p *ProfileTab) createProfile() {
 	prof := profile.Profile{
 		ID:          uuid.New(),
 		Name:        name,
-		Versions:    []modmgr.ModVersion{},
+		ModVersions: map[string]modmgr.ModVersion{},
 		LastUpdated: time.Now(),
 	}
 
@@ -337,15 +337,15 @@ func (p *ProfileTab) openProfileEditor(prof profile.Profile) {
 
 	// Mod List
 	modList := widget.NewList(
-		func() int { return len(currentProfile.Versions) },
+		func() int { return len(currentProfile.Versions()) },
 		func() fyne.CanvasObject {
 			return container.NewBorder(nil, nil, nil, widget.NewButtonWithIcon("", theme.DeleteIcon(), nil), widget.NewLabel("Mod Name"))
 		},
 		func(id widget.ListItemID, item fyne.CanvasObject) {
-			if id >= len(currentProfile.Versions) {
+			if id >= len(currentProfile.Versions()) {
 				return
 			}
-			v := currentProfile.Versions[id]
+			v := currentProfile.Versions()[id]
 			c := item.(*fyne.Container)
 			label := c.Objects[0].(*widget.Label)
 			delBtn := c.Objects[1].(*widget.Button)
@@ -353,7 +353,7 @@ func (p *ProfileTab) openProfileEditor(prof profile.Profile) {
 			label.SetText(v.ModID + " (" + v.ID + ")") // Display ModID and VersionID
 			delBtn.OnTapped = func() {
 				// Remove mod
-				currentProfile.Versions = append(currentProfile.Versions[:id], currentProfile.Versions[id+1:]...)
+				currentProfile.RemoveModVersion(v.ModID)
 				// Refresh list
 				item.(*fyne.Container).Refresh() // This might not be enough, need to refresh list
 				// Hacky refresh
@@ -371,10 +371,10 @@ func (p *ProfileTab) openProfileEditor(prof profile.Profile) {
 	// BUT if we delete an item, the list length changes.
 	// Let's use a more robust delete approach.
 	modList.UpdateItem = func(id widget.ListItemID, item fyne.CanvasObject) {
-		if id >= len(currentProfile.Versions) {
+		if id >= len(currentProfile.Versions()) {
 			return
 		}
-		v := currentProfile.Versions[id]
+		v := currentProfile.Versions()[id]
 		c := item.(*fyne.Container)
 		label := c.Objects[0].(*widget.Label)
 		delBtn := c.Objects[1].(*widget.Button)
@@ -382,8 +382,8 @@ func (p *ProfileTab) openProfileEditor(prof profile.Profile) {
 		label.SetText(v.ModID + " (" + v.ID + ")")
 		delBtn.OnTapped = func() {
 			// Remove at index id
-			if id < len(currentProfile.Versions) {
-				currentProfile.Versions = append(currentProfile.Versions[:id], currentProfile.Versions[id+1:]...)
+			if id < len(currentProfile.Versions()) {
+				currentProfile.RemoveModVersion(v.ModID)
 				modList.Refresh()
 			}
 		}
@@ -391,7 +391,9 @@ func (p *ProfileTab) openProfileEditor(prof profile.Profile) {
 
 	addModBtn := widget.NewButtonWithIcon(lang.LocalizeKey("profile.add_mod", "Add Mod"), theme.ContentAddIcon(), func() {
 		p.showAddModDialog(func(addedMods []modmgr.ModVersion) {
-			currentProfile.Versions = append(currentProfile.Versions, addedMods...)
+			for _, m := range addedMods {
+				currentProfile.AddModVersion(m)
+			}
 			modList.Refresh()
 		})
 	})
