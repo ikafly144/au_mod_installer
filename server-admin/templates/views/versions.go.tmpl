@@ -30,9 +30,9 @@
                         <td><code>{{.ID}}</code></td>
                         <td>{{.CreatedAt.Format "2006/01/02"}}</td>
                         <td>
-                            {{if .TargetVersion}}
-                            {{range $k, $v := .TargetVersion}}
-                            {{$k}}: {{$v}}<br>
+                            {{if .GameVersions}}
+                            {{range $i, $v := .GameVersions}}
+                            {{$v}}<br>
                             {{end}}
                             {{else}}
                             -
@@ -74,9 +74,9 @@
                     <div class="grid grid-cols-2 gap-2 text-sm mb-4">
                         <div class="text-gray-500">対象AU</div>
                         <div>
-                            {{if .TargetVersion}}
-                            {{range $k, $v := .TargetVersion}}
-                            {{$k}}: {{$v}}<br>
+                            {{if .GameVersions}}
+                            {{range $i, $v := .GameVersions}}
+                            {{$v}}<br>
                             {{end}}
                             {{else}}
                             -

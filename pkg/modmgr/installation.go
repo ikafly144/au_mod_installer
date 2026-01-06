@@ -356,7 +356,7 @@ func RestoreGame(gameDir string, restoreInfo *RestoreInfo) error {
 	return nil
 }
 
-func InstallMod(modInstallLocation *os.Root, gameManifest aumgr.Manifest, launcherType aumgr.LauncherType, binaryType aumgr.BinaryType, modVersions []ModVersion, progress progress.Progress) (*ModInstallation, error) {
+func InstallMod(modInstallLocation *os.Root, gameVersion string, launcherType aumgr.LauncherType, binaryType aumgr.BinaryType, modVersions []ModVersion, progress progress.Progress) (*ModInstallation, error) {
 	slog.Info("Starting mod installation", "mods", modVersions)
 	if progress != nil {
 		progress.SetValue(0.0)
@@ -364,15 +364,12 @@ func InstallMod(modInstallLocation *os.Root, gameManifest aumgr.Manifest, launch
 		defer progress.Done()
 	}
 
-	if gameManifest == nil {
-		return nil, fmt.Errorf("game manifest is nil")
-	}
 	if binaryType == aumgr.BinaryTypeUnknown {
 		return nil, fmt.Errorf("unknown binary type")
 	}
 	for _, mod := range modVersions {
-		if !mod.IsCompatible(launcherType, binaryType, gameManifest.GetVersion()) {
-			return nil, fmt.Errorf("mod is not compatible with the current game version: %s", gameManifest.GetVersion())
+		if !mod.IsCompatible(launcherType, binaryType, gameVersion) {
+			return nil, fmt.Errorf("mod is not compatible with the current game version: %s", gameVersion)
 		}
 	}
 
@@ -406,7 +403,7 @@ func InstallMod(modInstallLocation *os.Root, gameManifest aumgr.Manifest, launch
 	installation := &ModInstallation{
 		FileVersion:          currentFileVersion,
 		InstalledMods:        installedMods,
-		InstalledGameVersion: gameManifest.GetVersion(),
+		InstalledGameVersion: gameVersion,
 		Status:               InstallStatusBroken,
 	}
 	if err := SaveInstallationInfo(modInstallLocation, installation); err != nil {

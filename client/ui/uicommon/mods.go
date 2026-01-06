@@ -80,9 +80,9 @@ func (s *State) InstallMods(modId string, versionData modmgr.ModVersion, progres
 	}
 
 	launcherType := aumgr.DetectLauncherType(path)
-	manifest, err := aumgr.GetManifest(launcherType, path)
+	gameVersion, err := aumgr.GetVersion(path)
 	if err != nil {
-		slog.Error("Failed to get game manifest", "error", err)
+		slog.Error("Failed to get game version", "error", err)
 		return err
 	}
 
@@ -100,13 +100,13 @@ func (s *State) InstallMods(modId string, versionData modmgr.ModVersion, progres
 		}) {
 			continue
 		}
-		if !v.IsCompatible(launcherType, binaryType, manifest.GetVersion()) {
+		if !v.IsCompatible(launcherType, binaryType, gameVersion) {
 			slog.Warn("Mod version is not compatible, skipping", "modId", v.ID, "versionId", v.ID)
-			return fmt.Errorf("mod %s version %s is not compatible with version %s", modId, v.ID, manifest.GetVersion())
+			return fmt.Errorf("mod %s version %s is not compatible with version %s", modId, v.ID, gameVersion)
 		}
 		installVersions = append(installVersions, v)
 	}
-	if _, err := modmgr.InstallMod(gameRoot, manifest, launcherType, binaryType, installVersions, progress); err != nil {
+	if _, err := modmgr.InstallMod(gameRoot, gameVersion, launcherType, binaryType, installVersions, progress); err != nil {
 		slog.Error("Mod installation failed", "error", err)
 		return err
 	}

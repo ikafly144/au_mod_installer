@@ -33,8 +33,8 @@
 
             <div class="form-group">
                 <label>対象AUバージョン</label>
-                <div id="target-list" class="dynamic-list"></div>
-                <button type="button" class="btn btn-sm btn-secondary" onclick="addTarget()">+ 追加</button>
+                <div id="game-version-list" class="dynamic-list"></div>
+                <button type="button" class="btn btn-sm btn-secondary" onclick="addGameVersion()">+ 追加</button>
             </div>
             
             <!-- For Mod/Plugin/Library -->
@@ -100,15 +100,11 @@
         return div;
     }
 
-    function addTarget(launcher = '', version = '') {
+    function addGameVersion(version = '') {
         const html = `
-            <select class="target-launcher w-150">
-                <option value="steam" ${launcher === 'steam' ? 'selected' : ''}>Steam</option>
-                <option value="epic" ${launcher === 'epic' ? 'selected' : ''}>Epic Games</option>
-            </select>
-            <input type="text" class="target-version flex-grow" placeholder="バージョン (例: 2024.3.5)" value="${version}">
+            <input type="text" class="game-version flex-grow" placeholder="例: 2024.3.5" value="${version}">
         `;
-        document.getElementById('target-list').appendChild(createItem(html));
+        document.getElementById('game-version-list').appendChild(createItem(html));
     }
 
     function addFile(data = {}) {
@@ -328,9 +324,18 @@
             if (versionData.target_version) {
                 Object.entries(versionData.target_version).forEach(([k, v]) => addTarget(k, v));
             }
-
-            if (isModPack) {
-                (versionData.mods || []).forEach(m => addMod(m));
+Game Versions
+            if (versionData.game_versions && versionData.game_versions.length > 0) {
+                versionData.game_versions.forEach(v => addGameVersion(v));
+            } else if (versionData.target_version) {
+                // Migration: show unique versions from target_version
+                const seen = new Set();
+                Object.values(versionData.target_version).forEach(v => {
+                    if (!seen.has(v)) {
+                        addGameVersion(v);
+                        seen.add(v);
+                    }
+                }
             } else {
                 (versionData.files || []).forEach(f => addFile(f));
                 (versionData.dependencies || []).forEach(d => addDep(d));
@@ -339,12 +344,11 @@
     }
 
     async function saveVersion() {
-        const editing = document.getElementById('version-editing').value;
-        const versionId = document.getElementById('version-id').value.trim();
-        const isModPack = modType === 'modpack';
-
-        if (!versionId) {
-            showToast('バージョンは必須です', 'error');
+        const editiGame Versions
+        const game_versions = [];
+        document.querySelectorAll('#game-version-list .dynamic-item').forEach(item => {
+            const ver = item.querySelector('.game-version').value.trim();
+            if (ver) game_versions.push(ver)
             return;
         }
 
@@ -390,7 +394,7 @@
                 if (!id) return;
                 dependencies.push({
                     id,
-                    version: item.querySelector('.dep-version').value.trim(),
+            game_versionsn: item.querySelector('.dep-version').value.trim(),
                     type: item.querySelector('.dep-type').value
                 });
             });

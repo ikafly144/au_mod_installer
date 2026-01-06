@@ -35,13 +35,15 @@ func (mt ModType) IsVisible() bool {
 }
 
 type ModVersion struct {
-	ID            string                        `json:"id"`
-	ModID         string                        `json:"mod_id"`
-	CreatedAt     time.Time                     `json:"created_at"`
-	Dependencies  []ModDependency               `json:"dependencies,omitempty"`
-	Mods          []ModPack                     `json:"mods,omitempty"`
-	Files         []ModFile                     `json:"files,omitempty"`
+	ID           string          `json:"id"`
+	ModID        string          `json:"mod_id"`
+	CreatedAt    time.Time       `json:"created_at"`
+	Dependencies []ModDependency `json:"dependencies,omitempty"`
+	Mods         []ModPack       `json:"mods,omitempty"`
+	Files        []ModFile       `json:"files,omitempty"`
+	// Deprecated: use GameVersions instead
 	TargetVersion map[aumgr.LauncherType]string `json:"target_version,omitempty"`
+	GameVersions  []string                      `json:"game_versions,omitempty"`
 }
 
 type ModDependency struct {
@@ -80,10 +82,19 @@ const (
 )
 
 func (m ModVersion) IsCompatible(launcherType aumgr.LauncherType, binaryType aumgr.BinaryType, gameVersion string) bool {
-	if version, ok := m.TargetVersion[launcherType]; ok && version != "" && version != gameVersion {
+	if m.CompatibleFilesCount(binaryType) == 0 && (len(m.Mods) == 0 && len(m.Files) > 0) {
 		return false
 	}
-	return m.CompatibleFilesCount(binaryType) > 0 || (len(m.Mods) > 0 && len(m.Files) == 0)
+	// Check game version compatibility
+	supported := false
+	// Check deprecated TargetVersion first for backward compatibility
+	for _, v := range m.GameVersions {
+		if v == gameVersion {
+			supported = true
+			break
+		}
+	}
+	return supported || len(m.GameVersions) == 0
 }
 
 func (m ModVersion) CompatibleFilesCount(binaryType aumgr.BinaryType) int {

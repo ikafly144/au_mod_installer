@@ -193,7 +193,7 @@ func (i *State) RefreshModInstallation() {
 		defer i.ModInstalledInfo.Refresh()
 		detectedLauncher := aumgr.DetectLauncherType(path)
 		slog.Info("Detected launcher type", "type", detectedLauncher.String())
-		manifest, err := aumgr.GetManifest(detectedLauncher, path)
+		gameVersion, err := aumgr.GetVersion(path)
 		if err != nil {
 			slog.Warn("Failed to get game manifest", "error", err)
 			i.ModInstalledInfo.SetText(lang.LocalizeKey("installer.error.failed_to_get_version", "Mod is installed, but failed to get game version information."))
@@ -219,8 +219,8 @@ func (i *State) RefreshModInstallation() {
 		}
 		canLaunch := false
 		info := lang.LocalizeKey("installer.info.mod_installed", "Mod is installed.") + "\n"
-		if manifest.GetVersion() == installationInfo.InstalledGameVersion {
-			info += lang.LocalizeKey("installer.info.game_version", "Game Version: ") + manifest.GetVersion() + "\n"
+		if gameVersion == installationInfo.InstalledGameVersion {
+			info += lang.LocalizeKey("installer.info.game_version", "Game Version: ") + gameVersion + "\n"
 			canLaunch = true
 			for _, mod := range installationInfo.InstalledMods {
 				remoteMod, err := i.Mod(mod.ModID)
@@ -240,7 +240,7 @@ func (i *State) RefreshModInstallation() {
 				}
 			}
 		} else {
-			info += lang.LocalizeKey("installer.info.game_version", "Game Version: ") + manifest.GetVersion() + " (Modインストール時: " + installationInfo.InstalledGameVersion + ")\n"
+			info += lang.LocalizeKey("installer.info.game_version", "Game Version: ") + gameVersion + " (Modインストール時: " + installationInfo.InstalledGameVersion + ")\n"
 			info += lang.LocalizeKey("installer.info.mod_incompatible", "Mod is incompatible with the current game version.") + "\n"
 			installationInfo.Status = modmgr.InstallStatusIncompatible
 			if err := modmgr.SaveInstallationInfo(modInstallLocation, installationInfo); err != nil {
