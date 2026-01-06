@@ -12,6 +12,7 @@ require (
 	github.com/sqweek/dialog v0.0.0-20240226140203-065105509627
 	github.com/valkey-io/valkey-go v1.0.70
 	github.com/zzl/go-win32api v1.2.0
+	github.com/zzl/go-win32api/v2 v2.2.0
 	golang.org/x/mod v0.31.0
 	golang.org/x/sys v0.39.0
 )
