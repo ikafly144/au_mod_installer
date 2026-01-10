@@ -7,5 +7,6 @@
     "go.lintTool": "golangci-lint",
     "go.lintOnSave": "workspace",
     "scss.lint.unknownAtRules": "ignore",
-    "css.lint.unknownAtRules": "ignore"
+    "css.lint.unknownAtRules": "ignore",
+    "codewindProfiling.showProfiling": true
 }

@@ -7,40 +7,78 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"time"
+	"sync"
+
+	"golang.org/x/sys/windows"
 )
 
-func LaunchAmongUs(launcherType LauncherType, amongUsDir string, dllDir string) error {
-	switch launcherType {
-	case LauncherSteam:
-		return launchSteam(amongUsDir, dllDir)
-	case LauncherEpicGames:
-		return launchEpicGames(amongUsDir, dllDir)
-	default:
-		return launchDefault(amongUsDir, dllDir)
-	}
+var gameLock = sync.Mutex{}
+
+type LaunchContext struct {
+	GameExe     string
+	ProfilePath string
+	DllDir      string
+	BepInExDll  string
+	DotNetDir   string
+	CoreClrPath string
+	Platform    LauncherType
 }
 
-func launchDefault(amongUsDir string, dllDir string, args ...string) error {
-	cmd := exec.Command(filepath.Join(amongUsDir, "Among Us.exe"))
-	// if dllDir != "" {
-	// 	if err := windows.SetDllDirectory(dllDir); err != nil {
-	// 		return fmt.Errorf("SetDllDirectory failed: %v", err)
-	// 	}
-	// }
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+func LaunchAmongUs(ctx LaunchContext) error {
+	slog.Info("Launching Among Us", "launcher", ctx.Platform)
+	if i, err := os.Stat(ctx.GameExe); err != nil {
+		return fmt.Errorf("game executable not found: %w", err)
+	} else if i.IsDir() {
+		return fmt.Errorf("game executable path is a directory")
+	}
 
-	if err := cmd.Run(); err != nil {
+	if err := windows.SetDllDirectory(ctx.DllDir); err != nil {
+		return fmt.Errorf("SetDllDirectory failed: %v", err)
+	}
+
+	cmd := exec.Command(ctx.GameExe)
+	cmd.Args = append(cmd.Args, "--doorstop-enabled", "true")
+	cmd.Args = append(cmd.Args, "--doorstop-target-assembly", ctx.BepInExDll)
+	cmd.Args = append(cmd.Args, "--doorstop-clr-corlib-dir", ctx.DotNetDir)
+	cmd.Args = append(cmd.Args, "--doorstop-clr-runtime-coreclr-path", ctx.CoreClrPath)
+
+	if ctx.Platform == LauncherEpicGames {
+		// cmd.Args = append(cmd.Args, fmt.Sprintf("-AUTH_PASSWORD=%s", "TODO:get from EGL"))
+	}
+
+	return launch(cmd)
+}
+
+func launch(cmd *exec.Cmd) error {
+	if !gameLock.TryLock() {
+		slog.Warn("Another launch is already in progress")
+		return fmt.Errorf("another launch is already in progress")
+	}
+	defer gameLock.Unlock()
+
+	slog.Info("Starting Among Us")
+
+	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("failed to start Among Us: %w", err)
 	}
+
+	slog.Info("Among Us started successfully", "pid", cmd.Process.Pid)
+
+	if err := cmd.Wait(); err != nil {
+		return fmt.Errorf("Among Us exited with error: %w", err)
+	}
+
+	slog.Info("Among Us exited successfully")
 
 	return nil
 }
 
-func launchSteam(amongUsDir string, dllDir string) error {
-	return launchFromUrl("steam://rungameid/945360")
+func launchVanilla(gameExe string, platform LauncherType) error {
+	cmd := exec.Command(gameExe)
+	if platform == LauncherEpicGames {
+		// cmd.Args = append(cmd.Args, fmt.Sprintf("-AUTH_PASSWORD=%s", "TODO:get from EGL"))
+	}
+	return launch(cmd)
 }
 
 // const (
@@ -58,40 +96,3 @@ func launchSteam(amongUsDir string, dllDir string) error {
 // 	ExchangeEndpoint = "https://" + OAuthHost + "/account/api/oauth/exchange"
 // 	TokenEndpoint    = "https://" + OAuthHost + "/account/api/oauth/token"
 // )
-
-func launchEpicGames(amongUsDir string, dllDir string) error {
-	return launchFromUrl("com.epicgames.launcher://apps/" + EpicNamespace + "%3A" + EpicCatalogId + "%3A" + EpicArtifactId + "?action=launch&silent=true")
-}
-
-func launchFromUrl(url string) error {
-	cmd := exec.Command("rundll32.exe", "url.dll,FileProtocolHandler", url)
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("failed to start Among Us from url: %s error: %w", url, err)
-	}
-	for range 100 {
-		time.Sleep(500 * time.Millisecond)
-		pList, err := getProcesses()
-		if err != nil {
-			slog.Error("Failed to get process list", "error", err)
-			continue
-		}
-		p := findProcessByName(pList, "Among Us.exe")
-		if p == nil {
-			continue
-		}
-
-		proc, err := os.FindProcess(p.ProcessID)
-		if err != nil {
-			slog.Error("Failed to find Among Us process", "error", err)
-			continue
-		}
-		slog.Info("Among Us launched successfully", "pid", p.ProcessID)
-		if _, err := proc.Wait(); err != nil {
-			slog.Error("Failed to wait for Among Us process", "error", err)
-		}
-
-		return nil
-	}
-
-	return fmt.Errorf("timeout waiting for Among Us to launch")
-}
