@@ -4,6 +4,7 @@ package aumgr
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
 	"syscall"
 
@@ -29,6 +30,6 @@ func GetBinaryType(amongUsDir string) (BinaryType, error) {
 	case win32.SCS_64BIT_BINARY:
 		return BinaryType64Bit, nil
 	default:
-		return BinaryTypeUnknown, nil
+		return BinaryTypeUnknown, fmt.Errorf("unknown binary type: %d", binaryType)
 	}
 }

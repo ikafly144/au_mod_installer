@@ -8,7 +8,9 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	"mime"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -184,12 +186,47 @@ func DownloadMods(cacheDir string, modVersions []ModVersion, binaryType aumgr.Bi
 				if err != nil {
 					return err
 				}
-			case FileTypeNormal:
-				if file.Path == "" {
+			case FileTypeNormal, FileTypePlugin:
+				path := file.Path
+				var filename string
+				// RFC-6266 parsing for filename from Content-Disposition header
+				if v := resp.Header.Get("Content-Disposition"); v != "" {
+					_, params, err := mime.ParseMediaType(v)
+					if err == nil {
+						if fn, ok := params["filename*"]; ok {
+							if strings.HasPrefix(fn, "UTF-8''") {
+								filename, err = url.QueryUnescape(fn[7:])
+								if err != nil {
+									filename = fn[7:]
+								}
+							} else {
+								filename = fn
+							}
+						} else if fn, ok := params["filename"]; ok {
+							filename = fn
+						}
+					}
+				}
+				if filepath.Dir(path) == path || path == "" {
+					// Invalid or missing path, use filename from header if available
+					if filename != "" {
+						path = filepath.Join(filepath.Base(path), filename)
+					} else {
+						return fmt.Errorf("file path is empty for normal file type")
+					}
+				}
+				if file.FileType == FileTypePlugin {
+					if filename == "" {
+						return fmt.Errorf("failed to determine plugin filename for URL: %s", file.URL)
+					}
+					// For plugin files, use a fixed naming scheme
+					path = filepath.Join("BepInEx", "plugins", filename)
+				}
+				if path == "" {
 					return fmt.Errorf("file path is empty for normal file type")
 				}
-				_ = modCacheRoot.MkdirAll(filepath.Dir(file.Path), 0755)
-				destFile, err := modCacheRoot.OpenFile(file.Path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+				_ = modCacheRoot.MkdirAll(filepath.Dir(path), 0755)
+				destFile, err := modCacheRoot.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 				if err != nil {
 					return err
 				}

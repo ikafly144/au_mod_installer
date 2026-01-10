@@ -15,7 +15,6 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/lang"
-	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
@@ -52,22 +51,37 @@ func NewProfileTab(s *uicommon.State) uicommon.Tab {
 			return len(p.profiles)
 		},
 		func() fyne.CanvasObject {
-			label := widget.NewLabel("Template")
+			img := canvas.NewImageFromImage(image.NewPaletted(image.Rect(0, 0, 128, 128),
+				color.Palette{theme.Color(theme.ColorNameDisabled)},
+			)) // TODO: profile icon
+			img.CornerRadius = 8
+
+			title := widget.NewLabel("Profile Name")
+			title.TextStyle = fyne.TextStyle{Bold: true}
+			title.SizeName = theme.SizeNameSubHeadingText
+			desc := widget.NewLabel("Profile Description")
+			desc.Wrapping = fyne.TextWrapWord
+			desc.SizeName = theme.SizeNameCaptionText
+			label := container.NewVBox(title, desc)
 			menuBtn := widget.NewButtonWithIcon("", theme.MoreHorizontalIcon(), nil)
 			menuBtn.Importance = widget.LowImportance
 
-			return container.NewBorder(nil, nil, nil, menuBtn, menuBtn, label)
+			return container.NewPadded(container.NewBorder(nil, nil, img, menuBtn, img, label, menuBtn))
 		},
 		func(id widget.ListItemID, item fyne.CanvasObject) {
 			if id >= len(p.profiles) {
 				return
 			}
 			prof := p.profiles[id]
-			c := item.(*fyne.Container)
-			menuBtn := c.Objects[0].(*widget.Button)
-			label := c.Objects[1].(*widget.Label)
-
+			c := item.(*fyne.Container).Objects[0].(*fyne.Container)
+			img := c.Objects[0].(*canvas.Image)
+			img.SetMinSize(fyne.NewSquareSize(img.Size().Height))
+			label := c.Objects[1].(*fyne.Container).Objects[0].(*widget.Label)
+			desc := c.Objects[1].(*fyne.Container).Objects[1].(*widget.Label)
+			desc.SetText(fmt.Sprintf("Last Updated: %s Mods: %d", prof.LastUpdated.Format("2006-01-02 15:04:05"), len(prof.ModVersions)))
+			menuBtn := c.Objects[2].(*widget.Button)
 			label.SetText(prof.Name)
+
 			menuBtn.OnTapped = func() {
 				menu := fyne.NewMenu("",
 					fyne.NewMenuItem(lang.LocalizeKey("profile.edit", "Edit"), func() {
@@ -320,19 +334,30 @@ func (p *ProfileTab) openProfileEditor(prof profile.Profile) {
 	// Working copy
 	currentProfile := prof
 
+	var saveBtn *widget.Button
+	var d *dialog.CustomDialog
 	nameEntry := widget.NewEntry()
 	nameEntry.SetText(currentProfile.Name)
-	nameEntry.Validator = func(s string) error {
+	nameEntry.OnChanged = func(s string) {
+		if nameEntry.Validate() != nil {
+			saveBtn.Disable()
+		} else {
+			saveBtn.Enable()
+		}
+	}
+	nameEntry.Validator = func(s string) (err error) {
 		if s == "" {
 			return errors.New(lang.LocalizeKey("profile.error_name_empty", "Profile name cannot be empty"))
 		}
 		return nil
 	}
+	nameForm := widget.NewForm(widget.NewFormItem(lang.LocalizeKey("profile.name", "Profile Name"), nameEntry))
 
 	// Icon placeholder
-	iconPlaceholder := canvas.NewImageFromImage(image.NewPaletted(image.Rectangle{
-		Max: image.Point{64, 64},
-	}, color.Palette{theme.Color(theme.ColorNameDisabled)}))
+	iconPlaceholder := canvas.NewImageFromImage(image.NewPaletted(image.Rect(0, 0, 128, 128),
+		color.Palette{theme.Color(theme.ColorNameDisabled)},
+	))
+	iconPlaceholder.CornerRadius = 8
 	iconPlaceholder.SetMinSize(fyne.NewSize(128, 128))
 
 	// Mod List
@@ -398,24 +423,10 @@ func (p *ProfileTab) openProfileEditor(prof profile.Profile) {
 		})
 	})
 
-	content := container.NewBorder(
-		container.NewVBox(
-			container.NewHBox(iconPlaceholder, layout.NewSpacer()), // Icon area
-			widget.NewForm(widget.NewFormItem(lang.LocalizeKey("profile.name", "Profile Name"), nameEntry)),
-			widget.NewSeparator(),
-			widget.NewLabel(lang.LocalizeKey("profile.mods", "Mods")),
-		),
-		addModBtn, nil, nil,
-		modList,
-	)
-
-	d := dialog.NewCustomConfirm(
-		lang.LocalizeKey("profile.edit_title", "Edit Profile"),
-		lang.LocalizeKey("common.save", "Save"),
-		lang.LocalizeKey("common.cancel", "Cancel"),
-		content,
-		func(confirm bool) {
-			if !confirm {
+	saveBtn = widget.NewButtonWithIcon(lang.LocalizeKey("common.save", "Save"), theme.DocumentSaveIcon(),
+		func() {
+			if err := nameForm.Validate(); err != nil {
+				dialog.ShowError(err, p.state.Window)
 				return
 			}
 			newName := nameEntry.Text
@@ -448,9 +459,32 @@ func (p *ProfileTab) openProfileEditor(prof profile.Profile) {
 					break
 				}
 			}
-		},
+			d.Dismiss()
+		})
+	content := container.NewBorder(
+		container.NewVBox(
+			container.NewBorder(nil, nil, iconPlaceholder, nil,
+				iconPlaceholder,
+				nameForm,
+			), // Icon area
+			widget.NewSeparator(),
+			widget.NewLabel(lang.LocalizeKey("profile.mods", "Mods")),
+		),
+		addModBtn, nil, nil,
+		modList,
+	)
+
+	d = dialog.NewCustomWithoutButtons(
+		lang.LocalizeKey("profile.edit_title", "Edit Profile"),
+		content,
 		p.state.Window,
 	)
+	d.SetButtons([]fyne.CanvasObject{
+		widget.NewButtonWithIcon(lang.LocalizeKey("common.cancel", "Cancel"), theme.CancelIcon(), func() {
+			d.Dismiss()
+		}),
+		saveBtn,
+	})
 	d.Resize(fyne.NewSize(500, 600))
 	d.Show()
 }
@@ -478,28 +512,31 @@ func (p *ProfileTab) showAddModDialog(onAdd func([]modmgr.ModVersion)) {
 	modList = widget.NewList(
 		func() int { return len(mods) },
 		func() fyne.CanvasObject {
-			modIcon := canvas.NewSquare(theme.Color(theme.ColorNameDisabled)) // TODO: Load actual mod icon if available
-			modIcon.SetMinSize(fyne.NewSize(96, 96))
+			modIcon := canvas.NewImageFromImage(image.NewPaletted(image.Rect(0, 0, 128, 128),
+				color.Palette{theme.Color(theme.ColorNameDisabled)},
+			)) // TODO: Load actual mod icon if available
+			modIcon.CornerRadius = 8
 			modName := widget.NewLabel("Mod Name")
 			modDescription := widget.NewRichText()
 			versionLabel := widget.NewLabel("(None)")
 			versionLabel.SizeName = theme.SizeNameCaptionText
-			return container.NewBorder(nil, nil, modIcon, nil,
+			return container.NewPadded(container.NewBorder(nil, nil, modIcon, nil,
 				modIcon,
 				container.NewVBox(
 					modName,
 					modDescription,
 					versionLabel,
 				),
-			)
+			))
 		},
 		func(id widget.ListItemID, item fyne.CanvasObject) {
 			if id >= len(mods) {
 				return
 			}
 			mod := mods[id]
-			c := item.(*fyne.Container)
-			// modIcon := c.Objects[0].(*canvas.Rectangle)
+			c := item.(*fyne.Container).Objects[0].(*fyne.Container)
+			modIcon := c.Objects[0].(*canvas.Image)
+			modIcon.SetMinSize(fyne.NewSquareSize(modIcon.Size().Height))
 			modName := c.Objects[1].(*fyne.Container).Objects[0].(*widget.Label)
 			modDescription := c.Objects[1].(*fyne.Container).Objects[1].(*widget.RichText)
 			versionLabel := c.Objects[1].(*fyne.Container).Objects[2].(*widget.Label)

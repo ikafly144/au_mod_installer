@@ -22,6 +22,8 @@ type ModType string
 const (
 	ModTypeMod     ModType = "mod"
 	ModTypeLibrary ModType = "library"
+	// Deprecated: should not be used anymore
+	// ModPack will be represented as profile.Profile now
 	ModTypeModPack ModType = "modpack"
 )
 
@@ -39,11 +41,11 @@ type ModVersion struct {
 	ModID        string          `json:"mod_id"`
 	CreatedAt    time.Time       `json:"created_at"`
 	Dependencies []ModDependency `json:"dependencies,omitempty"`
-	Mods         []ModPack       `json:"mods,omitempty"`
 	Files        []ModFile       `json:"files,omitempty"`
-	// Deprecated: use GameVersions instead
-	TargetVersion map[aumgr.LauncherType]string `json:"target_version,omitempty"`
-	GameVersions  []string                      `json:"game_versions,omitempty"`
+	GameVersions []string        `json:"game_versions,omitempty"`
+
+	// Deprecated: use profile.Profile to represent mod packs now
+	Mods []ModPack `json:"mods,omitempty"`
 }
 
 type ModDependency struct {
@@ -61,6 +63,7 @@ const (
 	ModDependencyTypeEmbedded ModDependencyType = "embedded"
 )
 
+// Deprecated: use profile.Profile to represent mod packs now
 type ModPack struct {
 	ID      string `json:"id"`
 	Version string `json:"version,omitempty"`
@@ -69,7 +72,7 @@ type ModPack struct {
 type ModFile struct {
 	Compatible []aumgr.BinaryType `json:"compatible"`
 	FileType   FileType           `json:"file_type"`
-	// When FileType is Normal, Path is used.
+	// When FileType is Normal or Plugin, Path is used.
 	Path string `json:"path,omitempty"`
 	URL  string `json:"url"`
 }
@@ -79,6 +82,7 @@ type FileType string
 const (
 	FileTypeZip    FileType = "zip"
 	FileTypeNormal FileType = "normal"
+	FileTypePlugin FileType = "plugin"
 )
 
 func (m ModVersion) IsCompatible(launcherType aumgr.LauncherType, binaryType aumgr.BinaryType, gameVersion string) bool {

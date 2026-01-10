@@ -30,6 +30,9 @@ func (p *Profile) Versions() []modmgr.ModVersion {
 }
 
 func (p *Profile) AddModVersion(version modmgr.ModVersion) {
+	if p.ModVersions == nil {
+		p.ModVersions = make(map[string]modmgr.ModVersion)
+	}
 	p.ModVersions[version.ModID] = version
 }
 
