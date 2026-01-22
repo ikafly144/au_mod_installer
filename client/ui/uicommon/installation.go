@@ -2,11 +2,10 @@ package uicommon
 
 import (
 	"log/slog"
-	"os"
 	"path/filepath"
 
+	"github.com/ikafly144/au_mod_installer/client/core"
 	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
-	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 )
 
 func (s *State) CheckInstalled() bool {
@@ -17,26 +16,15 @@ func (s *State) CheckInstalled() bool {
 	if err != nil || path == "" {
 		return false
 	}
-	modInstallLocation, err := os.OpenRoot(s.ModInstallDir())
-	if err != nil {
-		slog.Warn("Failed to open game root", "error", err)
-		return false
+
+	status := s.Core.GetInstallationStatus(path, false)
+	isInstalled := status.Status != core.StatusNotInstalled
+
+	if err := s.ModInstalled.Set(isInstalled); err != nil {
+		slog.Warn("Failed to set modInstalled", "error", err)
 	}
-	if _, err := modInstallLocation.Stat(modmgr.InstallationInfoFileName); err == nil || !os.IsNotExist(err) {
-		if err := s.ModInstalled.Set(true); err != nil {
-			slog.Warn("Failed to set modInstalled", "error", err)
-		}
-	} else {
-		if err := s.ModInstalled.Set(false); err != nil {
-			slog.Warn("Failed to set modInstalled", "error", err)
-		}
-	}
-	ok, err := s.ModInstalled.Get()
-	if err != nil {
-		slog.Warn("Failed to get modInstalled", "error", err)
-		return false
-	}
-	return ok
+	
+	return isInstalled
 }
 
 func (i *State) selectLauncher(s string) {
@@ -48,7 +36,7 @@ func (i *State) selectLauncher(s string) {
 		if err != nil {
 			slog.Warn("Failed to get selected game path", "error", err)
 		}
-		beforeType := aumgr.DetectLauncherType(beforePath)
+		beforeType := i.Core.DetectLauncherType(beforePath)
 		path, err := i.ExplorerOpenFile("Among Us", "Among Us.exe")
 		if err != nil {
 			slog.Info("File selection cancelled or failed", "error", err)
@@ -56,7 +44,7 @@ func (i *State) selectLauncher(s string) {
 			return
 		}
 		slog.Info("User selected game path", "path", path)
-		l := aumgr.DetectLauncherType(path)
+		l := i.Core.DetectLauncherType(path)
 		_ = i.SelectedGamePath.Set(filepath.Dir(path))
 		i.InstallSelect.Selected = l.String()
 	}

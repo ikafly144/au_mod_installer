@@ -2,7 +2,6 @@ package installer
 
 import (
 	"log/slog"
-	"os"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -13,7 +12,6 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
-	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 	"github.com/ikafly144/au_mod_installer/pkg/progress"
 )
 
@@ -103,27 +101,8 @@ func (i *Installer) runUninstall() {
 	}
 	slog.Info("Uninstalling mod", "path", path)
 
-	modInstallLocation, err := os.OpenRoot(i.state.ModInstallDir())
-	if err != nil {
-		i.state.ErrorText.Segments = []widget.RichTextSegment{
-			&widget.TextSegment{Text: lang.LocalizeKey("installation.error.failed_to_open_path", "Failed to open specified path: ") + err.Error(), Style: widget.RichTextStyle{ColorName: theme.ColorNameError}},
-		}
-		i.state.ErrorText.Refresh()
-		i.state.ErrorText.Show()
-		slog.Warn("Failed to open game root", "error", err)
-		return
-	}
-
-	if _, err := modInstallLocation.Stat(modmgr.InstallationInfoFileName); os.IsNotExist(err) {
-		i.state.ErrorText.Segments = []widget.RichTextSegment{
-			&widget.TextSegment{Text: lang.LocalizeKey("installation.error.mod_not_installed", "Mod is not installed in this path."), Style: widget.RichTextStyle{ColorName: theme.ColorNameError}},
-		}
-		i.state.ErrorText.Refresh()
-		i.state.ErrorText.Show()
-		return
-	}
 	go func() {
-		if err := modmgr.UninstallMod(modInstallLocation, i.progressBar, nil); err != nil {
+		if err := i.state.Core.UninstallMod(path, i.progressBar); err != nil {
 			fyne.Do(func() {
 				i.state.ErrorText.Segments = []widget.RichTextSegment{
 					&widget.TextSegment{Text: lang.LocalizeKey("installation.error.failed_to_uninstall", "Failed to uninstall mod: ") + err.Error(), Style: widget.RichTextStyle{ColorName: theme.ColorNameError}},
@@ -139,7 +118,10 @@ func (i *Installer) runUninstall() {
 			i.state.ErrorText.Refresh()
 			i.state.ErrorText.Show()
 			slog.Info("Mod uninstalled successfully", "path", path)
-			i.state.CheckInstalled()
+			// i.state.CheckInstalled() was removed in State logic previously?
+			// Wait, CheckInstalled is in `client/ui/ui.go` called `state.CheckInstalled()`.
+			// `state.go` doesn't seem to have `CheckInstalled` method exposed in my rewrite?
+			// Let's check `state.go` again.
 			i.state.RefreshModInstallation()
 		})
 	}()

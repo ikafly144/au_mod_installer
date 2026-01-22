@@ -1,10 +1,7 @@
 package uicommon
 
 import (
-	"fmt"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -16,9 +13,8 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/ikafly144/au_mod_installer/client/core"
 	"github.com/ikafly144/au_mod_installer/client/rest"
-	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
-	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 	"github.com/ikafly144/au_mod_installer/pkg/profile"
 )
 
@@ -35,48 +31,26 @@ func WithRestClient(c rest.Client) func(*Config) {
 }
 
 func NewState(w fyne.Window, version string, options ...Option) (*State, error) {
-	detectedPath, err := aumgr.GetAmongUsDir()
-	if err != nil {
-		return nil, err
-	}
-
-	// execPath, err := os.Executable()
-	// if err != nil {
-	// 	return nil, fmt.Errorf("failed to get executable path: %w", err)
-	// }
-
-	// modPath := filepath.Join(filepath.Dir(execPath), "mods")
-
-	// if err := os.MkdirAll(modPath, 0755); err != nil {
-	// 	return nil, fmt.Errorf("failed to create mods directory: %w", err)
-	// }
-
-	configDir, err := os.UserConfigDir()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get user config dir: %w", err)
-	}
-	profilePath := filepath.Join(configDir, "au_mod_installer")
-	profileManager, err := profile.NewManager(profilePath)
-	if err != nil {
-		if err := os.RemoveAll(profilePath); err != nil {
-			return nil, fmt.Errorf("failed to remove profile path: %w", err)
-		}
-		profileManager, err = profile.NewManager(profilePath)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create profile manager after removal: %w", err)
-		}
-	}
-
 	var cfg Config
 	for _, option := range options {
 		option(&cfg)
 	}
 
+	app, err := core.New(version, cfg.rest)
+	if err != nil {
+		return nil, err
+	}
+
+	detectedPath, err := app.DetectGamePath()
+	if err != nil {
+		return nil, err
+	}
+
 	var s State
 	s = State{
-		Version: version,
-		Window:  w,
-		// ModPath:          modPath,
+		Version:          version,
+		Window:           w,
+		Core:             app,
 		SelectedGamePath: binding.NewString(),
 		DetectedGamePath: detectedPath,
 		ModInstalled:     binding.NewBool(),
@@ -86,8 +60,8 @@ func NewState(w fyne.Window, version string, options ...Option) (*State, error) 
 		ErrorText:        widget.NewRichTextFromMarkdown(""),
 
 		ModInstalledInfo: widget.NewLabel(lang.LocalizeKey("installer.select_install_path", "Please select the installation path.")),
-		Rest:             cfg.rest,
-		ProfileManager:   profileManager,
+		Rest:             app.Rest,
+		ProfileManager:   app.ProfileManager,
 		ActiveProfile:    binding.NewString(),
 	}
 
@@ -103,7 +77,7 @@ func NewState(w fyne.Window, version string, options ...Option) (*State, error) 
 	s.ErrorText.Wrapping = fyne.TextWrapWord
 	s.ErrorText.Hide()
 	s.InstallSelect.PlaceHolder = lang.LocalizeKey("installer.select_install", "(Select Among Us)")
-	detectedLauncher := aumgr.DetectLauncherType(detectedPath)
+	detectedLauncher := app.DetectLauncherType(detectedPath)
 	s.InstallSelect.Options = []string{detectedLauncher.String(), lang.LocalizeKey("installer.manual_select", "Manual Selection")}
 	s.InstallSelect.Selected = detectedLauncher.String()
 	if err := s.SelectedGamePath.Set(detectedPath); err != nil {
@@ -136,14 +110,15 @@ type State struct {
 	launchLock       sync.Mutex
 	installLock      sync.Mutex
 
-	Rest rest.Client
+	Core           *core.App
+	Rest           rest.Client
+	ProfileManager *profile.Manager
 
 	ModInstalledInfo *widget.Label
 	InstallSelect    *widget.Select
 	ErrorText        *widget.RichText
 
-	ProfileManager *profile.Manager
-	ActiveProfile  binding.String
+	ActiveProfile binding.String
 }
 
 func (s *State) ModInstallDir() string {
@@ -189,84 +164,82 @@ func (i *State) RefreshModInstallation() {
 		i.ModInstalledInfo.SetText(lang.LocalizeKey("installer.info.select_path", "Please select the installation path."))
 		return
 	}
-	if ok, err := i.ModInstalled.Get(); ok && err == nil {
-		defer i.ModInstalledInfo.Refresh()
-		detectedLauncher := aumgr.DetectLauncherType(path)
-		slog.Info("Detected launcher type", "type", detectedLauncher.String())
-		gameVersion, err := aumgr.GetVersion(path)
-		if err != nil {
-			slog.Warn("Failed to get game manifest", "error", err)
-			i.ModInstalledInfo.SetText(lang.LocalizeKey("installer.error.failed_to_get_version", "Mod is installed, but failed to get game version information."))
-			return
-		}
 
-		modInstallLocation, err := os.OpenRoot(i.ModInstallDir())
-		if err != nil {
-			slog.Warn("Failed to open game root", "error", err)
-			i.ModInstalledInfo.SetText(lang.LocalizeKey("installer.error.failed_to_open_path", "Mod is installed, but failed to open installation path."))
-			return
-		}
+	status := i.Core.GetInstallationStatus(path, true)
+	if status.Error != nil {
+		slog.Warn("Failed to get installation status", "error", status.Error)
+		// Assuming generic error for now, or we can check type of error
+		// Using the error message from status if possible, or fallback
+		i.ModInstalledInfo.SetText(lang.LocalizeKey("installer.error.failed_to_get_version", "Mod is installed, but failed to get game version information."))
+		return
+	}
 
-		installationInfo, err := modmgr.LoadInstallationInfo(modInstallLocation)
-		if err != nil {
-			slog.Warn("Failed to load installation info", "error", err)
-			i.ModInstalledInfo.SetText(lang.LocalizeKey("installer.error.failed_to_get_installation_info", "Mod is installed, but failed to get installation info."))
-			return
-		}
-		if installationInfo.Status == modmgr.InstallStatusBroken {
-			i.ModInstalledInfo.SetText(lang.LocalizeKey("installer.error.broken_installation", "Mod installation is broken. Please uninstall and reinstall the mod."))
-			return
-		}
-		canLaunch := false
-		info := lang.LocalizeKey("installer.info.mod_installed", "Mod is installed.") + "\n"
-		if gameVersion == installationInfo.InstalledGameVersion {
-			info += lang.LocalizeKey("installer.info.game_version", "Game Version: ") + gameVersion + "\n"
-			canLaunch = true
-			for _, mod := range installationInfo.InstalledMods {
-				remoteMod, err := i.Mod(mod.ModID)
-				if err != nil {
-					slog.Warn("Failed to get mod", "modID", mod.ID, "error", err)
-					continue
-				}
-				if remoteMod.LatestVersion != mod.ID && remoteMod.Type != modmgr.ModTypeLibrary {
-					info += lang.LocalizeKey("installer.info.mod_version_outdated", "Mod version is outdated: {{.mod}} (Installed: {{.version}}, Latest: {{.latest}})",
-						map[string]any{
-							"mod":     mod.ModID,
-							"version": mod.ID,
-							"latest":  remoteMod.LatestVersion,
-						}) + "\n"
-					canLaunch = false // TODO: allow launching with outdated mods
-					break
-				}
-			}
-		} else {
-			info += lang.LocalizeKey("installer.info.game_version", "Game Version: ") + gameVersion + " (Modインストール時: " + installationInfo.InstalledGameVersion + ")\n"
-			info += lang.LocalizeKey("installer.info.mod_incompatible", "Mod is incompatible with the current game version.") + "\n"
-			installationInfo.Status = modmgr.InstallStatusIncompatible
-			if err := modmgr.SaveInstallationInfo(modInstallLocation, installationInfo); err != nil {
-				slog.Warn("Failed to save installation info", "error", err)
-			}
-			canLaunch = false
-		}
-		var modNames []string
-		for _, mod := range installationInfo.InstalledMods {
-			modNames = append(modNames, mod.ModID+" ("+mod.ID+")")
-		}
-		info += lang.LocalizeKey("installer.info.mod_name", "Mod: ") + strings.Join(modNames, ", ") + "\n"
-		i.ModInstalledInfo.SetText(strings.TrimSpace(info))
-		if strings.Contains(i.Version, "(devel)") { // NOTE: allow launching in development mode
-			canLaunch = true
-		}
-		if err := i.CanLaunch.Set(canLaunch); err != nil {
-			slog.Warn("Failed to set launchable", "error", err)
-		}
-	} else if err == nil {
+	// Update ModInstalled binding
+	isInstalled := status.Status != core.StatusNotInstalled
+	// Avoid infinite loop if binding triggers this function?
+	// ModInstalled.Set triggers listener? Yes.
+	// But we check i.ModInstalled.Get() in original code.
+	// Here we should set it if different?
+	currentInstalled, _ := i.ModInstalled.Get()
+	if currentInstalled != isInstalled {
+		i.ModInstalled.Set(isInstalled)
+	}
+
+	if !isInstalled {
 		fyne.Do(func() {
 			i.ModInstalledInfo.Refresh()
 			i.ModInstalledInfo.SetText(lang.LocalizeKey("installer.info.mod_not_installed", "Mod is not installed."))
 		})
+		return
+	}
+
+	defer i.ModInstalledInfo.Refresh()
+
+	detectedLauncher := i.Core.DetectLauncherType(path)
+	slog.Info("Detected launcher type", "type", detectedLauncher.String())
+
+	if status.Status == core.StatusBroken {
+		i.ModInstalledInfo.SetText(lang.LocalizeKey("installer.error.broken_installation", "Mod installation is broken. Please uninstall and reinstall the mod."))
+		return
+	}
+
+	canLaunch := false
+	info := lang.LocalizeKey("installer.info.mod_installed", "Mod is installed.") + "\n"
+
+	if status.Status == core.StatusIncompatible {
+		info += lang.LocalizeKey("installer.info.game_version", "Game Version: ") + status.GameVersion + " (Modインストール時: " + status.InstalledGameVersion + ")\n"
+		info += lang.LocalizeKey("installer.info.mod_incompatible", "Mod is incompatible with the current game version.") + "\n"
+		canLaunch = false
 	} else {
-		slog.Warn("Failed to get mod installed", "error", err)
+		// Compatible
+		info += lang.LocalizeKey("installer.info.game_version", "Game Version: ") + status.GameVersion + "\n"
+		canLaunch = true
+
+		for _, outdated := range status.OutdatedMods {
+			info += lang.LocalizeKey("installer.info.mod_version_outdated", "Mod version is outdated: {{.mod}} (Installed: {{.version}}, Latest: {{.latest}})",
+				map[string]any{
+					"mod":     outdated.ID,
+					"version": outdated.CurrentVersion,
+					"latest":  outdated.LatestVersion,
+				})
+			canLaunch = false // TODO: allow launching with outdated mods
+			// Original code broke loop here
+			break
+		}
+	}
+
+	var modNames []string
+	for _, mod := range status.InstalledMods {
+		modNames = append(modNames, mod.ModID+" ("+mod.ID+")")
+	}
+	info += lang.LocalizeKey("installer.info.mod_name", "Mod: ") + strings.Join(modNames, ", ") + "\n"
+	i.ModInstalledInfo.SetText(strings.TrimSpace(info))
+
+	if strings.Contains(i.Version, "(devel)") { // NOTE: allow launching in development mode
+		canLaunch = true
+	}
+	if err := i.CanLaunch.Set(canLaunch); err != nil {
+		slog.Warn("Failed to set launchable", "error", err)
 	}
 }
 
@@ -277,19 +250,22 @@ func (s *State) checkPlayingProcess() bool {
 	if ok, err := s.CanInstall.Get(); err == nil && !ok {
 		canInstall = true
 	}
-	pid, err := aumgr.IsAmongUsRunning()
+
+	running, err := s.Core.IsGameRunning()
 	if err != nil {
 		slog.Error("Failed to check Among Us process", "error", err)
 		return false
 	}
-	if pid != 0 && !canInstall {
-		slog.Info("Among Us is currently running", "pid", pid)
+
+	if running && !canInstall {
+		// Log PID? Core doesn't return PID. That's fine.
+		slog.Info("Among Us is currently running")
 
 		_ = s.CanInstall.Set(false)
 		_ = s.CanLaunch.Set(false)
 
 		return true
-	} else if canInstall && pid == 0 {
+	} else if canInstall && !running {
 		slog.Info("Among Us is not running, re-enabling installation")
 		_ = s.CanInstall.Set(true)
 		fyne.Do(s.RefreshModInstallation)
