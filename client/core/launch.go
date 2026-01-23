@@ -59,7 +59,7 @@ func (a *App) PrepareLaunch(gamePath string, profileID uuid.UUID) (string, func(
 		return "", nil, err
 	}
 
-	if err := modmgr.PrepareProfileDirectory(profileDir, cacheDir, resolvedVersions, binaryType); err != nil {
+	if err := modmgr.PrepareProfileDirectory(profileDir, cacheDir, resolvedVersions, binaryType, false); err != nil {
 		return "", nil, err
 	}
 
@@ -67,6 +67,24 @@ func (a *App) PrepareLaunch(gamePath string, profileID uuid.UUID) (string, func(
 		return nil
 	}
 	return profileDir, cleanup, nil
+}
+
+// SyncProfile forces a re-sync of the profile directory by clearing it and re-installing mods.
+func (a *App) SyncProfile(profileID uuid.UUID, binaryType aumgr.BinaryType) error {
+	profile, found := a.ProfileManager.Get(profileID)
+	if !found {
+		return fmt.Errorf("profile not found: %s", profileID)
+	}
+
+	resolvedVersions, err := a.ResolveDependencies(profile.Versions())
+	if err != nil {
+		return fmt.Errorf("failed to resolve dependencies: %w", err)
+	}
+
+	cacheDir := filepath.Join(a.ConfigDir, "mods")
+	profileDir := filepath.Join(a.ConfigDir, "profiles", profileID.String())
+
+	return modmgr.PrepareProfileDirectory(profileDir, cacheDir, resolvedVersions, binaryType, true)
 }
 
 // ExecuteLaunch launches the game and blocks until it exits.

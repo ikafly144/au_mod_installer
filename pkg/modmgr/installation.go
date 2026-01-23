@@ -128,7 +128,7 @@ func SaveInstallationInfo(gameRoot *os.Root, installation *ModInstallation) erro
 	return nil
 }
 
-func DownloadMods(cacheDir string, modVersions []ModVersion, binaryType aumgr.BinaryType, progress progress.Progress) error {
+func DownloadMods(cacheDir string, modVersions []ModVersion, binaryType aumgr.BinaryType, progress progress.Progress, force bool) error {
 	if err := os.MkdirAll(cacheDir, 0755); err != nil {
 		return fmt.Errorf("failed to create cache directory: %w", err)
 	}
@@ -151,9 +151,15 @@ func DownloadMods(cacheDir string, modVersions []ModVersion, binaryType aumgr.Bi
 	for i := range modVersions {
 		modCacheDir := filepath.Join(cacheDir, modVersions[i].ModID, hashId(modVersions[i].ID))
 		if _, err := os.Stat(modCacheDir); err == nil {
-			slog.Info("Mod already cached", "modId", modVersions[i].ModID, "versionId", modVersions[i].ID)
-			progress.SetValue(progress.GetValue() + (float64(modVersions[i].CompatibleFilesCount(binaryType)) / float64(totalDownloadCount)))
-			continue
+			if !force {
+				slog.Info("Mod already cached", "modId", modVersions[i].ModID, "versionId", modVersions[i].ID)
+				progress.SetValue(progress.GetValue() + (float64(modVersions[i].CompatibleFilesCount(binaryType)) / float64(totalDownloadCount)))
+				continue
+			}
+			slog.Info("Force re-downloading mod, clearing cache", "modId", modVersions[i].ModID, "versionId", modVersions[i].ID)
+			if err := os.RemoveAll(modCacheDir); err != nil {
+				return fmt.Errorf("failed to clear mod cache: %w", err)
+			}
 		}
 
 		if err := os.MkdirAll(modCacheDir, 0755); err != nil {

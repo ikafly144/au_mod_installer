@@ -1,6 +1,7 @@
 package modmgr
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
@@ -9,44 +10,126 @@ import (
 	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
 )
 
+type ProfileMetadata struct {
+	ModVersions []ModVersion `json:"mod_versions"`
+}
+
+func getProfileMetadataPath(profileDir string) string {
+	return filepath.Join(profileDir, "profile_meta.json")
+}
+
+func loadProfileMetadata(profileDir string) (*ProfileMetadata, error) {
+	path := getProfileMetadataPath(profileDir)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var meta ProfileMetadata
+	if err := json.Unmarshal(data, &meta); err != nil {
+		return nil, err
+	}
+	return &meta, nil
+}
+
+func saveProfileMetadata(profileDir string, meta *ProfileMetadata) error {
+	path := getProfileMetadataPath(profileDir)
+	data, err := json.MarshalIndent(meta, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0644)
+}
+
+func modVersionsEqual(a, b []ModVersion) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	// Sort or map? They might be in different order.
+	ma := make(map[string]string)
+	for _, v := range a {
+		ma[v.ModID] = v.ID
+	}
+	for _, v := range b {
+		if id, ok := ma[v.ModID]; !ok || id != v.ID {
+			return false
+		}
+	}
+	return true
+}
+
 // PrepareProfileDirectory installs mods from cache to the profile directory and generates doorstop_config.ini.
-func PrepareProfileDirectory(profileDir string, cacheDir string, modVersions []ModVersion, binaryType aumgr.BinaryType) error {
+func PrepareProfileDirectory(profileDir string, cacheDir string, modVersions []ModVersion, binaryType aumgr.BinaryType, force bool) error {
 	if err := os.MkdirAll(profileDir, 0755); err != nil {
 		return fmt.Errorf("failed to create profile directory: %w", err)
 	}
 
-	// Install mods
-	for _, mod := range modVersions {
-		modCacheDir := filepath.Join(cacheDir, mod.ModID, hashId(mod.ID))
-		if err := filepath.WalkDir(modCacheDir, func(path string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return err
+	meta, err := loadProfileMetadata(profileDir)
+	if err != nil {
+		return fmt.Errorf("failed to load profile metadata: %w", err)
+	}
+
+	shouldInstall := force || meta == nil || !modVersionsEqual(meta.ModVersions, modVersions)
+
+	if shouldInstall {
+		// Clear BepInEx folder
+		bepInExDir := filepath.Join(profileDir, "BepInEx")
+		if _, err := os.Stat(bepInExDir); err == nil {
+			if err := os.RemoveAll(bepInExDir); err != nil {
+				return fmt.Errorf("failed to clear BepInEx directory: %w", err)
 			}
-			if d.IsDir() {
+		}
+		// Also clear dotnet folder if it exists (for IL2CPP)
+		dotnetDir := filepath.Join(profileDir, "dotnet")
+		if _, err := os.Stat(dotnetDir); err == nil {
+			if err := os.RemoveAll(dotnetDir); err != nil {
+				return fmt.Errorf("failed to clear dotnet directory: %w", err)
+			}
+		}
+
+		// Install mods
+		for _, mod := range modVersions {
+			modCacheDir := filepath.Join(cacheDir, mod.ModID, hashId(mod.ID))
+			if err := filepath.WalkDir(modCacheDir, func(path string, d fs.DirEntry, err error) error {
+				if err != nil {
+					return err
+				}
+				if d.IsDir() {
+					return nil
+				}
+
+				relPath, err := filepath.Rel(modCacheDir, path)
+				if err != nil {
+					return err
+				}
+
+				destPath := filepath.Join(profileDir, relPath)
+				if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+					return err
+				}
+
+				srcData, err := os.ReadFile(path)
+				if err != nil {
+					return err
+				}
+				if err := os.WriteFile(destPath, srcData, 0644); err != nil {
+					return err
+				}
+
 				return nil
+			}); err != nil {
+				return fmt.Errorf("failed to install mod %s: %w", mod.ModID, err)
 			}
+		}
 
-			relPath, err := filepath.Rel(modCacheDir, path)
-			if err != nil {
-				return err
-			}
-
-			destPath := filepath.Join(profileDir, relPath)
-			if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
-				return err
-			}
-
-			srcData, err := os.ReadFile(path)
-			if err != nil {
-				return err
-			}
-			if err := os.WriteFile(destPath, srcData, 0644); err != nil {
-				return err
-			}
-
-			return nil
-		}); err != nil {
-			return fmt.Errorf("failed to install mod %s: %w", mod.ModID, err)
+		// Save metadata
+		newMeta := &ProfileMetadata{
+			ModVersions: modVersions,
+		}
+		if err := saveProfileMetadata(profileDir, newMeta); err != nil {
+			return fmt.Errorf("failed to save profile metadata: %w", err)
 		}
 	}
 

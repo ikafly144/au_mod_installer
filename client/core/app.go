@@ -88,3 +88,11 @@ func (a *App) UninstallMod(gamePath string, progressListener progress.Progress) 
 
 	return modmgr.UninstallMod(modInstallLocation, progressListener, nil)
 }
+
+func (a *App) ClearModCache() error {
+	cacheDir := filepath.Join(a.ConfigDir, "mods")
+	if _, err := os.Stat(cacheDir); err == nil {
+		return os.RemoveAll(cacheDir)
+	}
+	return nil
+}

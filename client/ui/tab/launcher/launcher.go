@@ -115,6 +115,9 @@ func (l *Launcher) setupProfileList() {
 					fyne.NewMenuItem(lang.LocalizeKey("profile.edit", "Edit"), func() {
 						l.openProfileEditor(prof)
 					}),
+					fyne.NewMenuItem(lang.LocalizeKey("profile.sync", "Sync (Clear & Re-download)"), func() {
+						l.syncProfile(prof)
+					}),
 					fyne.NewMenuItem(lang.LocalizeKey("profile.duplicate", "Duplicate"), func() {
 						l.showDuplicateDialog(prof)
 					}),
@@ -227,7 +230,7 @@ func (l *Launcher) runLaunch() {
 		}
 		cacheDir := filepath.Join(configDir, "au_mod_installer", "mods")
 
-		if err := modmgr.DownloadMods(cacheDir, resolvedVersions, binaryType, l.progressBar); err != nil {
+		if err := modmgr.DownloadMods(cacheDir, resolvedVersions, binaryType, l.progressBar, false); err != nil {
 			l.state.SetError(err)
 			return
 		}
@@ -279,6 +282,63 @@ func (l *Launcher) checkLaunchState() {
 	// For now, let's enable it if profile is selected and game exists.
 	// The `state.Launch` will show error if already running.
 	l.launchButton.Enable()
+}
+
+func (l *Launcher) syncProfile(prof profile.Profile) {
+	path, err := l.state.SelectedGamePath.Get()
+	if err != nil || path == "" {
+		dialog.ShowError(errors.New(lang.LocalizeKey("launcher.error.no_path", "Game path is not specified.")), l.state.Window)
+		return
+	}
+
+	binaryType, err := aumgr.GetBinaryType(path)
+	if err != nil {
+		dialog.ShowError(err, l.state.Window)
+		return
+	}
+
+	l.progressBar.Canvas().Show()
+	l.launchButton.Disable()
+	l.state.CanInstall.Set(false)
+	l.state.CanLaunch.Set(false)
+
+	go func() {
+		defer fyne.Do(func() {
+			l.progressBar.Canvas().Hide()
+			l.checkLaunchState()
+		})
+
+		// Resolve dependencies
+		resolvedVersions, err := l.state.Core.ResolveDependencies(prof.Versions())
+		if err != nil {
+			l.state.SetError(fmt.Errorf("failed to resolve dependencies: %w", err))
+			return
+		}
+
+		// Download mods to cache with force=false (don't clear global cache)
+		configDir, err := os.UserConfigDir()
+		if err != nil {
+			l.state.SetError(err)
+			return
+		}
+		cacheDir := filepath.Join(configDir, "au_mod_installer", "mods")
+
+		if err := modmgr.DownloadMods(cacheDir, resolvedVersions, binaryType, l.progressBar, false); err != nil {
+			l.state.SetError(err)
+			return
+		}
+
+		// Sync profile directory
+		if err := l.state.Core.SyncProfile(prof.ID, binaryType); err != nil {
+			l.state.SetError(err)
+			return
+		}
+
+		l.state.ClearError()
+		fyne.Do(func() {
+			dialog.ShowInformation("Sync Complete", "Profile has been re-synced and mods re-downloaded.", l.state.Window)
+		})
+	}()
 }
 
 func (l *Launcher) refreshProfiles() {

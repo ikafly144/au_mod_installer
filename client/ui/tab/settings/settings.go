@@ -27,14 +27,15 @@ type Settings struct {
 	state               *uicommon.State
 	BranchSelect        *widget.Select
 	ImportProfileButton *widget.Button
+	ClearCacheButton    *widget.Button
 
 	uninstallButton      *widget.Button
 	progressBar          *progress.FyneProgress
 	installationListener binding.DataListener
 
-	epicAccountLabel  *widget.Label
-	epicLoginButton   *widget.Button
-	epicLogoutButton  *widget.Button
+	epicAccountLabel *widget.Label
+	epicLoginButton  *widget.Button
+	epicLogoutButton *widget.Button
 }
 
 func NewSettings(state *uicommon.State) *Settings {
@@ -54,10 +55,10 @@ func NewSettings(state *uicommon.State) *Settings {
 	branchSelect.SetSelected(currentBranch)
 
 	s := &Settings{
-		state:        state,
-		BranchSelect: branchSelect,
-		uninstallButton: widget.NewButtonWithIcon(lang.LocalizeKey("installation.uninstall", "Uninstall from Game Folder"), theme.DeleteIcon(), nil), // nil callback initially, set in init
-		progressBar:     progress.NewFyneProgress(widget.NewProgressBar()),
+		state:            state,
+		BranchSelect:     branchSelect,
+		uninstallButton:  widget.NewButtonWithIcon(lang.LocalizeKey("installation.uninstall", "Uninstall from Game Folder"), theme.DeleteIcon(), nil), // nil callback initially, set in init
+		progressBar:      progress.NewFyneProgress(widget.NewProgressBar()),
 		epicAccountLabel: widget.NewLabel(""),
 	}
 
@@ -65,11 +66,11 @@ func NewSettings(state *uicommon.State) *Settings {
 	s.epicLogoutButton = widget.NewButton(lang.LocalizeKey("settings.epic_logout", "Logout"), s.epicLogout)
 
 	s.refreshEpicAccountInfo()
-	
+
 	s.uninstallButton.OnTapped = s.runUninstall
 	s.uninstallButton.Importance = widget.DangerImportance
 	s.uninstallButton.Disable()
-	
+
 	if s.installationListener == nil {
 		s.installationListener = binding.NewDataListener(s.checkUninstallState)
 		s.state.ModInstalled.AddListener(s.installationListener)
@@ -79,8 +80,22 @@ func NewSettings(state *uicommon.State) *Settings {
 	}
 
 	s.ImportProfileButton = widget.NewButtonWithIcon(lang.LocalizeKey("settings.import_profile", "Import Profile from Current Installation"), theme.DocumentSaveIcon(), s.importProfile)
+	s.ClearCacheButton = widget.NewButtonWithIcon(lang.LocalizeKey("settings.clear_cache", "Clear Mod Cache"), theme.DeleteIcon(), s.clearCache)
 
 	return s
+}
+
+func (s *Settings) clearCache() {
+	dialog.ShowConfirm(lang.LocalizeKey("settings.clear_cache_confirm_title", "Clear Mod Cache"), lang.LocalizeKey("settings.clear_cache_confirm_message", "Are you sure you want to clear the mod cache? This will force re-downloading mods next time."), func(confirm bool) {
+		if !confirm {
+			return
+		}
+		if err := s.state.Core.ClearModCache(); err != nil {
+			dialog.ShowError(err, s.state.Window)
+		} else {
+			dialog.ShowInformation(lang.LocalizeKey("common.success", "Success"), lang.LocalizeKey("settings.cache_cleared", "Mod cache cleared successfully."), s.state.Window)
+		}
+	}, s.state.Window)
 }
 
 func (s *Settings) checkUninstallState() {
@@ -127,6 +142,8 @@ func (s *Settings) Tab() (*container.TabItem, error) {
 		widget.NewSeparator(),
 		epicAccountSection,
 		widget.NewSeparator(),
+		settingsEntry(lang.LocalizeKey("settings.cache_management", "Cache Management"), s.ClearCacheButton),
+		widget.NewSeparator(),
 		settingsEntry(lang.LocalizeKey("settings.legacy_migration", "Legacy Migration"), s.ImportProfileButton),
 		widget.NewSeparator(),
 		uninstallSection,
@@ -138,7 +155,7 @@ func (s *Settings) Tab() (*container.TabItem, error) {
 func (s *Settings) refreshEpicAccountInfo() {
 	session := s.state.Core.EpicSessionManager.GetSession()
 	if session == nil {
-		s.epicAccountLabel.SetText(lang.LocalizeKey("installer.info.mod_not_installed", "Not Logged In")) // Reuse if appropriate or use new key
+		s.epicAccountLabel.SetText(lang.LocalizeKey("settings.epic_logged_out", "Not Logged In")) // Reuse if appropriate or use new key
 		s.epicLoginButton.Show()
 		s.epicLogoutButton.Hide()
 	} else {
@@ -150,24 +167,24 @@ func (s *Settings) refreshEpicAccountInfo() {
 
 func (s *Settings) showEpicLoginDialog() {
 	authUrl := s.state.Core.EpicApi.GetAuthUrl()
-	
+
 	instruction := widget.NewLabel(lang.LocalizeKey("settings.epic_login_instruction", "Please login with Epic Games and enter the code below."))
 	instruction.Wrapping = fyne.TextWrapWord
-	
+
 	openButton := widget.NewButton(lang.LocalizeKey("settings.epic_login_url_button", "Open Login Page"), func() {
 		u, _ := url.Parse(authUrl)
 		_ = fyne.CurrentApp().OpenURL(u)
 	})
-	
+
 	entry := widget.NewEntry()
 	entry.SetPlaceHolder(lang.LocalizeKey("settings.epic_login_code_label", "Authorization Code"))
-	
+
 	content := container.NewVBox(
 		instruction,
 		openButton,
 		entry,
 	)
-	
+
 	dialog.ShowCustomConfirm(
 		lang.LocalizeKey("settings.epic_login", "Login"),
 		lang.LocalizeKey("common.save", "Login"),
@@ -177,19 +194,19 @@ func (s *Settings) showEpicLoginDialog() {
 			if !confirm || entry.Text == "" {
 				return
 			}
-			
+
 			code := entry.Text
 			session, err := s.state.Core.EpicApi.LoginWithAuthCode(code)
 			if err != nil {
 				dialog.ShowError(err, s.state.Window)
 				return
 			}
-			
+
 			if err := s.state.Core.EpicSessionManager.Save(session); err != nil {
 				dialog.ShowError(err, s.state.Window)
 				return
 			}
-			
+
 			s.refreshEpicAccountInfo()
 			dialog.ShowInformation(lang.LocalizeKey("common.success", "Success"), lang.LocalizeKey("common.success", "Logged in successfully."), s.state.Window)
 		},
