@@ -1,4 +1,6 @@
 # Mod of Us
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fikafly144%2Fau_mod_installer.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Fikafly144%2Fau_mod_installer?ref=badge_shield)
+
 
 Mod of Us is a mod manager for the game "Among Us". It allows players to easily install, manage, and switch between different mods to enhance their gaming experience.
 
@@ -29,3 +31,6 @@ Contributions are welcome! If you would like to contribute to Mod of Us, please 
 ## License
 
 Mod of Us is licensed under the MIT License. See the [LICENSE](LICENSE) file for more information.
+
+
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fikafly144%2Fau_mod_installer.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Fikafly144%2Fau_mod_installer?ref=badge_large)
