@@ -10,8 +10,29 @@ import (
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 )
 
+// ResolveProfileDependencies resolves all required dependencies for the given profile.
+func (a *App) ResolveProfileDependencies(profileID uuid.UUID) ([]modmgr.ModVersion, error) {
+	profile, found := a.ProfileManager.Get(profileID)
+	if !found {
+		return nil, fmt.Errorf("profile not found: %s", profileID)
+	}
+	return a.ResolveDependencies(profile.Versions())
+}
+
+func (a *App) ResolveDependencies(initialMods []modmgr.ModVersion) ([]modmgr.ModVersion, error) {
+	resolvedMap, err := modmgr.ResolveDependencies(initialMods, a.Rest)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]modmgr.ModVersion, 0, len(resolvedMap))
+	for _, v := range resolvedMap {
+		result = append(result, v)
+	}
+	return result, nil
+}
+
 // PrepareLaunch prepares the game for launch by preparing the profile directory.
-// It returns the path to the profile directory to be used as DLL directory.
 func (a *App) PrepareLaunch(gamePath string, profileID uuid.UUID) (string, func() error, error) {
 	if _, err := os.Stat(filepath.Join(gamePath, "Among Us.exe")); os.IsNotExist(err) {
 		return "", nil, fmt.Errorf("Among Us executable not found: %w", err)
@@ -26,6 +47,11 @@ func (a *App) PrepareLaunch(gamePath string, profileID uuid.UUID) (string, func(
 		return "", nil, fmt.Errorf("profile not found: %s", profileID)
 	}
 
+	resolvedVersions, err := a.ResolveDependencies(profile.Versions())
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to resolve dependencies: %w", err)
+	}
+
 	cacheDir := filepath.Join(a.ConfigDir, "mods")
 	profileDir := filepath.Join(a.ConfigDir, "profiles", profileID.String())
 	binaryType, err := aumgr.GetBinaryType(gamePath)
@@ -33,7 +59,7 @@ func (a *App) PrepareLaunch(gamePath string, profileID uuid.UUID) (string, func(
 		return "", nil, err
 	}
 
-	if err := modmgr.PrepareProfileDirectory(profileDir, cacheDir, profile.Versions(), binaryType); err != nil {
+	if err := modmgr.PrepareProfileDirectory(profileDir, cacheDir, resolvedVersions, binaryType); err != nil {
 		return "", nil, err
 	}
 

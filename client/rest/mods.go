@@ -43,3 +43,14 @@ func (c *clientImpl) GetModVersion(modID string, versionID string) (*modmgr.ModV
 	err := c.do(rest.EndpointGetModVersion.Compile(nil, modID, versionID), nil, &modVersion, 1)
 	return &modVersion, err
 }
+
+func (c *clientImpl) GetLatestModVersion(modID string) (*modmgr.ModVersion, error) {
+	mod, err := c.GetMod(modID)
+	if err != nil {
+		return nil, err
+	}
+	if mod.LatestVersion == "" {
+		return nil, fmt.Errorf("mod %s does not have a latest version", modID)
+	}
+	return c.GetModVersion(modID, mod.LatestVersion)
+}

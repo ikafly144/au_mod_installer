@@ -97,3 +97,11 @@ func (f *FileClient) GetModVersion(modID string, versionID string) (*modmgr.ModV
 	}
 	return &versions[0], nil
 }
+
+func (f *FileClient) GetLatestModVersion(modID string) (*modmgr.ModVersion, error) {
+	mod, ok := f.modStore[modID]
+	if !ok || mod.LatestVersion == "" {
+		return nil, nil
+	}
+	return f.GetModVersion(modID, mod.LatestVersion)
+}

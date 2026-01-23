@@ -212,6 +212,13 @@ func (l *Launcher) runLaunch() {
 			// l.state.CanInstall.Set(true)
 		})
 
+		// Resolve dependencies
+		resolvedVersions, err := l.state.Core.ResolveDependencies(targetProfile.Versions())
+		if err != nil {
+			l.state.SetError(fmt.Errorf("failed to resolve dependencies: %w", err))
+			return
+		}
+
 		// Download mods to cache
 		configDir, err := os.UserConfigDir()
 		if err != nil {
@@ -220,7 +227,7 @@ func (l *Launcher) runLaunch() {
 		}
 		cacheDir := filepath.Join(configDir, "au_mod_installer", "mods")
 
-		if err := modmgr.DownloadMods(cacheDir, targetProfile.Versions(), binaryType, l.progressBar); err != nil {
+		if err := modmgr.DownloadMods(cacheDir, resolvedVersions, binaryType, l.progressBar); err != nil {
 			l.state.SetError(err)
 			return
 		}
