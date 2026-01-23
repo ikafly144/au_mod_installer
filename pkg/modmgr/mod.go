@@ -13,6 +13,7 @@ type Mod struct {
 	Name      string    `json:"name"`                // Mod name
 	Author    string    `json:"author"`              // Author name
 	Thumbnail string    `json:"thumbnail,omitempty"` // URL to thumbnail image (optional)
+	Website   string    `json:"website,omitempty"`   // Mod website URL (optional)
 	CreatedAt time.Time `json:"created_at"`          // Creation timestamp
 	UpdatedAt time.Time `json:"updated_at"`          // Last update timestamp
 

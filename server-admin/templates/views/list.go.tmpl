@@ -120,6 +120,10 @@
                     <label for="mod-description">説明</label>
                     <textarea id="mod-description" name="description"></textarea>
                 </div>
+                <div class="form-group">
+                    <label for="mod-website">ウェブサイト</label>
+                    <input type="url" id="mod-website" name="website" placeholder="https://example.com">
+                </div>
             </form>
         </div>
         <div class="modal-footer">
@@ -141,6 +145,7 @@
         document.getElementById('mod-author').value = mod?.author || '';
         document.getElementById('mod-type').value = mod?.type || '';
         document.getElementById('mod-description').value = mod?.description || '';
+        document.getElementById('mod-website').value = mod?.website || '';
         document.getElementById('mod-modal').classList.add('active');
     }
 
@@ -159,7 +164,8 @@
             name: document.getElementById('mod-name').value.trim(),
             author: document.getElementById('mod-author').value.trim(),
             type: document.getElementById('mod-type').value,
-            description: document.getElementById('mod-description').value.trim()
+            description: document.getElementById('mod-description').value.trim(),
+            website: document.getElementById('mod-website').value.trim()
         };
 
         if (!mod.id || !mod.name || !mod.author) {

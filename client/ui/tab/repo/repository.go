@@ -3,6 +3,7 @@ package repo
 import (
 	"fmt"
 	"log/slog"
+	"net/url"
 	"slices"
 	"strings"
 	"sync"
@@ -202,11 +203,19 @@ func (r *Repository) showModDetails(mod modmgr.Mod) {
 	headerText := container.NewVBox(
 		widget.NewLabelWithStyle(mod.Name, fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		widget.NewLabel(lang.LocalizeKey("repository.author", "Author: {{.Author}}", map[string]any{"Author": mod.Author})),
-		widget.NewHyperlink(lang.LocalizeKey("repository.website", "Website"), nil),
-		widget.NewButton(lang.LocalizeKey("repository.install_latest", "Install Latest"), func() {
-			r.installModVersion(mod, mod.LatestVersion)
-		}),
 	)
+
+	if mod.Website != "" {
+		if u, err := url.Parse(mod.Website); err == nil {
+			headerText.Add(widget.NewHyperlink(lang.LocalizeKey("repository.website", "Website"), u))
+		} else {
+			slog.Warn("Failed to parse mod website URL", "url", mod.Website, "error", err)
+		}
+	}
+
+	headerText.Add(widget.NewButton(lang.LocalizeKey("repository.install_latest", "Install Latest"), func() {
+		r.installModVersion(mod, mod.LatestVersion)
+	}))
 
 	header := container.New(layout.NewBorderLayout(nil, nil, img, nil),
 		img,
