@@ -3,15 +3,13 @@ package uicommon
 import (
 	"errors"
 	"log/slog"
-	"os"
-	"path/filepath"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/lang"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
-	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
+	"github.com/google/uuid"
 )
 
 func (s *State) Launch(path string) {
@@ -20,6 +18,7 @@ func (s *State) Launch(path string) {
 		return
 	}
 	defer s.launchLock.Unlock()
+
 	fyne.Do(func() {
 		s.ErrorText.Segments = []widget.RichTextSegment{
 			&widget.TextSegment{Text: lang.LocalizeKey("launch.running", "Among Us is currently running...")},
@@ -27,18 +26,55 @@ func (s *State) Launch(path string) {
 		s.ErrorText.Refresh()
 		s.ErrorText.Show()
 	})
-	if _, err := os.Stat(filepath.Join(path, "Among Us.exe")); os.IsNotExist(err) {
+
+	activeProfileIDStr, _ := s.ActiveProfile.Get()
+	activeProfileID, err := uuid.Parse(activeProfileIDStr)
+	if err != nil {
+		slog.Warn("Failed to parse active profile ID", "error", err)
+		activeProfileID = uuid.Nil
+	}
+
+	if activeProfileID != uuid.Nil {
 		fyne.Do(func() {
 			s.ErrorText.Segments = []widget.RichTextSegment{
-				&widget.TextSegment{Text: lang.LocalizeKey("launch.error.executable_not_found", "Among Us executable not found: ") + err.Error(), Style: widget.RichTextStyle{ColorName: theme.ColorNameError}},
-				&widget.TextSegment{Text: lang.LocalizeKey("launch.error.reinstall_instruction", "Please uninstall the mod and reinstall Among Us.")},
+				&widget.TextSegment{Text: lang.LocalizeKey("launch.applying_mods", "Applying mods...")},
 			}
 			s.ErrorText.Refresh()
+			s.ErrorText.Show()
 		})
-		slog.Warn("Among Us executable not found", "error", err)
+	}
+
+	profileDir, cleanup, err := s.Core.PrepareLaunch(path, activeProfileID)
+	if err != nil {
+		slog.Error("Failed to prepare launch", "error", err)
+		s.SetError(err)
 		return
 	}
-	if err := aumgr.LaunchAmongUs(aumgr.DetectLauncherType(path), path, s.ModInstallDir()); err != nil {
+
+	defer func() {
+		// Cleanup if needed (currently no-op for profile directory preservation)
+		if err := cleanup(); err != nil {
+			slog.Error("Failed to cleanup", "error", err)
+			s.SetError(err)
+		} else {
+			fyne.Do(func() {
+				s.ErrorText.Hide()
+			})
+		}
+	}()
+
+	// Re-set "running" message if we changed it to "applying mods"
+	if activeProfileID != uuid.Nil {
+		fyne.Do(func() {
+			s.ErrorText.Segments = []widget.RichTextSegment{
+				&widget.TextSegment{Text: lang.LocalizeKey("launch.running", "Among Us is currently running...")},
+			}
+			s.ErrorText.Refresh()
+			s.ErrorText.Show()
+		})
+	}
+
+	if err := s.Core.ExecuteLaunch(path, profileDir); err != nil {
 		fyne.Do(func() {
 			s.ErrorText.Segments = []widget.RichTextSegment{
 				&widget.TextSegment{Text: lang.LocalizeKey("launch.error.launch_failed", "Failed to launch Among Us: ") + err.Error(), Style: widget.RichTextStyle{ColorName: theme.ColorNameError}},

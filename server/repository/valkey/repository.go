@@ -23,6 +23,99 @@ type Repository struct {
 	client valkey.Client
 }
 
+// DeleteMod implements [repository.ModRepository].
+func (r *Repository) DeleteMod(ctx context.Context, modID string) error {
+	// Delete all versions first
+	versions, err := r.GetAllModVersions(ctx, modID)
+	if err == nil {
+		for _, v := range versions {
+			_ = r.DeleteVersion(ctx, modID, v.ID)
+		}
+	}
+
+	// Delete mod data
+	key := keyModPrefix + modID
+	if err := r.client.Do(ctx, r.client.B().Del().Key(key).Build()).Error(); err != nil {
+		return err
+	}
+
+	// Remove from mod list
+	if err := r.client.Do(ctx, r.client.B().Zrem().Key(keyModList).Member(modID).Build()).Error(); err != nil {
+		return err
+	}
+
+	slog.Info("deleted mod", "id", modID)
+	return nil
+}
+
+// DeleteVersion implements [repository.ModRepository].
+func (r *Repository) DeleteVersion(ctx context.Context, modID string, versionID string) error {
+	// Delete version data
+	key := keyVersionPrefix + modID + ":" + versionID
+	if err := r.client.Do(ctx, r.client.B().Del().Key(key).Build()).Error(); err != nil {
+		return err
+	}
+
+	// Remove from version list
+	listKey := keyVersionPrefix + modID
+	return r.client.Do(ctx, r.client.B().Zrem().Key(listKey).Member(versionID).Build()).Error()
+}
+
+// GetAllModVersions implements [repository.ModRepository].
+func (r *Repository) GetAllModVersions(ctx context.Context, modID string) ([]modmgr.ModVersion, error) {
+	// Get all version IDs from sorted set
+	listKey := keyVersionPrefix + modID
+	versionIDs, err := r.client.Do(ctx, r.client.B().Zrange().Key(listKey).Min("0").Max("-1").Build()).AsStrSlice()
+	if err != nil {
+		return nil, err
+	}
+
+	if len(versionIDs) == 0 {
+		return []modmgr.ModVersion{}, nil
+	}
+
+	// Get version data for each ID
+	versions := make([]modmgr.ModVersion, 0, len(versionIDs))
+	for _, id := range versionIDs {
+		version, err := r.GetModVersion(ctx, modID, id)
+		if err != nil {
+			return nil, err
+		}
+		if version != nil {
+			versions = append(versions, *version)
+		}
+	}
+
+	return versions, nil
+}
+
+// GetAllMods implements [repository.ModRepository].
+func (r *Repository) GetAllMods(ctx context.Context) ([]modmgr.Mod, error) {
+	// Get all mod IDs from sorted set
+	modIDs, err := r.client.Do(ctx, r.client.B().Zrange().Key(keyModList).Min("0").Max("-1").Build()).AsStrSlice()
+	if err != nil {
+		return nil, err
+	}
+
+	if len(modIDs) == 0 {
+		return []modmgr.Mod{}, nil
+	}
+
+	// Get mod data for each ID
+	mods := make([]modmgr.Mod, 0, len(modIDs))
+	for _, id := range modIDs {
+		mod, err := r.GetMod(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if mod != nil {
+			mods = append(mods, *mod)
+		}
+	}
+
+	return mods, nil
+}
+
 // NewRepository creates a new Valkey repository
 func NewRepository(client valkey.Client) *Repository {
 	return &Repository{
@@ -147,6 +240,9 @@ func (r *Repository) GetModList(ctx context.Context, limit int, after string, be
 
 // SetModVersion stores a mod version in Valkey
 func (r *Repository) SetModVersion(ctx context.Context, modID string, version modmgr.ModVersion) error {
+	if version.ModID == "" {
+		version.ModID = modID
+	}
 	data, err := json.Marshal(version)
 	if err != nil {
 		return fmt.Errorf("failed to marshal version: %w", err)
@@ -184,6 +280,10 @@ func (r *Repository) GetModVersion(ctx context.Context, modID string, versionID 
 	var version modmgr.ModVersion
 	if err := json.Unmarshal([]byte(data), &version); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal version: %w", err)
+	}
+
+	if version.ModID == "" {
+		version.ModID = modID
 	}
 
 	return &version, nil
@@ -235,6 +335,9 @@ func (r *Repository) GetModVersions(ctx context.Context, modID string, limit int
 			return nil, err
 		}
 		if version != nil {
+			if version.ModID == "" {
+				version.ModID = modID
+			}
 			versions = append(versions, *version)
 		}
 	}

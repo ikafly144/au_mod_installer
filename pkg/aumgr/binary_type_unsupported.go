@@ -4,6 +4,6 @@ package aumgr
 
 import "errors"
 
-func DetectBinaryType(amongUsDir string) (BinaryType, error) {
+func GetBinaryType(amongUsDir string) (BinaryType, error) {
 	return BinaryTypeUnknown, errors.New("binary type detection is unsupported on this platform")
 }

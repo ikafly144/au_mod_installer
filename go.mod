@@ -4,8 +4,10 @@ go 1.25.5
 
 require (
 	fyne.io/fyne/v2 v2.7.1
+	github.com/Microsoft/go-winio v0.6.2
 	github.com/TheTitanrain/w32 v0.0.0-20200114052255-2654d97dbd3d
 	github.com/google/go-github/v80 v80.0.0
+	github.com/google/uuid v1.6.0
 	github.com/josephspurrier/goversioninfo v1.5.0
 	github.com/minio/selfupdate v0.6.0
 	github.com/nightlyone/lockfile v1.0.0

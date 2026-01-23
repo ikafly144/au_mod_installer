@@ -3,7 +3,6 @@
 package ui
 
 import (
-	"github.com/ikafly144/au_mod_installer/client/ui/tab/installer"
 	"github.com/ikafly144/au_mod_installer/client/ui/tab/launcher"
 	"github.com/ikafly144/au_mod_installer/client/ui/tab/repo"
 	"github.com/ikafly144/au_mod_installer/client/ui/tab/settings"
@@ -15,6 +14,7 @@ import (
 
 type Config struct {
 	stateOptions []uicommon.Option
+	stateInits   []func(*uicommon.State)
 }
 
 func WithStateOptions(options ...uicommon.Option) func(*Config) {
@@ -23,7 +23,13 @@ func WithStateOptions(options ...uicommon.Option) func(*Config) {
 	}
 }
 
-func Main(w fyne.Window, version string, cfg ...func(*Config)) error {
+func WithStateInit(init func(*uicommon.State)) func(*Config) {
+	return func(cfg *Config) {
+		cfg.stateInits = append(cfg.stateInits, init)
+	}
+}
+
+func Main(w fyne.Window, version string, sharedURI string, cfg ...func(*Config)) error {
 	var config Config
 
 	for _, c := range cfg {
@@ -34,14 +40,13 @@ func Main(w fyne.Window, version string, cfg ...func(*Config)) error {
 	if err != nil {
 		return err
 	}
+	state.SharedURI = sharedURI
+
+	for _, init := range config.stateInits {
+		init(state)
+	}
 
 	state.CheckInstalled()
-
-	i := installer.NewInstallerTab(state)
-	installerTab, err := i.Tab()
-	if err != nil {
-		return err
-	}
 
 	l := launcher.NewLauncherTab(state)
 	launcherTab, err := l.Tab()
@@ -63,7 +68,6 @@ func Main(w fyne.Window, version string, cfg ...func(*Config)) error {
 
 	canvas := container.NewAppTabs(
 		launcherTab,
-		installerTab,
 		repoTab,
 		settingsTab,
 	)

@@ -36,3 +36,7 @@ func (c *OfflineClient) GetModVersions(modID string, limit int, after string) ([
 func (c *OfflineClient) GetModVersion(modID string, versionID string) (*modmgr.ModVersion, error) {
 	return nil, errors.New("offline mode: mod version details not available")
 }
+
+func (c *OfflineClient) GetLatestModVersion(modID string) (*modmgr.ModVersion, error) {
+	return nil, errors.New("offline mode: latest mod version details not available")
+}

@@ -11,4 +11,5 @@ type Client interface {
 	GetMod(modID string) (*modmgr.Mod, error)
 	GetModVersions(modID string, limit int, after string) ([]modmgr.ModVersion, error)
 	GetModVersion(modID string, versionID string) (*modmgr.ModVersion, error)
+	GetLatestModVersion(modID string) (*modmgr.ModVersion, error)
 }

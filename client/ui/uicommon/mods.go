@@ -38,19 +38,21 @@ func (s *State) InstallMods(modId string, versionData modmgr.ModVersion, progres
 	slog.Info("Starting mod installation", "modId", modId, "versionId", versionData.ID)
 
 	var versions []modmgr.ModVersion
-	if len(versionData.Mods) > 0 {
-		for _, modPack := range versionData.Mods {
-			modVersion, err := s.ModVersion(modPack.ID, modPack.Version)
-			if err != nil {
-				slog.Error("Failed to get mod version from mod pack", "modPackId", modPack.ID, "version", modPack.Version, "error", err)
-				return err
+	/*
+		if len(versionData.Mods) > 0 {
+			for _, modPack := range versionData.Mods {
+				modVersion, err := s.ModVersion(modPack.ID, modPack.Version)
+				if err != nil {
+					slog.Error("Failed to get mod version from mod pack", "modPackId", modPack.ID, "version", modPack.Version, "error", err)
+					return err
+				}
+				versions = append(versions, *modVersion)
 			}
-			modVersion.ModID_ = modPack.ID
-			versions = append(versions, *modVersion)
+		} else {
+			versions = append(versions, versionData)
 		}
-	} else {
-		versions = append(versions, versionData)
-	}
+	*/
+	versions = append(versions, versionData)
 
 	resolved := make(map[string]modmgr.ModVersion)
 	unresolved := make(map[string]struct{})
@@ -81,13 +83,13 @@ func (s *State) InstallMods(modId string, versionData modmgr.ModVersion, progres
 	}
 
 	launcherType := aumgr.DetectLauncherType(path)
-	manifest, err := aumgr.GetManifest(launcherType, path)
+	gameVersion, err := aumgr.GetVersion(path)
 	if err != nil {
-		slog.Error("Failed to get game manifest", "error", err)
+		slog.Error("Failed to get game version", "error", err)
 		return err
 	}
 
-	binaryType, err := aumgr.DetectBinaryType(path)
+	binaryType, err := aumgr.GetBinaryType(path)
 	if err != nil {
 		slog.Error("Failed to detect binary type", "error", err)
 		return err
@@ -97,17 +99,17 @@ func (s *State) InstallMods(modId string, versionData modmgr.ModVersion, progres
 	installVersions := make([]modmgr.ModVersion, 0, len(resolved))
 	for _, v := range resolved {
 		if slices.ContainsFunc(installVersions, func(x modmgr.ModVersion) bool {
-			return x.ID == v.ID && x.ModID_ == v.ModID_
+			return x.ID == v.ID && x.ModID == v.ModID
 		}) {
 			continue
 		}
-		if !v.IsCompatible(launcherType, binaryType, manifest.GetVersion()) {
+		if !v.IsCompatible(launcherType, binaryType, gameVersion) {
 			slog.Warn("Mod version is not compatible, skipping", "modId", v.ID, "versionId", v.ID)
-			return fmt.Errorf("mod %s version %s is not compatible with version %s", modId, v.ID, manifest.GetVersion())
+			return fmt.Errorf("mod %s version %s is not compatible with version %s", modId, v.ID, gameVersion)
 		}
 		installVersions = append(installVersions, v)
 	}
-	if _, err := modmgr.InstallMod(gameRoot, manifest, launcherType, binaryType, installVersions, progress); err != nil {
+	if _, err := modmgr.InstallMod(gameRoot, gameVersion, launcherType, binaryType, installVersions, progress); err != nil {
 		slog.Error("Mod installation failed", "error", err)
 		return err
 	}
@@ -115,8 +117,8 @@ func (s *State) InstallMods(modId string, versionData modmgr.ModVersion, progres
 }
 
 func (s *State) resolveDependencies(modId string, versionData modmgr.ModVersion, resolved map[string]modmgr.ModVersion, unresolved map[string]struct{}, conflict map[string][]string) error {
-	if versionData.ModID_ == "" {
-		versionData.ModID_ = modId
+	if versionData.ModID == "" {
+		return fmt.Errorf("mod version %s has empty ModID", versionData.ID)
 	}
 	if _, ok := resolved[versionData.ID]; ok {
 		return nil

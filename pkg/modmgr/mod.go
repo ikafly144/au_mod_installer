@@ -8,13 +8,16 @@ import (
 )
 
 type Mod struct {
-	ID     string  `json:"id"`
-	Type   ModType `json:"type,omitempty"`
-	Name   string  `json:"name"`
-	Author string  `json:"author"`
+	ID        string    `json:"id"`                  // Mod unique ID
+	Type      ModType   `json:"type,omitempty"`      // Mod type
+	Name      string    `json:"name"`                // Mod name
+	Author    string    `json:"author"`              // Author name
+	Thumbnail string    `json:"thumbnail,omitempty"` // URL to thumbnail image (optional)
+	CreatedAt time.Time `json:"created_at"`          // Creation timestamp
+	UpdatedAt time.Time `json:"updated_at"`          // Last update timestamp
 
-	LatestVersion string `json:"latest_version,omitempty"`
-	Description   string `json:"description,omitempty"`
+	LatestVersion string `json:"latest_version,omitempty"` // Latest version ID (optional)
+	Description   string `json:"description,omitempty"`    // Mod description
 }
 
 type ModType string
@@ -22,6 +25,8 @@ type ModType string
 const (
 	ModTypeMod     ModType = "mod"
 	ModTypeLibrary ModType = "library"
+	// Deprecated: should not be used anymore
+	// ModPack will be represented as profile.Profile now
 	ModTypeModPack ModType = "modpack"
 )
 
@@ -35,13 +40,15 @@ func (mt ModType) IsVisible() bool {
 }
 
 type ModVersion struct {
-	ModID_        string                        `json:"-"` // for local use only
-	ID            string                        `json:"id"`
-	CreatedAt     time.Time                     `json:"created_at"`
-	Dependencies  []ModDependency               `json:"dependencies,omitempty"`
-	Mods          []ModPack                     `json:"mods,omitempty"`
-	Files         []ModFile                     `json:"files,omitempty"`
-	TargetVersion map[aumgr.LauncherType]string `json:"target_version,omitempty"`
+	ID           string          `json:"id"`
+	ModID        string          `json:"mod_id"`
+	CreatedAt    time.Time       `json:"created_at"`
+	Dependencies []ModDependency `json:"dependencies,omitempty"`
+	Files        []ModFile       `json:"files,omitempty"`
+	GameVersions []string        `json:"game_versions,omitempty"`
+
+	// Deprecated: use profile.Profile to represent mod packs now
+	Mods []ModPack `json:"mods,omitempty"`
 }
 
 type ModDependency struct {
@@ -59,6 +66,7 @@ const (
 	ModDependencyTypeEmbedded ModDependencyType = "embedded"
 )
 
+// Deprecated: use profile.Profile to represent mod packs now
 type ModPack struct {
 	ID      string `json:"id"`
 	Version string `json:"version,omitempty"`
@@ -67,8 +75,9 @@ type ModPack struct {
 type ModFile struct {
 	Compatible []aumgr.BinaryType `json:"compatible"`
 	FileType   FileType           `json:"file_type"`
-	Path       string             `json:"path,omitempty"`
-	URL        string             `json:"url"`
+	// When FileType is Normal or Plugin, Path is used.
+	Path string `json:"path,omitempty"`
+	URL  string `json:"url"`
 }
 
 type FileType string
@@ -76,13 +85,23 @@ type FileType string
 const (
 	FileTypeZip    FileType = "zip"
 	FileTypeNormal FileType = "normal"
+	FileTypePlugin FileType = "plugin"
 )
 
 func (m ModVersion) IsCompatible(launcherType aumgr.LauncherType, binaryType aumgr.BinaryType, gameVersion string) bool {
-	if version, ok := m.TargetVersion[launcherType]; ok && version != "" && version != gameVersion {
+	if m.CompatibleFilesCount(binaryType) == 0 && (len(m.Mods) == 0 && len(m.Files) > 0) {
 		return false
 	}
-	return m.CompatibleFilesCount(binaryType) > 0 || (len(m.Mods) > 0 && len(m.Files) == 0)
+	// Check game version compatibility
+	supported := false
+	// Check deprecated TargetVersion first for backward compatibility
+	for _, v := range m.GameVersions {
+		if v == gameVersion {
+			supported = true
+			break
+		}
+	}
+	return supported || len(m.GameVersions) == 0
 }
 
 func (m ModVersion) CompatibleFilesCount(binaryType aumgr.BinaryType) int {

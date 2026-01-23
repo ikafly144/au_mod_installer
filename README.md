@@ -28,4 +28,4 @@ Contributions are welcome! If you would like to contribute to Mod of Us, please 
 
 ## License
 
-Mod of Us is licensed under the MIT License. See the [LICENSE](LICENSE) file for more information.
+Mod of Us is licensed under the GNU General Public License v3.0. See the [LICENSE](LICENSE) file for more details.

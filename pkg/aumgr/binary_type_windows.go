@@ -4,13 +4,14 @@ package aumgr
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
 	"syscall"
 
 	"github.com/zzl/go-win32api/win32"
 )
 
-func DetectBinaryType(amongUsDir string) (BinaryType, error) {
+func GetBinaryType(amongUsDir string) (BinaryType, error) {
 	path, err := syscall.UTF16PtrFromString(filepath.Join(amongUsDir, "Among Us.exe"))
 	if err != nil {
 		return BinaryTypeUnknown, err
@@ -29,6 +30,6 @@ func DetectBinaryType(amongUsDir string) (BinaryType, error) {
 	case win32.SCS_64BIT_BINARY:
 		return BinaryType64Bit, nil
 	default:
-		return BinaryTypeUnknown, nil
+		return BinaryTypeUnknown, fmt.Errorf("unknown binary type: %d", binaryType)
 	}
 }

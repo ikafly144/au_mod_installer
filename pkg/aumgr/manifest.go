@@ -1,6 +1,7 @@
 package aumgr
 
 type Manifest interface {
+	// Deprecated: use GetVersion instead
 	GetVersion() string
 }
 

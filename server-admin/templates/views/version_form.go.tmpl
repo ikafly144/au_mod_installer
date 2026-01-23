@@ -33,8 +33,8 @@
 
             <div class="form-group">
                 <label>対象AUバージョン</label>
-                <div id="target-list" class="dynamic-list"></div>
-                <button type="button" class="btn btn-sm btn-secondary" onclick="addTarget()">+ 追加</button>
+                <div id="game-version-list" class="dynamic-list"></div>
+                <button type="button" class="btn btn-sm btn-secondary" onclick="addGameVersion()">+ 追加</button>
             </div>
             
             <!-- For Mod/Plugin/Library -->
@@ -100,15 +100,11 @@
         return div;
     }
 
-    function addTarget(launcher = '', version = '') {
+    function addGameVersion(version = '') {
         const html = `
-            <select class="target-launcher w-150">
-                <option value="steam" ${launcher === 'steam' ? 'selected' : ''}>Steam</option>
-                <option value="epic" ${launcher === 'epic' ? 'selected' : ''}>Epic Games</option>
-            </select>
-            <input type="text" class="target-version flex-grow" placeholder="バージョン (例: 2024.3.5)" value="${version}">
+            <input type="text" class="game-version flex-grow" placeholder="例: 2024.3.5" value="${version}">
         `;
-        document.getElementById('target-list').appendChild(createItem(html));
+        document.getElementById('game-version-list').appendChild(createItem(html));
     }
 
     function addFile(data = {}) {
@@ -325,40 +321,62 @@
 
         if (versionData) {
             // Populate Target Versions
+            // Migration: show unique versions from target_version
             if (versionData.target_version) {
-                Object.entries(versionData.target_version).forEach(([k, v]) => addTarget(k, v));
+                 const seen = new Set();
+                 Object.values(versionData.target_version).forEach(v => {
+                     if (!seen.has(v)) {
+                         addGameVersion(v);
+                         seen.add(v);
+                     }
+                 });
+            }
+            
+            if (versionData.game_versions && versionData.game_versions.length > 0) {
+                document.getElementById('game-version-list').innerHTML = ''; // Clear migration data if new data exists
+                versionData.game_versions.forEach(v => addGameVersion(v));
             }
 
-            if (isModPack) {
-                (versionData.mods || []).forEach(m => addMod(m));
-            } else {
+            if (!versionData.target_version && !versionData.game_versions) {
                 (versionData.files || []).forEach(f => addFile(f));
                 (versionData.dependencies || []).forEach(d => addDep(d));
+            } else {
+                // Restore files and deps even if game versions exist
+                (versionData.files || []).forEach(f => addFile(f));
+                (versionData.dependencies || []).forEach(d => addDep(d));
+            }
+            
+            if (versionData.mods) {
+                 versionData.mods.forEach(m => addMod(m));
             }
         }
     }
 
     async function saveVersion() {
-        const editing = document.getElementById('version-editing').value;
         const versionId = document.getElementById('version-id').value.trim();
-        const isModPack = modType === 'modpack';
+        const editing = document.getElementById('version-editing').value;
 
         if (!versionId) {
-            showToast('バージョンは必須です', 'error');
+            showToast('バージョンIDを入力してください', 'error');
             return;
         }
 
-        // Collect Target Versions
-        const target_version = {};
-        document.querySelectorAll('#target-list .dynamic-item').forEach(item => {
-            const launcher = item.querySelector('.target-launcher').value;
-            const ver = item.querySelector('.target-version').value.trim();
-            if (launcher && ver) target_version[launcher] = ver;
+        const game_versions = [];
+        document.querySelectorAll('#game-version-list .dynamic-item').forEach(item => {
+            const ver = item.querySelector('.game-version').value.trim();
+            if (ver) game_versions.push(ver);
         });
+
+        // Migration: target_version is deprecated, map from game_versions if needed or leave empty
+        const target_version = {}; 
+        // Simple mapping for backward compatibility if needed, but primarily using game_versions now.
+        // If specific mapping was needed, the UI for it is missing.
 
         let files = null;
         let dependencies = null;
         let mods = null;
+        
+        const isModPack = modType === 'modpack';
 
         if (isModPack) {
             mods = [];
@@ -398,7 +416,8 @@
 
         const version = {
             id: versionId,
-            target_version,
+            target_version, // Include for struct compatibility
+            game_versions,
             files,
             dependencies,
             mods
