@@ -119,6 +119,9 @@ type State struct {
 	ErrorText        *widget.RichText
 
 	ActiveProfile binding.String
+	SharedURI     string
+
+	OnSharedURIReceived func(uri string)
 }
 
 func (s *State) ModInstallDir() string {

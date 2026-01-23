@@ -14,6 +14,7 @@ import (
 
 type Config struct {
 	stateOptions []uicommon.Option
+	stateInits   []func(*uicommon.State)
 }
 
 func WithStateOptions(options ...uicommon.Option) func(*Config) {
@@ -22,7 +23,13 @@ func WithStateOptions(options ...uicommon.Option) func(*Config) {
 	}
 }
 
-func Main(w fyne.Window, version string, cfg ...func(*Config)) error {
+func WithStateInit(init func(*uicommon.State)) func(*Config) {
+	return func(cfg *Config) {
+		cfg.stateInits = append(cfg.stateInits, init)
+	}
+}
+
+func Main(w fyne.Window, version string, sharedURI string, cfg ...func(*Config)) error {
 	var config Config
 
 	for _, c := range cfg {
@@ -32,6 +39,11 @@ func Main(w fyne.Window, version string, cfg ...func(*Config)) error {
 	state, err := uicommon.NewState(w, version, config.stateOptions...)
 	if err != nil {
 		return err
+	}
+	state.SharedURI = sharedURI
+
+	for _, init := range config.stateInits {
+		init(state)
 	}
 
 	state.CheckInstalled()

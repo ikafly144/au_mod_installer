@@ -1,9 +1,12 @@
 package core
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/ikafly144/au_mod_installer/client/rest"
@@ -95,4 +98,35 @@ func (a *App) ClearModCache() error {
 		return os.RemoveAll(cacheDir)
 	}
 	return nil
+}
+
+func (a *App) HandleSharedProfile(uri string) (*profile.Profile, error) {
+	if !strings.HasPrefix(uri, "mod-of-us://profile/") {
+		return nil, fmt.Errorf("invalid URI scheme")
+	}
+
+	dataStr := strings.TrimPrefix(uri, "mod-of-us://profile/")
+	data, err := base64.URLEncoding.DecodeString(dataStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode profile data: %w", err)
+	}
+
+	var prof profile.Profile
+	if err := json.Unmarshal(data, &prof); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal profile data: %w", err)
+	}
+
+	// Reset ID to avoid collision if it's a known one, but maybe better to let user decide?
+	// For now, let's keep it but user should confirm import.
+	return &prof, nil
+}
+
+func (a *App) ExportProfile(prof profile.Profile) (string, error) {
+	data, err := json.Marshal(prof)
+	if err != nil {
+		return "", err
+	}
+
+	dataStr := base64.URLEncoding.EncodeToString(data)
+	return "mod-of-us://profile/" + dataStr, nil
 }

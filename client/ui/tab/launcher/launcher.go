@@ -71,6 +71,56 @@ func (l *Launcher) init() {
 	l.setupProfileList()
 	l.refreshProfiles()
 	l.checkLaunchState()
+	l.checkSharedURI()
+
+	l.state.OnSharedURIReceived = func(uri string) {
+		l.state.SharedURI = uri
+		fyne.Do(l.checkSharedURI)
+	}
+}
+
+func (l *Launcher) shareProfile(prof profile.Profile) {
+	uri, err := l.state.Core.ExportProfile(prof)
+	if err != nil {
+		dialog.ShowError(err, l.state.Window)
+		return
+	}
+	l.state.Window.Clipboard().SetContent(uri)
+	dialog.ShowInformation(lang.LocalizeKey("common.success", "Success"), lang.LocalizeKey("profile.shared_clipboard", "Share URI copied to clipboard."), l.state.Window)
+}
+
+func (l *Launcher) checkSharedURI() {
+	if l.state.SharedURI == "" {
+		return
+	}
+
+	prof, err := l.state.Core.HandleSharedProfile(l.state.SharedURI)
+	if err != nil {
+		dialog.ShowError(err, l.state.Window)
+		return
+	}
+
+	// Reset SharedURI so we don't prompt again on refresh
+	l.state.SharedURI = ""
+
+	dialog.ShowConfirm(lang.LocalizeKey("profile.import_title", "Import Profile"), lang.LocalizeKey("profile.import_message", "Do you want to import the shared profile '{{.Name}}'?", map[string]any{"Name": prof.Name}), func(confirm bool) {
+		if !confirm {
+			return
+		}
+
+		// Ensure unique ID if collision
+		if _, found := l.state.ProfileManager.Get(prof.ID); found {
+			prof.ID = uuid.New()
+			prof.Name = prof.Name + " (Imported)"
+		}
+		prof.LastUpdated = time.Now()
+
+		if err := l.state.ProfileManager.Add(*prof); err != nil {
+			dialog.ShowError(err, l.state.Window)
+			return
+		}
+		l.refreshProfiles()
+	}, l.state.Window)
 }
 
 func (l *Launcher) setupProfileList() {
@@ -117,6 +167,9 @@ func (l *Launcher) setupProfileList() {
 					}),
 					fyne.NewMenuItem(lang.LocalizeKey("profile.sync", "Sync (Clear & Re-download)"), func() {
 						l.syncProfile(prof)
+					}),
+					fyne.NewMenuItem(lang.LocalizeKey("profile.share", "Share"), func() {
+						l.shareProfile(prof)
 					}),
 					fyne.NewMenuItem(lang.LocalizeKey("profile.duplicate", "Duplicate"), func() {
 						l.showDuplicateDialog(prof)

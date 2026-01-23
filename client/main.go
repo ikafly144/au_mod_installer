@@ -3,9 +3,12 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"flag"
+	"io"
 	"log/slog"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,15 +22,26 @@ import (
 	"github.com/ikafly144/au_mod_installer/client/ui"
 	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
 	"github.com/ikafly144/au_mod_installer/common/versioning"
+	"github.com/Microsoft/go-winio"
 	"github.com/nightlyone/lockfile"
 	"github.com/sqweek/dialog"
 	"github.com/zzl/go-win32api/win32"
 	"golang.org/x/sys/windows"
+	"golang.org/x/sys/windows/registry"
 )
 
 var DefaultServer = "https://modofus.sabafly.net/v1"
+var pipeName = `\\.\pipe\au_mod_installer_ipc`
 
 func main() {
+	sharedURI := ""
+	for _, arg := range os.Args[1:] {
+		if strings.HasPrefix(arg, "mod-of-us://") {
+			sharedURI = arg
+			break
+		}
+	}
+
 	lockPath := filepath.Join(os.Getenv("PROGRAMDATA"), "au_mod_installer.lock")
 	lock, err := lockfile.New(lockPath)
 	if err != nil {
@@ -37,6 +51,17 @@ func main() {
 	err = lock.TryLock()
 	if err != nil {
 		slog.Error("Another instance is already running", "error", err)
+		
+		// Try to send URI to the existing instance via IPC
+		if sharedURI != "" {
+			conn, err := winio.DialPipe(pipeName, nil)
+			if err == nil {
+				defer conn.Close()
+				_, _ = conn.Write([]byte(sharedURI + "\n"))
+				slog.Info("Sent shared URI to existing instance", "uri", sharedURI)
+			}
+		}
+
 		owner, err := lock.GetOwner()
 		if current, err1 := os.FindProcess(os.Getpid()); err == nil && err1 == nil {
 			slog.Info("Lockfile owned by", "pid", owner.Pid)
@@ -94,13 +119,13 @@ func main() {
 			slog.Error("Failed to unlock lockfile", "error", err)
 		}
 	}()
-	mainErr := realMain()
+	mainErr := realMain(sharedURI)
 	if mainErr != nil {
 		os.Exit(1)
 	}
 }
 
-func realMain() error {
+func realMain(sharedURI string) error {
 	var (
 		localMode string
 		server    string
@@ -111,6 +136,10 @@ func realMain() error {
 	flag.StringVar(&server, "server", DefaultServer, "URL of the mod server")
 	flag.BoolVar(&offline, "offline", false, "Run in offline mode (only uninstallation and management of installed mods are available)")
 	flag.Parse()
+
+	if err := registerScheme(); err != nil {
+		slog.Error("Failed to register scheme", "error", err)
+	}
 
 	a := app.New()
 
@@ -169,14 +198,91 @@ func realMain() error {
 		}
 	}
 
-	if err := ui.Main(w, version,
+	if err := ui.Main(w, version, sharedURI,
 		ui.WithStateOptions(
 			uicommon.WithRestClient(client),
 		),
+		ui.WithStateInit(func(s *uicommon.State) {
+			go startIPCListener(s)
+		}),
 	); err != nil {
 		slog.Error("Failed to initialize UI", "error", err)
 		dialog.Message(lang.LocalizeKey("error.ui_initialization_failed", "Failed to initialize UI: %s"), err.Error()).Title(lang.LocalizeKey("app.error", "Error")).Error()
 		return err
 	}
+	return nil
+}
+
+func startIPCListener(s *uicommon.State) {
+	config := &winio.PipeConfig{
+		MessageMode:      true,
+		InputBufferSize:  4096,
+		OutputBufferSize: 4096,
+	}
+	ln, err := winio.ListenPipe(pipeName, config)
+	if err != nil {
+		slog.Error("Failed to listen on pipe", "error", err)
+		return
+	}
+	defer ln.Close()
+
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			slog.Error("Failed to accept pipe connection", "error", err)
+			continue
+		}
+		go func(c net.Conn) {
+			defer c.Close()
+			reader := bufio.NewReader(c)
+			for {
+				line, err := reader.ReadString('\n')
+				if err != nil {
+					if err != io.EOF {
+						slog.Error("Failed to read from pipe", "error", err)
+					}
+					break
+				}
+				uri := strings.TrimSpace(line)
+				if uri != "" && s.OnSharedURIReceived != nil {
+					slog.Info("Received shared URI via IPC", "uri", uri)
+					s.OnSharedURIReceived(uri)
+				}
+			}
+		}(conn)
+	}
+}
+
+func registerScheme() error {
+	execPath, err := os.Executable()
+	if err != nil {
+		return err
+	}
+
+	key, _, err := registry.CreateKey(registry.CURRENT_USER, `Software\Classes\mod-of-us`, registry.ALL_ACCESS)
+	if err != nil {
+		return err
+	}
+	defer key.Close()
+
+	if err := key.SetStringValue("", "URL:Mod of Us Protocol"); err != nil {
+		return err
+	}
+	if err := key.SetStringValue("URL Protocol", ""); err != nil {
+		return err
+	}
+
+	iconKey, _, err := registry.CreateKey(key, "DefaultIcon", registry.ALL_ACCESS)
+	if err == nil {
+		_ = iconKey.SetStringValue("", "\""+execPath+"\",0")
+		iconKey.Close()
+	}
+
+	shellKey, _, err := registry.CreateKey(key, `shell\open\command`, registry.ALL_ACCESS)
+	if err == nil {
+		_ = shellKey.SetStringValue("", "\""+execPath+"\" \"%1\"")
+		shellKey.Close()
+	}
+
 	return nil
 }
