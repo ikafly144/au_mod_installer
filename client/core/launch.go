@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/google/uuid"
+
 	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 )
@@ -35,7 +36,7 @@ func (a *App) ResolveDependencies(initialMods []modmgr.ModVersion) ([]modmgr.Mod
 // PrepareLaunch prepares the game for launch by preparing the profile directory.
 func (a *App) PrepareLaunch(gamePath string, profileID uuid.UUID) (string, func() error, error) {
 	if _, err := os.Stat(filepath.Join(gamePath, "Among Us.exe")); os.IsNotExist(err) {
-		return "", nil, fmt.Errorf("Among Us executable not found: %w", err)
+		return "", nil, fmt.Errorf("among Us executable not found: %w", err)
 	}
 
 	if profileID == uuid.Nil {
@@ -67,10 +68,10 @@ func (a *App) PrepareLaunch(gamePath string, profileID uuid.UUID) (string, func(
 	// Check profile compatibility
 	if meta, err := modmgr.GetProfileMetadata(profileDir); err == nil && meta != nil {
 		if meta.GameVersion != "" && meta.GameVersion != gameVersion {
-			return "", nil, fmt.Errorf("game version mismatch: profile installed for %s, but running %s. Please sync profile.", meta.GameVersion, gameVersion)
+			return "", nil, fmt.Errorf("game version mismatch: profile installed for %s, but running %s. please sync profile", meta.GameVersion, gameVersion)
 		}
 		if meta.BinaryType != "" && meta.BinaryType != binaryType {
-			return "", nil, fmt.Errorf("binary type mismatch: profile installed for %s, but running %s. Please sync profile.", meta.BinaryType, binaryType)
+			return "", nil, fmt.Errorf("binary type mismatch: profile installed for %s, but running %s. please sync profile", meta.BinaryType, binaryType)
 		}
 	}
 

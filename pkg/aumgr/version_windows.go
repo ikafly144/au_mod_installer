@@ -41,7 +41,7 @@ func readVersionFile(path string) (string, error) {
 		return "", fmt.Errorf("failed to convert path to UTF16: %w", err)
 	}
 	proc := dll.NewProc("ReadVersionFile")
-	ret, _, err := proc.Call(uintptr(unsafe.Pointer(pathPtr)), uintptr(unsafe.Pointer(&buffer[0])), uintptr(bufferSize))
+	ret, _, _ := proc.Call(uintptr(unsafe.Pointer(pathPtr)), uintptr(unsafe.Pointer(&buffer[0])), uintptr(bufferSize))
 	if ret != 0 {
 		return "", fmt.Errorf("failed to read version file: error code %d", ret)
 	}

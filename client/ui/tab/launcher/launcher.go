@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -21,6 +22,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/google/uuid"
+
 	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
 	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
@@ -271,8 +273,12 @@ func (l *Launcher) runLaunch() {
 
 	l.progressBar.Canvas().Show()
 	l.launchButton.Disable()
-	l.state.CanInstall.Set(false)
-	l.state.CanLaunch.Set(false) // Disable launch while downloading
+	if err := l.state.CanInstall.Set(false); err != nil {
+		slog.Warn("Failed to set canInstall", "error", err)
+	}
+	if err := l.state.CanLaunch.Set(false); err != nil {
+		slog.Warn("Failed to set canLaunch", "error", err)
+	} // Disable launch while downloading
 
 	go func() {
 		defer fyne.Do(func() {
@@ -371,8 +377,12 @@ func (l *Launcher) syncProfile(prof profile.Profile) {
 
 	l.progressBar.Canvas().Show()
 	l.launchButton.Disable()
-	l.state.CanInstall.Set(false)
-	l.state.CanLaunch.Set(false)
+	if err := l.state.CanInstall.Set(false); err != nil {
+		slog.Warn("Failed to set canInstall", "error", err)
+	}
+	if err := l.state.CanLaunch.Set(false); err != nil {
+		slog.Warn("Failed to set canLaunch", "error", err)
+	}
 
 	go func() {
 		defer fyne.Do(func() {
@@ -631,7 +641,9 @@ func (l *Launcher) openProfileEditor(prof profile.Profile) {
 			}
 
 			if oldID != currentProfile.ID {
-				l.state.ProfileManager.Remove(oldID)
+				if err := l.state.ProfileManager.Remove(oldID); err != nil {
+					slog.Warn("Failed to remove old profile", "error", err)
+				}
 			}
 
 			l.refreshProfiles()
@@ -687,7 +699,7 @@ func (l *Launcher) showAddModDialog(onAdd func([]modmgr.ModVersion)) {
 		contentBox.Objects = nil
 		for _, mod := range mods {
 			mod := mod // capture loop var
-			
+
 			// Create Item UI
 			imgRect := canvas.NewRectangle(theme.Color(theme.ColorNameDisabled))
 			imgRect.SetMinSize(fyne.NewSquareSize(80))
@@ -717,7 +729,7 @@ func (l *Launcher) showAddModDialog(onAdd func([]modmgr.ModVersion)) {
 			bg.StrokeColor = theme.Color(theme.ColorNameButton)
 			bg.StrokeWidth = 1
 			bg.CornerRadius = theme.InputRadiusSize()
-			
+
 			item := container.NewStack(bg, container.NewPadded(card))
 			contentBox.Add(item)
 		}

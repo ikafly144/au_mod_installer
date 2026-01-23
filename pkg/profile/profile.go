@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 )
 

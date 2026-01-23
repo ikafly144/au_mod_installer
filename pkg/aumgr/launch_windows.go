@@ -26,7 +26,7 @@ func LaunchAmongUs(launcherType LauncherType, amongUsDir string, dllDir string, 
 func launchDefault(amongUsDir string, dllDir string, args ...string) error {
 	exePath := filepath.Join(amongUsDir, "Among Us.exe")
 	if _, err := os.Stat(exePath); os.IsNotExist(err) {
-		return fmt.Errorf("Among Us executable not found: %s", exePath)
+		return fmt.Errorf("among Us executable not found: %s", exePath)
 	}
 
 	finalArgs := make([]string, 0, len(args)+8)

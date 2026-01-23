@@ -38,18 +38,21 @@ func (s *State) InstallMods(modId string, versionData modmgr.ModVersion, progres
 	slog.Info("Starting mod installation", "modId", modId, "versionId", versionData.ID)
 
 	var versions []modmgr.ModVersion
-	if len(versionData.Mods) > 0 {
-		for _, modPack := range versionData.Mods {
-			modVersion, err := s.ModVersion(modPack.ID, modPack.Version)
-			if err != nil {
-				slog.Error("Failed to get mod version from mod pack", "modPackId", modPack.ID, "version", modPack.Version, "error", err)
-				return err
+	/*
+		if len(versionData.Mods) > 0 {
+			for _, modPack := range versionData.Mods {
+				modVersion, err := s.ModVersion(modPack.ID, modPack.Version)
+				if err != nil {
+					slog.Error("Failed to get mod version from mod pack", "modPackId", modPack.ID, "version", modPack.Version, "error", err)
+					return err
+				}
+				versions = append(versions, *modVersion)
 			}
-			versions = append(versions, *modVersion)
+		} else {
+			versions = append(versions, versionData)
 		}
-	} else {
-		versions = append(versions, versionData)
-	}
+	*/
+	versions = append(versions, versionData)
 
 	resolved := make(map[string]modmgr.ModVersion)
 	unresolved := make(map[string]struct{})

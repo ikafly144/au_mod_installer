@@ -54,7 +54,7 @@ func getEpicManifest() (Manifest, error) {
 		return nil, err
 	}
 	if amongUsManifest == nil {
-		return nil, errors.New("Among Us manifest not found in Epic Games launcher")
+		return nil, errors.New("among Us manifest not found in Epic Games launcher")
 	}
 	return amongUsManifest, nil
 }

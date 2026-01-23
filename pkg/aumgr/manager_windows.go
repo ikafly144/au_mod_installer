@@ -23,7 +23,7 @@ func GetAmongUsDir() (string, error) {
 	val = strings.Trim(strings.TrimSpace(val[0:len(val)-4]), "\"")
 	val, ok := strings.CutSuffix(val, "Among Us_Data\\Resources\\AmongUsHelper.exe")
 	if !ok {
-		return "", fmt.Errorf("Among Us Helper is not supported %s", val)
+		return "", fmt.Errorf("among Us Helper is not supported %s", val)
 	}
 	return val, nil
 }

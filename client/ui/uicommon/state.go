@@ -185,7 +185,9 @@ func (i *State) RefreshModInstallation() {
 	// Here we should set it if different?
 	currentInstalled, _ := i.ModInstalled.Get()
 	if currentInstalled != isInstalled {
-		i.ModInstalled.Set(isInstalled)
+		if err := i.ModInstalled.Set(isInstalled); err != nil {
+			slog.Warn("Failed to set modInstalled", "error", err)
+		}
 	}
 
 	if !isInstalled {

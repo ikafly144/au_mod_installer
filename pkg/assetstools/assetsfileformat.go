@@ -386,11 +386,12 @@ func (a *AssetFileExternal) Read(r *AssetsFileReader, version uint32) error {
 	// pop up in the future. Also, the reason I don't just replace all "library"
 	// with "Resources" is so that when saving, I can change it back to the original
 	// (like how unity_builtin_extra goes back to "resources", not "library")
-	if a.PathName == "resources/unity_builtin_extra" {
+	switch a.PathName {
+	case "resources/unity_builtin_extra":
 		a.PathName = "Resources/unity_builtin_extra"
-	} else if a.PathName == "library/unity default resources" || a.PathName == "Library/unity default resources" {
+	case "library/unity default resources", "Library/unity default resources":
 		a.PathName = "Resources/unity default resources"
-	} else if a.PathName == "library/unity editor resources" || a.PathName == "Library/unity editor resources" {
+	case "library/unity editor resources", "Library/unity editor resources":
 		a.PathName = "Resources/unity editor resources"
 	}
 	return nil
@@ -705,7 +706,7 @@ func (h Hash128) IsZero() bool {
 func (h Hash128) String() string {
 	hex := new(strings.Builder)
 	for _, b := range h.data {
-		hex.WriteString(fmt.Sprintf("%02x", b))
+		fmt.Fprintf(hex, "%02x", b)
 	}
 	return hex.String()
 }

@@ -19,15 +19,16 @@ import (
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/lang"
 	"github.com/Microsoft/go-winio"
-	"github.com/ikafly144/au_mod_installer/client/rest"
-	"github.com/ikafly144/au_mod_installer/client/ui"
-	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
-	"github.com/ikafly144/au_mod_installer/common/versioning"
 	"github.com/nightlyone/lockfile"
 	"github.com/sqweek/dialog"
 	"github.com/zzl/go-win32api/win32"
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
+
+	"github.com/ikafly144/au_mod_installer/client/rest"
+	"github.com/ikafly144/au_mod_installer/client/ui"
+	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
+	"github.com/ikafly144/au_mod_installer/common/versioning"
 )
 
 var DefaultServer = "https://modofus.sabafly.net/v1"

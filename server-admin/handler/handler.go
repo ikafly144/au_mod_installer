@@ -40,7 +40,7 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 	}{
 		{Value: string(modmgr.ModTypeMod), Label: "Mod"},
 		{Value: string(modmgr.ModTypeLibrary), Label: "Library"},
-		{Value: string(modmgr.ModTypeModPack), Label: "ModPack"},
+		// {Value: string(modmgr.ModTypeModPack), Label: "ModPack"},
 	}
 
 	data := map[string]any{

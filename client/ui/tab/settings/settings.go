@@ -16,6 +16,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/google/uuid"
+
 	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
 	"github.com/ikafly144/au_mod_installer/common/versioning"
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
@@ -295,7 +296,7 @@ func (s *Settings) importProfile() {
 		name := entry.Text
 		mods := make(map[string]modmgr.ModVersion)
 		for _, m := range installationInfo.InstalledMods {
-			mods[m.ModVersion.ID] = m.ModVersion
+			mods[m.ID] = m.ModVersion
 		}
 
 		prof := profile.Profile{

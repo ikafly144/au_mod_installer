@@ -19,6 +19,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/google/uuid"
+
 	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 	"github.com/ikafly144/au_mod_installer/pkg/profile"
@@ -31,9 +32,9 @@ type Repository struct {
 	state *uicommon.State
 	mu    sync.Mutex
 
-	lastModID     string
-	modsBind      binding.List[modmgr.Mod]
-	
+	lastModID string
+	modsBind  binding.List[modmgr.Mod]
+
 	// Containers
 	mainContainer *fyne.Container // Stack container for switching views
 	listView      *fyne.Container // The list view container
@@ -101,13 +102,11 @@ func NewRepository(state *uicommon.State) *Repository {
 	)
 
 	// Initialize Detail View (empty for now)
-	repo.detailView = container.NewMax()
+	repo.detailView = container.NewStack()
 
-	// Main container stack
 	repo.mainContainer = container.NewStack(repo.listView, repo.detailView)
 	repo.detailView.Hide()
 
-	repo.init()
 	return repo
 }
 
@@ -147,7 +146,7 @@ func (r *Repository) updateModList(filter string) {
 		// Create List Item
 		imgRect := canvas.NewRectangle(theme.Color(theme.ColorNameDisabled))
 		imgRect.SetMinSize(fyne.NewSquareSize(80))
-		// Use a container that centers the image to maintain its aspect ratio 
+		// Use a container that centers the image to maintain its aspect ratio
 		// while the BorderLayout stretches the container itself.
 		img := container.NewCenter(imgRect)
 
@@ -168,13 +167,13 @@ func (r *Repository) updateModList(filter string) {
 		card := uicommon.NewTappableContainer(content, func() {
 			r.showModDetails(mod)
 		})
-		
+
 		// Add some padding/background similar to a Card
 		bg := canvas.NewRectangle(theme.Color(theme.ColorNameBackground))
 		bg.StrokeColor = theme.Color(theme.ColorNameButton)
 		bg.StrokeWidth = 1
 		bg.CornerRadius = theme.InputRadiusSize()
-		
+
 		item := container.NewStack(bg, container.NewPadded(card))
 
 		objs = append(objs, item)
@@ -202,13 +201,13 @@ func (r *Repository) showModDetails(mod modmgr.Mod) {
 
 	headerText := container.NewVBox(
 		widget.NewLabelWithStyle(mod.Name, fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		widget.NewLabel(lang.LocalizeKey("repository.author", "Author: {{.Author}}", map[string]interface{}{"Author": mod.Author})),
+		widget.NewLabel(lang.LocalizeKey("repository.author", "Author: {{.Author}}", map[string]any{"Author": mod.Author})),
 		widget.NewHyperlink(lang.LocalizeKey("repository.website", "Website"), nil),
 		widget.NewButton(lang.LocalizeKey("repository.install_latest", "Install Latest"), func() {
 			r.installModVersion(mod, mod.LatestVersion)
 		}),
 	)
-	
+
 	header := container.New(layout.NewBorderLayout(nil, nil, img, nil),
 		img,
 		headerText,
@@ -223,7 +222,7 @@ func (r *Repository) showModDetails(mod modmgr.Mod) {
 	versionsTab := container.NewTabItem(lang.LocalizeKey("repository.tab.versions", "Versions"),
 		container.NewVScroll(versionsList),
 	)
-	
+
 	// Loading versions
 	versionsList.Add(widget.NewProgressBarInfinite())
 	go func() {
@@ -265,14 +264,14 @@ func (r *Repository) showModDetails(mod modmgr.Mod) {
 
 	r.detailView.Objects = []fyne.CanvasObject{finalContent}
 	r.detailView.Refresh()
-	
+
 	r.listView.Hide()
 	r.detailView.Show()
 }
 
 func (r *Repository) installModVersion(mod modmgr.Mod, versionID string) {
 	r.stateLabel.Hide()
-	
+
 	profiles := r.state.ProfileManager.List()
 	if len(profiles) == 0 {
 		r.state.SetError(fmt.Errorf("%s", lang.LocalizeKey("repository.error.no_profiles", "No profiles found. Please create one in the Launcher tab.")))
@@ -329,7 +328,9 @@ func (r *Repository) installModVersion(mod modmgr.Mod, versionID string) {
 			go func() {
 				targetProfile, found := r.state.ProfileManager.Get(targetID)
 				if !found {
-					r.state.SetError(fmt.Errorf("Profile not found"))
+					fyne.Do(func() {
+						r.state.SetError(fmt.Errorf("profile not found"))
+					})
 					return
 				}
 

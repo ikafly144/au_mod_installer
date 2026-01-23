@@ -65,10 +65,7 @@ func findProcessByName(processes []WindowsProcess, name string) *WindowsProcess 
 func newWindowsProcess(e *windows.ProcessEntry32) WindowsProcess {
 	// Find when the string ends for decoding
 	end := 0
-	for {
-		if e.ExeFile[end] == 0 {
-			break
-		}
+	for e.ExeFile[end] != 0 {
 		end++
 	}
 
