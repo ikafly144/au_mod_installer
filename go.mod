@@ -8,12 +8,13 @@ require (
 	github.com/TheTitanrain/w32 v0.0.0-20200114052255-2654d97dbd3d
 	github.com/google/go-github/v80 v80.0.0
 	github.com/google/uuid v1.6.0
-	github.com/josephspurrier/goversioninfo v1.4.0
+	github.com/josephspurrier/goversioninfo v1.5.0
 	github.com/minio/selfupdate v0.6.0
 	github.com/nightlyone/lockfile v1.0.0
 	github.com/sqweek/dialog v0.0.0-20240226140203-065105509627
-	github.com/valkey-io/valkey-go v1.0.69
+	github.com/valkey-io/valkey-go v1.0.70
 	github.com/zzl/go-win32api v1.2.0
+	github.com/zzl/go-win32api/v2 v2.2.0
 	golang.org/x/mod v0.31.0
 	golang.org/x/sys v0.39.0
 )
@@ -21,7 +22,7 @@ require (
 require (
 	aead.dev/minisign v0.3.0 // indirect
 	fyne.io/systray v1.11.1-0.20250603113521-ca66a66d8b58 // indirect
-	fyne.io/tools v1.6.2 // indirect
+	fyne.io/tools v1.7.0 // indirect
 	github.com/BurntSushi/toml v1.5.0 // indirect
 	github.com/akavel/rsrc v0.10.2 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
