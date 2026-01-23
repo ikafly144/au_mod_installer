@@ -25,6 +25,14 @@ type Repository struct {
 
 // DeleteMod implements [repository.ModRepository].
 func (r *Repository) DeleteMod(ctx context.Context, modID string) error {
+	// Delete all versions first
+	versions, err := r.GetAllModVersions(ctx, modID)
+	if err == nil {
+		for _, v := range versions {
+			_ = r.DeleteVersion(ctx, modID, v.ID)
+		}
+	}
+
 	// Delete mod data
 	key := keyModPrefix + modID
 	if err := r.client.Do(ctx, r.client.B().Del().Key(key).Build()).Error(); err != nil {
@@ -326,10 +334,10 @@ func (r *Repository) GetModVersions(ctx context.Context, modID string, limit int
 		if err != nil {
 			return nil, err
 		}
-		if version.ModID == "" {
-			version.ModID = modID
-		}
 		if version != nil {
+			if version.ModID == "" {
+				version.ModID = modID
+			}
 			versions = append(versions, *version)
 		}
 	}

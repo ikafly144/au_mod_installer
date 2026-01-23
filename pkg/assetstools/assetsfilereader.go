@@ -24,12 +24,12 @@ func (r *AssetsFileReader) byteOrder() binary.ByteOrder {
 }
 
 func (r *AssetsFileReader) ReadBoolean() (bool, error) {
-	var value byte
-	_, err := r.reader.Read([]byte{value})
+	var buf [1]byte
+	_, err := r.reader.Read(buf[:])
 	if err != nil {
 		return false, err
 	}
-	return value != 0, nil
+	return buf[0] != 0, nil
 }
 
 func (r *AssetsFileReader) ReadInt16() (int16, error) {

@@ -56,7 +56,16 @@ func launchDefault(amongUsDir string, dllDir string, args ...string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	slog.Info("Launching Among Us", "path", exePath, "args", finalArgs)
+	// Redact sensitive info in logs
+	logArgs := make([]string, len(finalArgs))
+	copy(logArgs, finalArgs)
+	for i, arg := range logArgs {
+		if len(arg) > 15 && arg[:15] == "-AUTH_PASSWORD=" {
+			logArgs[i] = "-AUTH_PASSWORD=*****"
+		}
+	}
+
+	slog.Info("Launching Among Us", "path", exePath, "args", logArgs)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to start Among Us: %w", err)
 	}

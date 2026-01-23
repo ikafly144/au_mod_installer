@@ -321,48 +321,62 @@
 
         if (versionData) {
             // Populate Target Versions
+            // Migration: show unique versions from target_version
             if (versionData.target_version) {
-                Object.entries(versionData.target_version).forEach(([k, v]) => addTarget(k, v));
+                 const seen = new Set();
+                 Object.values(versionData.target_version).forEach(v => {
+                     if (!seen.has(v)) {
+                         addGameVersion(v);
+                         seen.add(v);
+                     }
+                 });
             }
-Game Versions
+            
             if (versionData.game_versions && versionData.game_versions.length > 0) {
+                document.getElementById('game-version-list').innerHTML = ''; // Clear migration data if new data exists
                 versionData.game_versions.forEach(v => addGameVersion(v));
-            } else if (versionData.target_version) {
-                // Migration: show unique versions from target_version
-                const seen = new Set();
-                Object.values(versionData.target_version).forEach(v => {
-                    if (!seen.has(v)) {
-                        addGameVersion(v);
-                        seen.add(v);
-                    }
-                }
-            } else {
+            }
+
+            if (!versionData.target_version && !versionData.game_versions) {
                 (versionData.files || []).forEach(f => addFile(f));
                 (versionData.dependencies || []).forEach(d => addDep(d));
+            } else {
+                // Restore files and deps even if game versions exist
+                (versionData.files || []).forEach(f => addFile(f));
+                (versionData.dependencies || []).forEach(d => addDep(d));
+            }
+            
+            if (versionData.mods) {
+                 versionData.mods.forEach(m => addMod(m));
             }
         }
     }
 
     async function saveVersion() {
-        const editiGame Versions
-        const game_versions = [];
-        document.querySelectorAll('#game-version-list .dynamic-item').forEach(item => {
-            const ver = item.querySelector('.game-version').value.trim();
-            if (ver) game_versions.push(ver)
+        const versionId = document.getElementById('version-id').value.trim();
+        const editing = document.getElementById('version-editing').value;
+
+        if (!versionId) {
+            showToast('バージョンIDを入力してください', 'error');
             return;
         }
 
-        // Collect Target Versions
-        const target_version = {};
-        document.querySelectorAll('#target-list .dynamic-item').forEach(item => {
-            const launcher = item.querySelector('.target-launcher').value;
-            const ver = item.querySelector('.target-version').value.trim();
-            if (launcher && ver) target_version[launcher] = ver;
+        const game_versions = [];
+        document.querySelectorAll('#game-version-list .dynamic-item').forEach(item => {
+            const ver = item.querySelector('.game-version').value.trim();
+            if (ver) game_versions.push(ver);
         });
+
+        // Migration: target_version is deprecated, map from game_versions if needed or leave empty
+        const target_version = {}; 
+        // Simple mapping for backward compatibility if needed, but primarily using game_versions now.
+        // If specific mapping was needed, the UI for it is missing.
 
         let files = null;
         let dependencies = null;
         let mods = null;
+        
+        const isModPack = modType === 'modpack';
 
         if (isModPack) {
             mods = [];
@@ -394,7 +408,7 @@ Game Versions
                 if (!id) return;
                 dependencies.push({
                     id,
-            game_versionsn: item.querySelector('.dep-version').value.trim(),
+                    version: item.querySelector('.dep-version').value.trim(),
                     type: item.querySelector('.dep-type').value
                 });
             });
@@ -402,7 +416,8 @@ Game Versions
 
         const version = {
             id: versionId,
-            target_version,
+            target_version, // Include for struct compatibility
+            game_versions,
             files,
             dependencies,
             mods

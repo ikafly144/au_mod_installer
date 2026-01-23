@@ -153,7 +153,9 @@ func DownloadMods(cacheDir string, modVersions []ModVersion, binaryType aumgr.Bi
 		if _, err := os.Stat(modCacheDir); err == nil {
 			if !force {
 				slog.Info("Mod already cached", "modId", modVersions[i].ModID, "versionId", modVersions[i].ID)
-				progress.SetValue(progress.GetValue() + (float64(modVersions[i].CompatibleFilesCount(binaryType)) / float64(totalDownloadCount)))
+				if progress != nil {
+					progress.SetValue(progress.GetValue() + (float64(modVersions[i].CompatibleFilesCount(binaryType)) / float64(totalDownloadCount)))
+				}
 				continue
 			}
 			slog.Info("Force re-downloading mod, clearing cache", "modId", modVersions[i].ModID, "versionId", modVersions[i].ID)
@@ -237,8 +239,12 @@ func DownloadMods(cacheDir string, modVersions []ModVersion, binaryType aumgr.Bi
 					return err
 				}
 				defer destFile.Close()
+				startVal := 0.0
+				if progress != nil {
+					startVal = progress.GetValue()
+				}
 				buf := &ProgressWrapper{
-					start:    progress.GetValue(),
+					start:    startVal,
 					goal:     uint64(contentLength),
 					scale:    (1.0 / float64(totalDownloadCount)),
 					progress: progress,
@@ -480,7 +486,9 @@ func InstallMod(modInstallLocation *os.Root, gameVersion string, launcherType au
 			if shouldSkip {
 				slog.Info("Skipping already installed mod", "modId", modVersions[i].ModID, "versionId", modVersions[i].ID)
 				installation.InstalledMods[i] = remainModInfo
-				progress.SetValue(progress.GetValue() + (1.0 / float64(totalDownloadCount)))
+				if progress != nil {
+					progress.SetValue(progress.GetValue() + (1.0 / float64(totalDownloadCount)))
+				}
 				continue
 			}
 		}
@@ -517,8 +525,12 @@ func InstallMod(modInstallLocation *os.Root, gameVersion string, launcherType au
 					return nil, err
 				}
 				defer destFile.Close()
+				startVal := 0.0
+				if progress != nil {
+					startVal = progress.GetValue()
+				}
 				buf := &ProgressWrapper{
-					start:    progress.GetValue(),
+					start:    startVal,
 					goal:     uint64(contentLength),
 					scale:    (1.0 / float64(totalDownloadCount)),
 					progress: progress,
@@ -721,8 +733,12 @@ func (pw *ProgressWriter) Write(data []byte) (n int, err error) {
 }
 
 func extractZip(reader io.Reader, contentLength int64, destRoot *os.Root, progress progress.Progress, n int) ([]string, error) {
+	startVal := 0.0
+	if progress != nil {
+		startVal = progress.GetValue()
+	}
 	buf := &ProgressWriter{
-		start:    progress.GetValue(),
+		start:    startVal,
 		scale:    (1.0 / float64(n)) * 0.9,
 		goal:     uint64(contentLength),
 		progress: progress,
@@ -748,7 +764,7 @@ func extractZip(reader io.Reader, contentLength int64, destRoot *os.Root, progre
 	}
 	filesCount := len(zipReader.File)
 	i := 0
-	start := progress.GetValue()
+	start := startVal
 	var extractErr error
 	var extractFiles []string
 	for _, f := range zipReader.File {

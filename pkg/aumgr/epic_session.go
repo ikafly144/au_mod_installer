@@ -16,7 +16,7 @@ type EpicSessionManager struct {
 }
 
 func NewEpicSessionManager(storagePath string) (*EpicSessionManager, error) {
-	if err := os.MkdirAll(storagePath, 0755); err != nil {
+	if err := os.MkdirAll(storagePath, 0700); err != nil {
 		return nil, fmt.Errorf("failed to create storage directory: %w", err)
 	}
 	m := &EpicSessionManager{
@@ -60,7 +60,7 @@ func (m *EpicSessionManager) Save(session *EpicSession) error {
 		return fmt.Errorf("failed to marshal epic session: %w", err)
 	}
 
-	if err := os.WriteFile(m.path, data, 0644); err != nil {
+	if err := os.WriteFile(m.path, data, 0600); err != nil {
 		return fmt.Errorf("failed to write epic session: %w", err)
 	}
 

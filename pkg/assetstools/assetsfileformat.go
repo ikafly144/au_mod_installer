@@ -284,7 +284,8 @@ func (m *AssetsFileMetadata) read(r *AssetsFileReader, version uint32) (err erro
 		}
 		fileInfo.TypeId = typeId
 
-		m.quickLookupAssetInfo[int64(typeId)] = fileInfo
+		m.AssetInfos[i] = *fileInfo
+		m.quickLookupAssetInfo[fileInfo.PathId] = fileInfo
 	}
 
 	scriptTypeCount, err := r.ReadInt32()
@@ -644,7 +645,7 @@ func (t *TypeTreeType) Read(r *AssetsFileReader, version uint32, hasTypeTree boo
 		t.StringBufferBytes = stringBufferBytes
 
 		if version >= 21 {
-			if isRefType {
+			if !isRefType {
 				dependenciesCount, err := r.ReadInt32()
 				if err != nil {
 					return err
