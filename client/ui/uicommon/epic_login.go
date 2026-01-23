@@ -48,13 +48,13 @@ func (s *State) ShowEpicLoginWindow(onSuccess func(), onCancel func()) {
 
 	// We use the dialog's dismiss button as "Cancel", so we don't need a custom Cancel button here.
 	// But for layout purposes, we might want to align Login button right.
-	
+
 	content := container.NewVBox(
 		widget.NewLabel(lang.LocalizeKey("settings.epic_login_instruction", "Epic Gamesでログインし、表示されたページのコードを以下に入力してください。")),
 		widget.NewButton(lang.LocalizeKey("settings.epic_login_url_button", "ログインページを開く"), func() {
 			authUrl := s.Core.EpicApi.GetAuthUrl()
 			u, _ := url.Parse(authUrl)
-			fyne.CurrentApp().OpenURL(u)
+			_ = fyne.CurrentApp().OpenURL(u) // TODO: handle error
 		}),
 		codeEntry,
 		container.NewHBox(layout.NewSpacer(), loginBtn),
@@ -66,7 +66,7 @@ func (s *State) ShowEpicLoginWindow(onSuccess func(), onCancel func()) {
 		content,
 		s.Window,
 	)
-	
+
 	popup.SetOnClosed(func() {
 		if !success && onCancel != nil {
 			onCancel()
