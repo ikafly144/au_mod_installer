@@ -56,5 +56,20 @@
     "launch.error.launch_failed": "Among Usの起動に失敗しました: ",
     "common.select_file": "{{.FileType}}を選択",
     "settings.title": "設定",
-    "settings.update_channel": "アップデートチャンネル"
+    "settings.update_channel": "アップデートチャンネル",
+    "settings.epic_games_account": "Epic Gamesアカウント",
+    "settings.epic_login": "ログイン",
+    "settings.epic_logout": "ログアウト",
+    "settings.epic_login_instruction": "Epic Gamesでログインし、表示されたページのコードを以下に入力してください。",
+    "settings.epic_login_url_button": "ログインページを開く",
+    "settings.epic_login_code_label": "認証コード",
+    "settings.epic_logged_in_as": "ログイン中: {{.DisplayName}}",
+    "common.success": "成功",
+    "common.cancel": "キャンセル",
+    "common.save": "保存",
+    "profile.save_title": "プロファイルの保存",
+    "profile.name": "プロファイル名",
+    "settings.import_profile": "現在のインストールからプロファイルをインポート",
+    "settings.legacy_migration": "レガシー移行",
+    "settings.profile_imported": "プロファイルをインポートしました。"
 }

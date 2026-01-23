@@ -44,7 +44,7 @@ func (s *State) Launch(path string) {
 		})
 	}
 
-	cleanup, err := s.Core.PrepareLaunch(path, activeProfileID)
+	profileDir, cleanup, err := s.Core.PrepareLaunch(path, activeProfileID)
 	if err != nil {
 		slog.Error("Failed to prepare launch", "error", err)
 		s.SetError(err)
@@ -52,17 +52,9 @@ func (s *State) Launch(path string) {
 	}
 
 	defer func() {
-		if activeProfileID != uuid.Nil {
-			fyne.Do(func() {
-				s.ErrorText.Segments = []widget.RichTextSegment{
-					&widget.TextSegment{Text: lang.LocalizeKey("launch.restoring", "Restoring game files...")},
-				}
-				s.ErrorText.Refresh()
-				s.ErrorText.Show()
-			})
-		}
+		// Cleanup if needed (currently no-op for profile directory preservation)
 		if err := cleanup(); err != nil {
-			slog.Error("Failed to restore game", "error", err)
+			slog.Error("Failed to cleanup", "error", err)
 			s.SetError(err)
 		} else {
 			fyne.Do(func() {
@@ -82,7 +74,7 @@ func (s *State) Launch(path string) {
 		})
 	}
 
-	if err := s.Core.ExecuteLaunch(path); err != nil {
+	if err := s.Core.ExecuteLaunch(path, profileDir); err != nil {
 		fyne.Do(func() {
 			s.ErrorText.Segments = []widget.RichTextSegment{
 				&widget.TextSegment{Text: lang.LocalizeKey("launch.error.launch_failed", "Failed to launch Among Us: ") + err.Error(), Style: widget.RichTextStyle{ColorName: theme.ColorNameError}},

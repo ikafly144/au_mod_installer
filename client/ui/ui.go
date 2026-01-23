@@ -3,9 +3,7 @@
 package ui
 
 import (
-	"github.com/ikafly144/au_mod_installer/client/ui/tab/installer"
 	"github.com/ikafly144/au_mod_installer/client/ui/tab/launcher"
-	"github.com/ikafly144/au_mod_installer/client/ui/tab/profile"
 	"github.com/ikafly144/au_mod_installer/client/ui/tab/repo"
 	"github.com/ikafly144/au_mod_installer/client/ui/tab/settings"
 	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
@@ -38,12 +36,6 @@ func Main(w fyne.Window, version string, cfg ...func(*Config)) error {
 
 	state.CheckInstalled()
 
-	i := installer.NewInstallerTab(state)
-	installerTab, err := i.Tab()
-	if err != nil {
-		return err
-	}
-
 	l := launcher.NewLauncherTab(state)
 	launcherTab, err := l.Tab()
 	if err != nil {
@@ -56,12 +48,6 @@ func Main(w fyne.Window, version string, cfg ...func(*Config)) error {
 		return err
 	}
 
-	p := profile.NewProfileTab(state)
-	profileTab, err := p.Tab()
-	if err != nil {
-		return err
-	}
-
 	s := settings.NewSettings(state)
 	settingsTab, err := s.Tab()
 	if err != nil {
@@ -70,9 +56,7 @@ func Main(w fyne.Window, version string, cfg ...func(*Config)) error {
 
 	canvas := container.NewAppTabs(
 		launcherTab,
-		installerTab,
 		repoTab,
-		profileTab,
 		settingsTab,
 	)
 	w.SetContent(canvas)

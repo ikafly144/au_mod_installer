@@ -6,18 +6,22 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
+	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/lang"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/google/uuid"
 	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
+	"github.com/ikafly144/au_mod_installer/pkg/profile"
 	"github.com/ikafly144/au_mod_installer/pkg/progress"
 )
 
@@ -85,9 +89,7 @@ func (r *Repository) init() {
 		}
 	}()
 
-	r.state.CanInstall.AddListener(binding.NewDataListener(func() {
-		r.updateInstallState(true)
-	}))
+	// Removed CanInstall listener as profile modification doesn't require game to be stopped
 }
 
 func (r *Repository) updateModList(filter string) {
@@ -132,7 +134,8 @@ func (r *Repository) updateModList(filter string) {
 
 		img := canvas.NewSquare(theme.Color(theme.ColorNameDisabled))
 		img.SetMinSize(fyne.NewSize(64, 64))
-		installBtn := widget.NewButton(lang.LocalizeKey("repository.install", "Install"), func() {
+		
+		installBtn := widget.NewButton(lang.LocalizeKey("repository.add_to_profile", "Add to Profile"), func() {
 			r.stateLabel.Hide()
 			version := mod.LatestVersion
 			if v, err := versionSelect.GetSelected(); err == nil && v != "" {
@@ -145,31 +148,97 @@ func (r *Repository) updateModList(filter string) {
 				return
 			}
 
-			r.state.ClearError()
-			_ = r.state.CanInstall.Set(false)
-			_ = r.state.CanLaunch.Set(false)
-			go func() {
-				versionData, err := r.state.Rest.GetModVersion(mod.ID, version)
-				if err != nil {
-					slog.Error("Failed to get mod version for installation", "modId", mod.ID, "versionId", version, "error", err)
-					r.state.SetError(err)
-					return
+			profiles := r.state.ProfileManager.List()
+			if len(profiles) == 0 {
+				r.state.SetError(fmt.Errorf(lang.LocalizeKey("repository.error.no_profiles", "No profiles found. Please create one in the Launcher tab.")))
+				return
+			}
+
+			var selectedProfile *profile.Profile
+			profileNames := make([]string, len(profiles))
+			for i, p := range profiles {
+				profileNames[i] = p.Name
+			}
+
+			selectWidget := widget.NewSelect(profileNames, func(s string) {
+				for _, p := range profiles {
+					if p.Name == s {
+						pCopy := p // Copy loop var
+						selectedProfile = &pCopy
+						break
+					}
 				}
-				if err := r.state.InstallMods(mod.ID, *versionData, r.progressBar); err != nil {
-					slog.Error("Mod installation failed", "error", err)
-					r.state.SetError(err)
-				} else {
-					slog.Info("Mod installation succeeded", "modId", mod.ID, "versionId", version)
+			})
+
+			// Pre-select active profile if available
+			activeIDStr, _ := r.state.ActiveProfile.Get()
+			if activeIDStr != "" {
+				activeID, _ := uuid.Parse(activeIDStr)
+				for _, p := range profiles {
+					if p.ID == activeID {
+						selectWidget.SetSelected(p.Name)
+						break
+					}
+				}
+			}
+			// If no active profile match, select first
+			if selectedProfile == nil && len(profiles) > 0 {
+				selectWidget.SetSelectedIndex(0)
+			}
+
+			d := dialog.NewCustomConfirm(
+				lang.LocalizeKey("repository.select_profile_title", "Select Profile"),
+				lang.LocalizeKey("common.add", "Add"),
+				lang.LocalizeKey("common.cancel", "Cancel"),
+				container.NewVBox(
+					widget.NewLabel(lang.LocalizeKey("repository.select_profile_msg", "Select a profile to add this mod to:")),
+					selectWidget,
+				),
+				func(confirm bool) {
+					if !confirm || selectedProfile == nil {
+						return
+					}
+					
 					r.state.ClearError()
-					_ = r.state.CanLaunch.Set(true)
-					fyne.DoAndWait(func() {
-						r.stateLabel.SetText(lang.LocalizeKey("repository.installation_complete", "Installation complete: {{.ModName}} ({{.Version}})", map[string]any{"ModName": mod.Name, "Version": version}))
-						r.stateLabel.Show()
-					})
-				}
-				_ = r.state.CanInstall.Set(true)
-				r.state.CheckInstalled()
-			}()
+					
+					// Capture selected profile ID
+					targetID := selectedProfile.ID
+					
+					go func() {
+						// Re-fetch profile to ensure thread safety
+						targetProfile, found := r.state.ProfileManager.Get(targetID)
+						if !found {
+							r.state.SetError(fmt.Errorf("Profile not found"))
+							return
+						}
+
+						versionData, err := r.state.Rest.GetModVersion(mod.ID, version)
+						if err != nil {
+							slog.Error("Failed to get mod version for installation", "modId", mod.ID, "versionId", version, "error", err)
+							r.state.SetError(err)
+							return
+						}
+
+						// Add to profile
+						targetProfile.AddModVersion(*versionData)
+						targetProfile.LastUpdated = time.Now()
+
+						if err := r.state.ProfileManager.Add(targetProfile); err != nil {
+							slog.Error("Failed to add mod to profile", "error", err)
+							r.state.SetError(err)
+						} else {
+							slog.Info("Mod added to profile", "modId", mod.ID, "versionId", version, "profile", targetProfile.Name)
+							r.state.ClearError()
+							fyne.DoAndWait(func() {
+								r.stateLabel.SetText(lang.LocalizeKey("repository.added_to_profile", "Added to profile '{{.Profile}}': {{.ModName}} ({{.Version}})", map[string]any{"Profile": targetProfile.Name, "ModName": mod.Name, "Version": version}))
+								r.stateLabel.Show()
+							})
+						}
+					}()
+				},
+				r.state.Window,
+			)
+			d.Show()
 		})
 
 		newInstallBtns = append(newInstallBtns, installBtn)
@@ -207,25 +276,13 @@ func (r *Repository) updateInstallState(update bool) {
 	fyne.Do(func() {
 		r.mu.Lock()
 		defer r.mu.Unlock()
-		ok, err := r.state.CanInstall.Get()
-		if err != nil {
-			slog.Warn("Failed to get install state", "error", err)
-			return
-		}
+		
 		for _, btn := range r.installBtns {
-			if ok {
-				btn.Enable()
-			} else {
-				btn.Disable()
-			}
+			btn.Enable()
 			btn.Refresh()
 		}
 		for _, selectWidget := range r.versionSelects {
-			if ok {
-				selectWidget.Enable()
-			} else {
-				selectWidget.Disable()
-			}
+			selectWidget.Enable()
 			if update {
 				selectWidget.Refresh()
 			}

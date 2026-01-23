@@ -10,45 +10,51 @@ import (
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 )
 
-// PrepareLaunch prepares the game for launch by applying mods if a profile is selected.
-// It returns a cleanup function that must be called after the game exits to restore the game files.
-func (a *App) PrepareLaunch(gamePath string, profileID uuid.UUID) (func() error, error) {
+// PrepareLaunch prepares the game for launch by preparing the profile directory.
+// It returns the path to the profile directory to be used as DLL directory.
+func (a *App) PrepareLaunch(gamePath string, profileID uuid.UUID) (string, func() error, error) {
 	if _, err := os.Stat(filepath.Join(gamePath, "Among Us.exe")); os.IsNotExist(err) {
-		return nil, fmt.Errorf("Among Us executable not found: %w", err)
+		return "", nil, fmt.Errorf("Among Us executable not found: %w", err)
 	}
 
-	var restoreInfo *modmgr.RestoreInfo
+	if profileID == uuid.Nil {
+		return "", func() error { return nil }, nil
+	}
 
-	if profileID != uuid.Nil {
-		profile, found := a.ProfileManager.Get(profileID)
-		if found {
-			configDir, err := os.UserConfigDir()
-			if err != nil {
-				return nil, err
-			}
-			cacheDir := filepath.Join(configDir, "au_mod_installer", "mods")
-			binaryType, err := aumgr.GetBinaryType(gamePath)
-			if err != nil {
-				return nil, err
-			}
+	profile, found := a.ProfileManager.Get(profileID)
+	if !found {
+		return "", nil, fmt.Errorf("profile not found: %s", profileID)
+	}
 
-			restoreInfo, err = modmgr.ApplyMods(gamePath, cacheDir, profile.Versions(), binaryType)
-			if err != nil {
-				return nil, err
-			}
-		}
+	cacheDir := filepath.Join(a.ConfigDir, "mods")
+	profileDir := filepath.Join(a.ConfigDir, "profiles", profileID.String())
+	binaryType, err := aumgr.GetBinaryType(gamePath)
+	if err != nil {
+		return "", nil, err
+	}
+
+	if err := modmgr.PrepareProfileDirectory(profileDir, cacheDir, profile.Versions(), binaryType); err != nil {
+		return "", nil, err
 	}
 
 	cleanup := func() error {
-		if restoreInfo != nil {
-			return modmgr.RestoreGame(gamePath, restoreInfo)
-		}
 		return nil
 	}
-	return cleanup, nil
+	return profileDir, cleanup, nil
 }
 
 // ExecuteLaunch launches the game and blocks until it exits.
-func (a *App) ExecuteLaunch(gamePath string) error {
-	return aumgr.LaunchAmongUs(aumgr.DetectLauncherType(gamePath), gamePath, gamePath)
+func (a *App) ExecuteLaunch(gamePath string, dllDir string) error {
+	launcherType := aumgr.DetectLauncherType(gamePath)
+	var exchangeCode string
+	if launcherType == aumgr.LauncherEpicGames {
+		session, err := a.EpicSessionManager.GetValidSession(a.EpicApi)
+		if err == nil {
+			ec, err := a.EpicApi.GetExchangeCode(session.AccessToken)
+			if err == nil {
+				exchangeCode = ec
+			}
+		}
+	}
+	return aumgr.LaunchAmongUs(launcherType, gamePath, dllDir, exchangeCode)
 }

@@ -62,7 +62,7 @@ func NewState(w fyne.Window, version string, options ...Option) (*State, error) 
 		ModInstalledInfo: widget.NewLabel(lang.LocalizeKey("installer.select_install_path", "Please select the installation path.")),
 		Rest:             app.Rest,
 		ProfileManager:   app.ProfileManager,
-		ActiveProfile:    binding.NewString(),
+		ActiveProfile:    binding.BindPreferenceString("core.active_profile", fyne.CurrentApp().Preferences()),
 	}
 
 	if err := s.CanInstall.Set(true); err != nil {

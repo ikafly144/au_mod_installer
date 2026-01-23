@@ -14,9 +14,12 @@ import (
 )
 
 type App struct {
-	Version        string
-	Rest           rest.Client
-	ProfileManager *profile.Manager
+	Version            string
+	ConfigDir          string
+	Rest               rest.Client
+	ProfileManager     *profile.Manager
+	EpicSessionManager *aumgr.EpicSessionManager
+	EpicApi            *aumgr.EpicApi
 
 	launchLock sync.Mutex
 }
@@ -26,22 +29,30 @@ func New(version string, restClient rest.Client) (*App, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user config dir: %w", err)
 	}
-	profilePath := filepath.Join(configDir, "au_mod_installer")
-	profileManager, err := profile.NewManager(profilePath)
+	appConfigDir := filepath.Join(configDir, "au_mod_installer")
+	profileManager, err := profile.NewManager(appConfigDir)
 	if err != nil {
-		if err := os.RemoveAll(profilePath); err != nil {
+		if err := os.RemoveAll(appConfigDir); err != nil {
 			return nil, fmt.Errorf("failed to remove profile path: %w", err)
 		}
-		profileManager, err = profile.NewManager(profilePath)
+		profileManager, err = profile.NewManager(appConfigDir)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create profile manager after removal: %w", err)
 		}
 	}
 
+	epicSessionManager, err := aumgr.NewEpicSessionManager(appConfigDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create epic session manager: %w", err)
+	}
+
 	return &App{
-		Version:        version,
-		Rest:           restClient,
-		ProfileManager: profileManager,
+		Version:            version,
+		ConfigDir:          appConfigDir,
+		Rest:               restClient,
+		ProfileManager:     profileManager,
+		EpicSessionManager: epicSessionManager,
+		EpicApi:            aumgr.NewEpicApi(),
 	}, nil
 }
 
