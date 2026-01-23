@@ -93,5 +93,7 @@
     "profile.error_name_empty": "プロファイル名を空にすることはできません",
     "settings.import_profile": "現在のインストールからプロファイルをインポート",
     "settings.legacy_migration": "レガシー移行",
-    "settings.profile_imported": "プロファイルをインポートしました。"
+    "settings.profile_imported": "プロファイルをインポートしました。",
+    "profile.overwrite_title": "プロファイルの上書き",
+    "profile.overwrite_message": "既存のプロファイルの方が新しいです。上書きしますか？"
 }

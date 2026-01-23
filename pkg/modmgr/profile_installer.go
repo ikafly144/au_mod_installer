@@ -147,7 +147,7 @@ func generateDoorstopConfig(basePath string) string {
 	// With SetDllDirectory, winhttp.dll is loaded from basePath.
 	// Doorstop usually resolves relative paths against the game executable.
 	// So we should use absolute paths here to be safe, pointing to files inside basePath.
-	
+
 	targetAssembly := filepath.Join(basePath, "BepInEx", "core", "BepInEx.Unity.IL2CPP.dll")
 	coreClrPath := filepath.Join(basePath, "dotnet", "coreclr.dll")
 	corlibDir := filepath.Join(basePath, "dotnet")

@@ -15,7 +15,7 @@ type Profile struct {
 	Author      string                       `json:"author"`
 	Description string                       `json:"description,omitempty"`
 	ModVersions map[string]modmgr.ModVersion `json:"mod_versions,omitempty"`
-	LastUpdated time.Time                    `json:"last_updated"`
+	UpdatedAt   time.Time                    `json:"updated_at"`
 }
 
 func (p *Profile) Versions() []modmgr.ModVersion {

@@ -28,9 +28,9 @@ import (
 )
 
 type Launcher struct {
-	state           *uicommon.State
-	launchButton    *widget.Button
-	greetingContent *widget.Label
+	state               *uicommon.State
+	launchButton        *widget.Button
+	greetingContent     *widget.Label
 	createProfileButton *widget.Button
 
 	profileList       *widget.List
@@ -48,11 +48,11 @@ func NewLauncherTab(s *uicommon.State) uicommon.Tab {
 	revision := fyne.CurrentApp().Metadata().Custom["revision"]
 	revision = revision[:min(7, len(revision))]
 	l = Launcher{
-		state:           s,
-		progressBar:     progress.NewFyneProgress(widget.NewProgressBar()),
-		launchButton:    widget.NewButtonWithIcon(lang.LocalizeKey("launcher.launch", "Launch"), theme.MediaPlayIcon(), l.runLaunch),
+		state:               s,
+		progressBar:         progress.NewFyneProgress(widget.NewProgressBar()),
+		launchButton:        widget.NewButtonWithIcon(lang.LocalizeKey("launcher.launch", "Launch"), theme.MediaPlayIcon(), l.runLaunch),
 		createProfileButton: widget.NewButtonWithIcon(lang.LocalizeKey("profile.create", "Create Profile"), theme.ContentAddIcon(), l.createProfile),
-		greetingContent: widget.NewLabelWithStyle(fmt.Sprintf("バージョン：%s (%s)", s.Version, revision), fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+		greetingContent:     widget.NewLabelWithStyle(fmt.Sprintf("バージョン：%s (%s)", s.Version, revision), fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 	}
 
 	l.init()
@@ -85,7 +85,7 @@ func (l *Launcher) shareProfile(prof profile.Profile) {
 		dialog.ShowError(err, l.state.Window)
 		return
 	}
-	l.state.Window.Clipboard().SetContent(uri)
+	fyne.CurrentApp().Clipboard().SetContent(uri)
 	dialog.ShowInformation(lang.LocalizeKey("common.success", "Success"), lang.LocalizeKey("profile.shared_clipboard", "Share URI copied to clipboard."), l.state.Window)
 }
 
@@ -108,19 +108,31 @@ func (l *Launcher) checkSharedURI() {
 			return
 		}
 
-		// Ensure unique ID if collision
-		if _, found := l.state.ProfileManager.Get(prof.ID); found {
-			prof.ID = uuid.New()
-			prof.Name = prof.Name + " (Imported)"
+		if existing, found := l.state.ProfileManager.Get(prof.ID); found {
+			if existing.UpdatedAt.After(prof.UpdatedAt) {
+				dialog.ShowConfirm(lang.LocalizeKey("profile.overwrite_title", "Overwrite Profile"), lang.LocalizeKey("profile.overwrite_message", "The existing profile is newer than the imported one. Do you want to overwrite it?"), func(confirm bool) {
+					if !confirm {
+						return
+					}
+					l.importProfile(*prof)
+				}, l.state.Window)
+				return
+			}
 		}
-		prof.LastUpdated = time.Now()
 
-		if err := l.state.ProfileManager.Add(*prof); err != nil {
-			dialog.ShowError(err, l.state.Window)
-			return
-		}
-		l.refreshProfiles()
+		l.importProfile(*prof)
 	}, l.state.Window)
+}
+
+func (l *Launcher) importProfile(prof profile.Profile) {
+	prof.UpdatedAt = time.Now()
+	// prof.UpdatedAt is preserved from import
+
+	if err := l.state.ProfileManager.Add(prof); err != nil {
+		dialog.ShowError(err, l.state.Window)
+		return
+	}
+	l.refreshProfiles()
 }
 
 func (l *Launcher) setupProfileList() {
@@ -156,7 +168,7 @@ func (l *Launcher) setupProfileList() {
 			img.SetMinSize(fyne.NewSquareSize(img.Size().Height))
 			label := c.Objects[1].(*fyne.Container).Objects[0].(*widget.Label)
 			desc := c.Objects[1].(*fyne.Container).Objects[1].(*widget.Label)
-			desc.SetText(fmt.Sprintf("Last Updated: %s Mods: %d", prof.LastUpdated.Format("2006-01-02 15:04:05"), len(prof.ModVersions)))
+			desc.SetText(fmt.Sprintf("Last Updated: %s Mods: %d", prof.UpdatedAt.Format("2006-01-02 15:04:05"), len(prof.ModVersions)))
 			menuBtn := c.Objects[2].(*widget.Button)
 			label.SetText(prof.Name)
 
@@ -295,7 +307,7 @@ func (l *Launcher) runLaunch() {
 		}
 
 		l.state.ClearError()
-		
+
 		// Proceed to Launch
 		l.state.Launch(path)
 	}()
@@ -304,7 +316,7 @@ func (l *Launcher) runLaunch() {
 func (l *Launcher) checkLaunchState() {
 	// Enable launch if profile selected and game path exists
 	// We might also check if game is running (handled in state.Launch but button state is good to have)
-	
+
 	// Check Game Path
 	path, err := l.state.SelectedGamePath.Get()
 	if err != nil || path == "" {
@@ -328,10 +340,10 @@ func (l *Launcher) checkLaunchState() {
 	// s.checkPlayingProcess() updates CanInstall/CanLaunch if running.
 	// We can trust s.CanInstall or s.CanLaunch for "Not Running" status?
 	// s.CanLaunch is false if "Not Installed".
-	// Let's rely on s.CanInstall as a proxy for "Not Running"? 
-	// Or better, just check if running? 
+	// Let's rely on s.CanInstall as a proxy for "Not Running"?
+	// Or better, just check if running?
 	// But `state.Launch` has a lock.
-	
+
 	// For now, let's enable it if profile is selected and game exists.
 	// The `state.Launch` will show error if already running.
 	l.launchButton.Enable()
@@ -437,7 +449,7 @@ func (l *Launcher) createProfile() {
 		ID:          uuid.New(),
 		Name:        name,
 		ModVersions: map[string]modmgr.ModVersion{},
-		LastUpdated: time.Now(),
+		UpdatedAt:   time.Now(),
 	}
 
 	if err := l.state.ProfileManager.Add(prof); err != nil {
@@ -497,7 +509,7 @@ func (l *Launcher) showDuplicateDialog(prof profile.Profile) {
 		newProf := prof
 		newProf.ID = uuid.New()
 		newProf.Name = newName
-		newProf.LastUpdated = time.Now()
+		newProf.UpdatedAt = time.Now()
 
 		if err := l.state.ProfileManager.Add(newProf); err != nil {
 			dialog.ShowError(err, l.state.Window)
@@ -563,7 +575,7 @@ func (l *Launcher) openProfileEditor(prof profile.Profile) {
 			}
 		},
 	)
-	
+
 	// Hook up update item to ensure closure correctness
 	modList.UpdateItem = func(id widget.ListItemID, item fyne.CanvasObject) {
 		if id >= len(currentProfile.Versions()) {
@@ -604,7 +616,7 @@ func (l *Launcher) openProfileEditor(prof profile.Profile) {
 
 			oldID := prof.ID
 			currentProfile.Name = newName
-			currentProfile.LastUpdated = time.Now()
+			currentProfile.UpdatedAt = time.Now()
 
 			if err := l.state.ProfileManager.Add(currentProfile); err != nil {
 				dialog.ShowError(err, l.state.Window)
@@ -699,7 +711,7 @@ func (l *Launcher) showAddModDialog(onAdd func([]modmgr.ModVersion)) {
 	)
 
 	go func() {
-		m, err := l.state.Rest.GetModList(100, "", "") 
+		m, err := l.state.Rest.GetModList(100, "", "")
 		if err != nil {
 			dialog.ShowError(err, l.state.Window)
 			return
@@ -718,7 +730,7 @@ func (l *Launcher) showAddModDialog(onAdd func([]modmgr.ModVersion)) {
 			onAdd([]modmgr.ModVersion{v})
 			d.Dismiss()
 		})
-		// detailsDialog.SetOnClosed(modList.UnselectAll) // newModDetailsDialog returns *CustomDialog, doesn't have SetOnClosed exposed nicely unless we check type? 
+		// detailsDialog.SetOnClosed(modList.UnselectAll) // newModDetailsDialog returns *CustomDialog, doesn't have SetOnClosed exposed nicely unless we check type?
 		// Actually CustomDialog has SetOnClosed.
 		// But let's just show it.
 		detailsDialog.Show()

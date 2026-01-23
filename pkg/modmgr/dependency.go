@@ -41,7 +41,7 @@ func ResolveDependencies(initialMods []ModVersion, provider VersionProvider) (ma
 			// For now, if it's empty, we might have a problem unless the provider can handle it.
 			// But usually ModDependency should have a version or we assume latest.
 			// The current GetModVersion interface requires a versionID.
-			
+
 			var depVersion *ModVersion
 			var err error
 			if dep.Version == "" {

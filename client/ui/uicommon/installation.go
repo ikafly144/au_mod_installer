@@ -23,7 +23,7 @@ func (s *State) CheckInstalled() bool {
 	if err := s.ModInstalled.Set(isInstalled); err != nil {
 		slog.Warn("Failed to set modInstalled", "error", err)
 	}
-	
+
 	return isInstalled
 }
 

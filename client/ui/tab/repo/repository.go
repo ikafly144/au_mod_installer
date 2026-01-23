@@ -134,7 +134,7 @@ func (r *Repository) updateModList(filter string) {
 
 		img := canvas.NewSquare(theme.Color(theme.ColorNameDisabled))
 		img.SetMinSize(fyne.NewSize(64, 64))
-		
+
 		installBtn := widget.NewButton(lang.LocalizeKey("repository.add_to_profile", "Add to Profile"), func() {
 			r.stateLabel.Hide()
 			version := mod.LatestVersion
@@ -198,12 +198,12 @@ func (r *Repository) updateModList(filter string) {
 					if !confirm || selectedProfile == nil {
 						return
 					}
-					
+
 					r.state.ClearError()
-					
+
 					// Capture selected profile ID
 					targetID := selectedProfile.ID
-					
+
 					go func() {
 						// Re-fetch profile to ensure thread safety
 						targetProfile, found := r.state.ProfileManager.Get(targetID)
@@ -221,7 +221,7 @@ func (r *Repository) updateModList(filter string) {
 
 						// Add to profile
 						targetProfile.AddModVersion(*versionData)
-						targetProfile.LastUpdated = time.Now()
+						targetProfile.UpdatedAt = time.Now()
 
 						if err := r.state.ProfileManager.Add(targetProfile); err != nil {
 							slog.Error("Failed to add mod to profile", "error", err)
@@ -276,7 +276,7 @@ func (r *Repository) updateInstallState(update bool) {
 	fyne.Do(func() {
 		r.mu.Lock()
 		defer r.mu.Unlock()
-		
+
 		for _, btn := range r.installBtns {
 			btn.Enable()
 			btn.Refresh()

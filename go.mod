@@ -4,6 +4,7 @@ go 1.25.5
 
 require (
 	fyne.io/fyne/v2 v2.7.1
+	github.com/Microsoft/go-winio v0.6.2
 	github.com/TheTitanrain/w32 v0.0.0-20200114052255-2654d97dbd3d
 	github.com/google/go-github/v80 v80.0.0
 	github.com/google/uuid v1.6.0
@@ -22,7 +23,6 @@ require (
 	fyne.io/systray v1.11.1-0.20250603113521-ca66a66d8b58 // indirect
 	fyne.io/tools v1.6.2 // indirect
 	github.com/BurntSushi/toml v1.5.0 // indirect
-	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/akavel/rsrc v0.10.2 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect

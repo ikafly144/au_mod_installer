@@ -18,11 +18,11 @@ import (
 
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/lang"
+	"github.com/Microsoft/go-winio"
 	"github.com/ikafly144/au_mod_installer/client/rest"
 	"github.com/ikafly144/au_mod_installer/client/ui"
 	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
 	"github.com/ikafly144/au_mod_installer/common/versioning"
-	"github.com/Microsoft/go-winio"
 	"github.com/nightlyone/lockfile"
 	"github.com/sqweek/dialog"
 	"github.com/zzl/go-win32api/win32"
@@ -51,7 +51,7 @@ func main() {
 	err = lock.TryLock()
 	if err != nil {
 		slog.Error("Another instance is already running", "error", err)
-		
+
 		// Try to send URI to the existing instance via IPC
 		if sharedURI != "" {
 			conn, err := winio.DialPipe(pipeName, nil)
