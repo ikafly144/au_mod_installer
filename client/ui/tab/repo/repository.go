@@ -31,55 +31,84 @@ type Repository struct {
 	state *uicommon.State
 	mu    sync.Mutex
 
-	lastModID    string
-	modsBind     binding.List[modmgr.Mod]
-	modContainer *fyne.Container
-	modScroll    *container.Scroll
-	progressBar  *progress.FyneProgress
-	searchBar    *widget.Entry
-	reloadBtn    *widget.Button
-	stateLabel   *widget.Label
+	lastModID     string
+	modsBind      binding.List[modmgr.Mod]
+	
+	// Containers
+	mainContainer *fyne.Container // Stack container for switching views
+	listView      *fyne.Container // The list view container
+	detailView    *fyne.Container // The detail view container
 
-	versionSelects []*versionSelectMenu
-	installBtns    []*widget.Button
+	// List View Elements
+	modListContainer *fyne.Container
+	modScroll        *container.Scroll
+	progressBar      *progress.FyneProgress
+	searchBar        *widget.Entry
+	reloadBtn        *widget.Button
+	stateLabel       *widget.Label
 }
 
 func NewRepository(state *uicommon.State) *Repository {
-	var repo Repository
 	bind := binding.NewList(func(a, b modmgr.Mod) bool { return a.ID == b.ID })
 
-	repo = Repository{
-		state:     state,
-		lastModID: "",
-		searchBar: widget.NewEntry(),
-		reloadBtn: widget.NewButtonWithIcon(lang.LocalizeKey("repository.reload", "Reload"), theme.ViewRefreshIcon(), func() {
-			repo.reloadBtn.Disable()
-			go func() {
-				repo.reloadMods()
-			}()
-		}),
-		modsBind:     bind,
-		modContainer: container.NewVBox(),
-		progressBar:  progress.NewFyneProgress(widget.NewProgressBar()),
-		stateLabel:   widget.NewLabel(""),
-	}
-	repo.modScroll = container.NewVScroll(repo.modContainer)
-	repo.modScroll.OnScrolled = func(pos fyne.Position) {
-		if pos.Y >= repo.modContainer.Size().Height-repo.modScroll.Size().Height {
-			repo.LoadNext()
-		}
+	repo := &Repository{
+		state:            state,
+		lastModID:        "",
+		modsBind:         bind,
+		modListContainer: container.NewVBox(),
+		progressBar:      progress.NewFyneProgress(widget.NewProgressBar()),
+		stateLabel:       widget.NewLabel(""),
 	}
 
-	repo.stateLabel.Hide()
-	repo.stateLabel.Wrapping = fyne.TextWrapWord
-
+	// Initialize UI components
+	repo.searchBar = widget.NewEntry()
 	repo.searchBar.SetPlaceHolder(lang.LocalizeKey("repository.search_placeholder", "Filter mods by name"))
 	repo.searchBar.OnChanged = func(s string) {
 		go repo.updateModList(s)
 	}
 
+	repo.reloadBtn = widget.NewButtonWithIcon(lang.LocalizeKey("repository.reload", "Reload"), theme.ViewRefreshIcon(), func() {
+		repo.reloadBtn.Disable()
+		go func() {
+			repo.reloadMods()
+		}()
+	})
+
+	repo.stateLabel.Hide()
+	repo.stateLabel.Wrapping = fyne.TextWrapWord
+
+	repo.modScroll = container.NewVScroll(repo.modListContainer)
+	repo.modScroll.OnScrolled = func(pos fyne.Position) {
+		if pos.Y >= repo.modListContainer.Size().Height-repo.modScroll.Size().Height {
+			repo.LoadNext()
+		}
+	}
+
+	// Build List View
+	top := container.New(layout.NewBorderLayout(nil, nil, nil, repo.reloadBtn),
+		repo.searchBar,
+		repo.reloadBtn,
+	)
+	bottom := container.NewVBox(
+		repo.state.ErrorText,
+		repo.stateLabel,
+		repo.progressBar.Canvas(),
+	)
+	repo.listView = container.New(layout.NewBorderLayout(top, bottom, nil, nil),
+		top,
+		bottom,
+		repo.modScroll,
+	)
+
+	// Initialize Detail View (empty for now)
+	repo.detailView = container.NewMax()
+
+	// Main container stack
+	repo.mainContainer = container.NewStack(repo.listView, repo.detailView)
+	repo.detailView.Hide()
+
 	repo.init()
-	return &repo
+	return repo
 }
 
 func (r *Repository) init() {
@@ -88,12 +117,13 @@ func (r *Repository) init() {
 			slog.Error("Failed to refresh mods in repository tab", "error", err)
 		}
 	}()
+}
 
-	// Removed CanInstall listener as profile modification doesn't require game to be stopped
+func (r *Repository) Tab() (*container.TabItem, error) {
+	return container.NewTabItem(lang.LocalizeKey("repository.tab_name", "Repository"), r.mainContainer), nil
 }
 
 func (r *Repository) updateModList(filter string) {
-	defer r.updateInstallState(true)
 	defer fyne.Do(r.reloadBtn.Enable)
 	var objs []fyne.CanvasObject
 	mods, err := r.modsBind.Get()
@@ -104,9 +134,7 @@ func (r *Repository) updateModList(filter string) {
 	if len(mods) == 0 {
 		return
 	}
-	var newInstallBtns []*widget.Button
-	var newVersionSelects []*versionSelectMenu
-	wg := sync.WaitGroup{}
+
 	searchText := strings.ToLower(filter)
 	for _, mod := range mods {
 		if !mod.Type.IsVisible() {
@@ -116,196 +144,221 @@ func (r *Repository) updateModList(filter string) {
 			continue
 		}
 
-		versionSelect := newVersionSelectMenu(nil)
-		wg.Add(1)
-		go func(mod modmgr.Mod) {
-			defer wg.Done()
-			versionSelect.SupplyMods(func() ([]modmgr.ModVersion, error) {
-				versions, err := r.state.Rest.GetModVersions(mod.ID, 10, "")
-				if err != nil {
-					slog.Error("Failed to get mod versions", "modId", mod.ID, "error", err)
-					return nil, err
-				}
-				return versions, nil
-			})
-			versionSelect.SetSelected(mod.LatestVersion)
-		}(mod)
-		newVersionSelects = append(newVersionSelects, versionSelect)
+		// Create List Item
+		imgRect := canvas.NewRectangle(theme.Color(theme.ColorNameDisabled))
+		imgRect.SetMinSize(fyne.NewSquareSize(80))
+		// Use a container that centers the image to maintain its aspect ratio 
+		// while the BorderLayout stretches the container itself.
+		img := container.NewCenter(imgRect)
 
-		img := canvas.NewSquare(theme.Color(theme.ColorNameDisabled))
-		img.SetMinSize(fyne.NewSize(64, 64))
-
-		installBtn := widget.NewButton(lang.LocalizeKey("repository.add_to_profile", "Add to Profile"), func() {
-			r.stateLabel.Hide()
-			version := mod.LatestVersion
-			if v, err := versionSelect.GetSelected(); err == nil && v != "" {
-				version = v
-			}
-
-			if version == "" {
-				slog.Error("No version selected for installation", "modId", mod.ID)
-				r.state.SetError(fmt.Errorf(lang.LocalizeKey("repository.error.no_version_selected", "No version selected for installation: %s"), mod.Name))
-				return
-			}
-
-			profiles := r.state.ProfileManager.List()
-			if len(profiles) == 0 {
-				r.state.SetError(fmt.Errorf(lang.LocalizeKey("repository.error.no_profiles", "No profiles found. Please create one in the Launcher tab.")))
-				return
-			}
-
-			var selectedProfile *profile.Profile
-			profileNames := make([]string, len(profiles))
-			for i, p := range profiles {
-				profileNames[i] = p.Name
-			}
-
-			selectWidget := widget.NewSelect(profileNames, func(s string) {
-				for _, p := range profiles {
-					if p.Name == s {
-						pCopy := p // Copy loop var
-						selectedProfile = &pCopy
-						break
-					}
-				}
-			})
-
-			// Pre-select active profile if available
-			activeIDStr, _ := r.state.ActiveProfile.Get()
-			if activeIDStr != "" {
-				activeID, _ := uuid.Parse(activeIDStr)
-				for _, p := range profiles {
-					if p.ID == activeID {
-						selectWidget.SetSelected(p.Name)
-						break
-					}
-				}
-			}
-			// If no active profile match, select first
-			if selectedProfile == nil && len(profiles) > 0 {
-				selectWidget.SetSelectedIndex(0)
-			}
-
-			d := dialog.NewCustomConfirm(
-				lang.LocalizeKey("repository.select_profile_title", "Select Profile"),
-				lang.LocalizeKey("common.add", "Add"),
-				lang.LocalizeKey("common.cancel", "Cancel"),
-				container.NewVBox(
-					widget.NewLabel(lang.LocalizeKey("repository.select_profile_msg", "Select a profile to add this mod to:")),
-					selectWidget,
-				),
-				func(confirm bool) {
-					if !confirm || selectedProfile == nil {
-						return
-					}
-
-					r.state.ClearError()
-
-					// Capture selected profile ID
-					targetID := selectedProfile.ID
-
-					go func() {
-						// Re-fetch profile to ensure thread safety
-						targetProfile, found := r.state.ProfileManager.Get(targetID)
-						if !found {
-							r.state.SetError(fmt.Errorf("Profile not found"))
-							return
-						}
-
-						versionData, err := r.state.Rest.GetModVersion(mod.ID, version)
-						if err != nil {
-							slog.Error("Failed to get mod version for installation", "modId", mod.ID, "versionId", version, "error", err)
-							r.state.SetError(err)
-							return
-						}
-
-						// Add to profile
-						targetProfile.AddModVersion(*versionData)
-						targetProfile.UpdatedAt = time.Now()
-
-						if err := r.state.ProfileManager.Add(targetProfile); err != nil {
-							slog.Error("Failed to add mod to profile", "error", err)
-							r.state.SetError(err)
-						} else {
-							slog.Info("Mod added to profile", "modId", mod.ID, "versionId", version, "profile", targetProfile.Name)
-							r.state.ClearError()
-							fyne.DoAndWait(func() {
-								r.stateLabel.SetText(lang.LocalizeKey("repository.added_to_profile", "Added to profile '{{.Profile}}': {{.ModName}} ({{.Version}})", map[string]any{"Profile": targetProfile.Name, "ModName": mod.Name, "Version": version}))
-								r.stateLabel.Show()
-							})
-						}
-					}()
-				},
-				r.state.Window,
-			)
-			d.Show()
-		})
-
-		newInstallBtns = append(newInstallBtns, installBtn)
-
-		bottom := container.NewHBox(
-			versionSelect.Canvas(), installBtn,
+		textContainer := container.NewVBox(
+			widget.NewLabelWithStyle(mod.Name, fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+			widget.NewLabel(mod.Author),
+			widget.NewLabel(mod.Description),
 		)
-		item := container.New(layout.NewBorderLayout(nil, nil, img, nil),
-			container.New(layout.NewBorderLayout(nil, bottom, nil, nil),
-				container.NewHBox(
-					widget.NewLabel(mod.Name+" ("+mod.Author+")"),
-				),
-				bottom,
-			),
+		textContainer.Objects[2].(*widget.Label).Wrapping = fyne.TextWrapWord
+
+		// Border layout with centered img on the left
+		content := container.New(layout.NewBorderLayout(nil, nil, img, nil),
 			img,
+			container.NewPadded(textContainer),
 		)
 
-		objs = append(objs, item, widget.NewSeparator())
+		// Make it clickable
+		card := uicommon.NewTappableContainer(content, func() {
+			r.showModDetails(mod)
+		})
+		
+		// Add some padding/background similar to a Card
+		bg := canvas.NewRectangle(theme.Color(theme.ColorNameBackground))
+		bg.StrokeColor = theme.Color(theme.ColorNameButton)
+		bg.StrokeWidth = 1
+		bg.CornerRadius = theme.InputRadiusSize()
+		
+		item := container.NewStack(bg, container.NewPadded(card))
+
+		objs = append(objs, item)
 	}
 	objs = append(objs, widget.NewButton(lang.LocalizeKey("repository.load_next", "Load more..."), r.LoadNext))
 
-	wg.Wait()
-	r.mu.Lock()
-	r.installBtns = newInstallBtns
-	r.versionSelects = newVersionSelects
-	r.mu.Unlock()
-
 	fyne.Do(func() {
-		r.modContainer.Objects = objs
-		r.modContainer.Refresh()
+		r.modListContainer.Objects = objs
+		r.modListContainer.Refresh()
+		r.modScroll.Refresh()
 	})
 }
 
-func (r *Repository) updateInstallState(update bool) {
-	fyne.Do(func() {
-		r.mu.Lock()
-		defer r.mu.Unlock()
+func (r *Repository) showModDetails(mod modmgr.Mod) {
+	// Navigation Bar (Topmost)
+	backBtn := widget.NewButtonWithIcon(lang.LocalizeKey("common.back", "Back"), theme.NavigateBackIcon(), func() {
+		r.detailView.Hide()
+		r.listView.Show()
+	})
+	topBar := container.NewHBox(backBtn)
 
-		for _, btn := range r.installBtns {
-			btn.Enable()
-			btn.Refresh()
-		}
-		for _, selectWidget := range r.versionSelects {
-			selectWidget.Enable()
-			if update {
-				selectWidget.Refresh()
+	// Header Info
+	img := canvas.NewSquare(theme.Color(theme.ColorNameDisabled))
+	img.SetMinSize(fyne.NewSize(128, 128))
+
+	headerText := container.NewVBox(
+		widget.NewLabelWithStyle(mod.Name, fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		widget.NewLabel(lang.LocalizeKey("repository.author", "Author: {{.Author}}", map[string]interface{}{"Author": mod.Author})),
+		widget.NewHyperlink(lang.LocalizeKey("repository.website", "Website"), nil),
+		widget.NewButton(lang.LocalizeKey("repository.install_latest", "Install Latest"), func() {
+			r.installModVersion(mod, mod.LatestVersion)
+		}),
+	)
+	
+	header := container.New(layout.NewBorderLayout(nil, nil, img, nil),
+		img,
+		headerText,
+	)
+
+	// Tabs
+	detailsTab := container.NewTabItem(lang.LocalizeKey("repository.tab.details", "Details"),
+		container.NewVScroll(widget.NewLabel(mod.Description)),
+	)
+
+	versionsList := container.NewVBox()
+	versionsTab := container.NewTabItem(lang.LocalizeKey("repository.tab.versions", "Versions"),
+		container.NewVScroll(versionsList),
+	)
+	
+	// Loading versions
+	versionsList.Add(widget.NewProgressBarInfinite())
+	go func() {
+		versions, err := r.state.Rest.GetModVersions(mod.ID, 100, "")
+		fyne.Do(func() {
+			versionsList.Objects = nil
+			if err != nil {
+				versionsList.Add(widget.NewLabel("Failed to load versions: " + err.Error()))
+				return
+			}
+			for _, v := range versions {
+				verLabel := widget.NewLabel(v.ID)
+				addBtn := widget.NewButton(lang.LocalizeKey("repository.add_to_profile", "Add to Profile"), func() {
+					r.installModVersion(mod, v.ID)
+				})
+				row := container.New(layout.NewBorderLayout(nil, nil, nil, addBtn),
+					addBtn,
+					verLabel,
+				)
+				versionsList.Add(row)
+				versionsList.Add(widget.NewSeparator())
+			}
+			versionsTab.Content.Refresh()
+		})
+	}()
+
+	tabs := container.NewAppTabs(detailsTab, versionsTab)
+
+	// Assemble Detail View
+	detailContent := container.New(layout.NewBorderLayout(header, nil, nil, nil),
+		header,
+		tabs,
+	)
+
+	finalContent := container.New(layout.NewBorderLayout(topBar, nil, nil, nil),
+		topBar,
+		detailContent,
+	)
+
+	r.detailView.Objects = []fyne.CanvasObject{finalContent}
+	r.detailView.Refresh()
+	
+	r.listView.Hide()
+	r.detailView.Show()
+}
+
+func (r *Repository) installModVersion(mod modmgr.Mod, versionID string) {
+	r.stateLabel.Hide()
+	
+	profiles := r.state.ProfileManager.List()
+	if len(profiles) == 0 {
+		r.state.SetError(fmt.Errorf("%s", lang.LocalizeKey("repository.error.no_profiles", "No profiles found. Please create one in the Launcher tab.")))
+		return
+	}
+
+	var selectedProfile *profile.Profile
+	profileNames := make([]string, len(profiles))
+	for i, p := range profiles {
+		profileNames[i] = p.Name
+	}
+
+	selectWidget := widget.NewSelect(profileNames, func(s string) {
+		for _, p := range profiles {
+			if p.Name == s {
+				pCopy := p
+				selectedProfile = &pCopy
+				break
 			}
 		}
 	})
-}
 
-func (r *Repository) Tab() (*container.TabItem, error) {
-	top := container.New(layout.NewBorderLayout(nil, nil, nil, r.reloadBtn),
-		r.searchBar,
-		r.reloadBtn,
+	// Pre-select active profile
+	activeIDStr, _ := r.state.ActiveProfile.Get()
+	if activeIDStr != "" {
+		activeID, _ := uuid.Parse(activeIDStr)
+		for _, p := range profiles {
+			if p.ID == activeID {
+				selectWidget.SetSelected(p.Name)
+				break
+			}
+		}
+	}
+	if selectedProfile == nil && len(profiles) > 0 {
+		selectWidget.SetSelectedIndex(0)
+	}
+
+	d := dialog.NewCustomConfirm(
+		lang.LocalizeKey("repository.select_profile_title", "Select Profile"),
+		lang.LocalizeKey("common.add", "Add"),
+		lang.LocalizeKey("common.cancel", "Cancel"),
+		container.NewVBox(
+			widget.NewLabel(lang.LocalizeKey("repository.select_profile_msg", "Select a profile to add this mod to:")),
+			selectWidget,
+		),
+		func(confirm bool) {
+			if !confirm || selectedProfile == nil {
+				return
+			}
+
+			r.state.ClearError()
+			targetID := selectedProfile.ID
+
+			go func() {
+				targetProfile, found := r.state.ProfileManager.Get(targetID)
+				if !found {
+					r.state.SetError(fmt.Errorf("Profile not found"))
+					return
+				}
+
+				versionData, err := r.state.Rest.GetModVersion(mod.ID, versionID)
+				if err != nil {
+					slog.Error("Failed to get mod version for installation", "modId", mod.ID, "versionId", versionID, "error", err)
+					r.state.SetError(err)
+					return
+				}
+
+				targetProfile.AddModVersion(*versionData)
+				targetProfile.UpdatedAt = time.Now()
+
+				if err := r.state.ProfileManager.Add(targetProfile); err != nil {
+					slog.Error("Failed to add mod to profile", "error", err)
+					r.state.SetError(err)
+				} else {
+					slog.Info("Mod added to profile", "modId", mod.ID, "versionId", versionID, "profile", targetProfile.Name)
+					r.state.ClearError()
+					fyne.DoAndWait(func() {
+						r.stateLabel.SetText(lang.LocalizeKey("repository.added_to_profile", "Added to profile '{{.Profile}}': {{.ModName}} ({{.Version}})", map[string]any{"Profile": targetProfile.Name, "ModName": mod.Name, "Version": versionID}))
+						r.stateLabel.Show()
+					})
+				}
+			}()
+		},
+		r.state.Window,
 	)
-	bottom := container.NewVBox(
-		r.state.ErrorText,
-		r.stateLabel,
-		r.progressBar.Canvas(),
-	)
-	content := container.New(layout.NewBorderLayout(top, bottom, nil, nil),
-		r.modScroll,
-		top,
-		bottom,
-	)
-	return container.NewTabItem(lang.LocalizeKey("repository.tab_name", "Repository"), content), nil
+	d.Show()
 }
 
 func (r *Repository) LoadNext() {
@@ -324,7 +377,6 @@ func (r *Repository) LoadNext() {
 }
 
 func (r *Repository) fetchMods() (error, bool) {
-	defer r.updateInstallState(true)
 	defer func() {
 		var text string
 		fyne.DoAndWait(func() {

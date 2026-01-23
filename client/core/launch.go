@@ -59,7 +59,22 @@ func (a *App) PrepareLaunch(gamePath string, profileID uuid.UUID) (string, func(
 		return "", nil, err
 	}
 
-	if err := modmgr.PrepareProfileDirectory(profileDir, cacheDir, resolvedVersions, binaryType, false); err != nil {
+	gameVersion, err := aumgr.GetVersion(gamePath)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to get game version: %w", err)
+	}
+
+	// Check profile compatibility
+	if meta, err := modmgr.GetProfileMetadata(profileDir); err == nil && meta != nil {
+		if meta.GameVersion != "" && meta.GameVersion != gameVersion {
+			return "", nil, fmt.Errorf("game version mismatch: profile installed for %s, but running %s. Please sync profile.", meta.GameVersion, gameVersion)
+		}
+		if meta.BinaryType != "" && meta.BinaryType != binaryType {
+			return "", nil, fmt.Errorf("binary type mismatch: profile installed for %s, but running %s. Please sync profile.", meta.BinaryType, binaryType)
+		}
+	}
+
+	if err := modmgr.PrepareProfileDirectory(profileDir, cacheDir, resolvedVersions, binaryType, gameVersion, false); err != nil {
 		return "", nil, err
 	}
 
@@ -70,7 +85,7 @@ func (a *App) PrepareLaunch(gamePath string, profileID uuid.UUID) (string, func(
 }
 
 // SyncProfile forces a re-sync of the profile directory by clearing it and re-installing mods.
-func (a *App) SyncProfile(profileID uuid.UUID, binaryType aumgr.BinaryType) error {
+func (a *App) SyncProfile(profileID uuid.UUID, binaryType aumgr.BinaryType, gameVersion string) error {
 	profile, found := a.ProfileManager.Get(profileID)
 	if !found {
 		return fmt.Errorf("profile not found: %s", profileID)
@@ -84,7 +99,7 @@ func (a *App) SyncProfile(profileID uuid.UUID, binaryType aumgr.BinaryType) erro
 	cacheDir := filepath.Join(a.ConfigDir, "mods")
 	profileDir := filepath.Join(a.ConfigDir, "profiles", profileID.String())
 
-	return modmgr.PrepareProfileDirectory(profileDir, cacheDir, resolvedVersions, binaryType, true)
+	return modmgr.PrepareProfileDirectory(profileDir, cacheDir, resolvedVersions, binaryType, gameVersion, true)
 }
 
 // ExecuteLaunch launches the game and blocks until it exits.

@@ -16,6 +16,7 @@ import (
 	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/lang"
+	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
@@ -362,6 +363,12 @@ func (l *Launcher) syncProfile(prof profile.Profile) {
 		return
 	}
 
+	gameVersion, err := aumgr.GetVersion(path)
+	if err != nil {
+		dialog.ShowError(err, l.state.Window)
+		return
+	}
+
 	l.progressBar.Canvas().Show()
 	l.launchButton.Disable()
 	l.state.CanInstall.Set(false)
@@ -394,7 +401,7 @@ func (l *Launcher) syncProfile(prof profile.Profile) {
 		}
 
 		// Sync profile directory
-		if err := l.state.Core.SyncProfile(prof.ID, binaryType); err != nil {
+		if err := l.state.Core.SyncProfile(prof.ID, binaryType, gameVersion); err != nil {
 			l.state.SetError(err)
 			return
 		}
@@ -668,47 +675,54 @@ func (l *Launcher) openProfileEditor(prof profile.Profile) {
 func (l *Launcher) showAddModDialog(onAdd func([]modmgr.ModVersion)) {
 	l.progressBar.Canvas().Show()
 	defer l.progressBar.Canvas().Hide()
-	var mods []modmgr.Mod
-	var modList *widget.List
 
-	// Create list first
-	modList = widget.NewList(
-		func() int { return len(mods) },
-		func() fyne.CanvasObject {
-			modIcon := canvas.NewImageFromImage(image.NewPaletted(image.Rect(0, 0, 128, 128),
-				color.Palette{theme.Color(theme.ColorNameDisabled)},
-			))
-			modIcon.CornerRadius = 8
-			modName := widget.NewLabel("Mod Name")
-			modDescription := widget.NewRichText()
-			versionLabel := widget.NewLabel("(None)")
-			versionLabel.SizeName = theme.SizeNameCaptionText
-			return container.NewPadded(container.NewBorder(nil, nil, modIcon, nil,
-				modIcon,
-				container.NewVBox(
-					modName,
-					modDescription,
-					versionLabel,
-				),
-			))
-		},
-		func(id widget.ListItemID, item fyne.CanvasObject) {
-			if id >= len(mods) {
-				return
-			}
-			mod := mods[id]
-			c := item.(*fyne.Container).Objects[0].(*fyne.Container)
-			modIcon := c.Objects[0].(*canvas.Image)
-			modIcon.SetMinSize(fyne.NewSquareSize(modIcon.Size().Height))
-			modName := c.Objects[1].(*fyne.Container).Objects[0].(*widget.Label)
-			modDescription := c.Objects[1].(*fyne.Container).Objects[1].(*widget.RichText)
-			versionLabel := c.Objects[1].(*fyne.Container).Objects[2].(*widget.Label)
+	contentBox := container.NewVBox()
+	scroll := container.NewVScroll(contentBox)
 
-			modName.SetText(mod.Name)
-			modDescription.ParseMarkdown(mod.Description)
-			versionLabel.SetText(mod.LatestVersion)
-		},
-	)
+	// Create dialog first
+	var d *dialog.CustomDialog
+
+	// Refresh function
+	refreshList := func(mods []modmgr.Mod) {
+		contentBox.Objects = nil
+		for _, mod := range mods {
+			mod := mod // capture loop var
+			
+			// Create Item UI
+			imgRect := canvas.NewRectangle(theme.Color(theme.ColorNameDisabled))
+			imgRect.SetMinSize(fyne.NewSquareSize(80))
+			img := container.NewCenter(imgRect)
+
+			textContainer := container.NewVBox(
+				widget.NewLabelWithStyle(mod.Name, fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+				widget.NewLabel(mod.Author),
+			)
+
+			itemContent := container.New(layout.NewBorderLayout(nil, nil, img, nil),
+				img,
+				container.NewPadded(textContainer),
+			)
+
+			// Make clickable
+			card := uicommon.NewTappableContainer(itemContent, func() {
+				detailsDialog := l.newModDetailsDialog(mod, func(v modmgr.ModVersion) {
+					onAdd([]modmgr.ModVersion{v})
+					d.Dismiss()
+				})
+				detailsDialog.Show()
+			})
+
+			// Styling
+			bg := canvas.NewRectangle(theme.Color(theme.ColorNameBackground))
+			bg.StrokeColor = theme.Color(theme.ColorNameButton)
+			bg.StrokeWidth = 1
+			bg.CornerRadius = theme.InputRadiusSize()
+			
+			item := container.NewStack(bg, container.NewPadded(card))
+			contentBox.Add(item)
+		}
+		contentBox.Refresh()
+	}
 
 	go func() {
 		m, err := l.state.Rest.GetModList(100, "", "")
@@ -716,31 +730,15 @@ func (l *Launcher) showAddModDialog(onAdd func([]modmgr.ModVersion)) {
 			dialog.ShowError(err, l.state.Window)
 			return
 		}
-		mods = m
-		fyne.Do(modList.Refresh)
-	}()
-
-	var d *dialog.CustomDialog
-	modList.OnSelected = func(id widget.ListItemID) {
-		if id >= len(mods) {
-			return
-		}
-		mod := mods[id]
-		detailsDialog := l.newModDetailsDialog(mod, func(v modmgr.ModVersion) {
-			onAdd([]modmgr.ModVersion{v})
-			d.Dismiss()
+		fyne.Do(func() {
+			refreshList(m)
 		})
-		// detailsDialog.SetOnClosed(modList.UnselectAll) // newModDetailsDialog returns *CustomDialog, doesn't have SetOnClosed exposed nicely unless we check type?
-		// Actually CustomDialog has SetOnClosed.
-		// But let's just show it.
-		detailsDialog.Show()
-		modList.Unselect(id)
-	}
+	}()
 
 	d = dialog.NewCustom(
 		lang.LocalizeKey("profile.add_mod_title", "Add Mods"),
 		lang.LocalizeKey("common.cancel", "Cancel"),
-		modList,
+		scroll,
 		l.state.Window,
 	)
 	d.Resize(fyne.NewSize(600, 600))

@@ -11,14 +11,16 @@ import (
 )
 
 type ProfileMetadata struct {
-	ModVersions []ModVersion `json:"mod_versions"`
+	ModVersions []ModVersion     `json:"mod_versions"`
+	GameVersion string           `json:"game_version"`
+	BinaryType  aumgr.BinaryType `json:"binary_type"`
 }
 
 func getProfileMetadataPath(profileDir string) string {
 	return filepath.Join(profileDir, "profile_meta.json")
 }
 
-func loadProfileMetadata(profileDir string) (*ProfileMetadata, error) {
+func GetProfileMetadata(profileDir string) (*ProfileMetadata, error) {
 	path := getProfileMetadataPath(profileDir)
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -61,17 +63,17 @@ func modVersionsEqual(a, b []ModVersion) bool {
 }
 
 // PrepareProfileDirectory installs mods from cache to the profile directory and generates doorstop_config.ini.
-func PrepareProfileDirectory(profileDir string, cacheDir string, modVersions []ModVersion, binaryType aumgr.BinaryType, force bool) error {
+func PrepareProfileDirectory(profileDir string, cacheDir string, modVersions []ModVersion, binaryType aumgr.BinaryType, gameVersion string, force bool) error {
 	if err := os.MkdirAll(profileDir, 0755); err != nil {
 		return fmt.Errorf("failed to create profile directory: %w", err)
 	}
 
-	meta, err := loadProfileMetadata(profileDir)
+	meta, err := GetProfileMetadata(profileDir)
 	if err != nil {
 		return fmt.Errorf("failed to load profile metadata: %w", err)
 	}
 
-	shouldInstall := force || meta == nil || !modVersionsEqual(meta.ModVersions, modVersions)
+	shouldInstall := force || meta == nil || !modVersionsEqual(meta.ModVersions, modVersions) || meta.GameVersion != gameVersion || meta.BinaryType != binaryType
 
 	if shouldInstall {
 		// Clear BepInEx folder
@@ -127,6 +129,8 @@ func PrepareProfileDirectory(profileDir string, cacheDir string, modVersions []M
 		// Save metadata
 		newMeta := &ProfileMetadata{
 			ModVersions: modVersions,
+			GameVersion: gameVersion,
+			BinaryType:  binaryType,
 		}
 		if err := saveProfileMetadata(profileDir, newMeta); err != nil {
 			return fmt.Errorf("failed to save profile metadata: %w", err)
