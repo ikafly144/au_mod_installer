@@ -10,6 +10,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/google/uuid"
+	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
 )
 
 func (s *State) Launch(path string) {
@@ -18,6 +19,15 @@ func (s *State) Launch(path string) {
 		return
 	}
 	defer s.launchLock.Unlock()
+
+	if s.Core.DetectLauncherType(path) == aumgr.LauncherEpicGames {
+		if _, err := s.Core.EpicSessionManager.GetValidSession(s.Core.EpicApi); err != nil {
+			s.ShowEpicLoginWindow(func() {
+				go s.Launch(path)
+			}, nil)
+			return
+		}
+	}
 
 	fyne.Do(func() {
 		s.ErrorText.Segments = []widget.RichTextSegment{

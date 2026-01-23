@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -35,6 +36,7 @@ type Launcher struct {
 	launchButton        *widget.Button
 	greetingContent     *widget.Label
 	createProfileButton *widget.Button
+	importProfileButton *widget.Button
 
 	profileList       *widget.List
 	progressBar       *progress.FyneProgress
@@ -55,6 +57,7 @@ func NewLauncherTab(s *uicommon.State) uicommon.Tab {
 		progressBar:         progress.NewFyneProgress(widget.NewProgressBar()),
 		launchButton:        widget.NewButtonWithIcon(lang.LocalizeKey("launcher.launch", "Launch"), theme.MediaPlayIcon(), l.runLaunch),
 		createProfileButton: widget.NewButtonWithIcon(lang.LocalizeKey("profile.create", "Create Profile"), theme.ContentAddIcon(), l.createProfile),
+		importProfileButton: widget.NewButtonWithIcon(lang.LocalizeKey("profile.import_clipboard", "Import from Clipboard"), theme.ContentPasteIcon(), l.showImportDialog),
 		greetingContent:     widget.NewLabelWithStyle(fmt.Sprintf("バージョン：%s (%s)", s.Version, revision), fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 	}
 
@@ -90,6 +93,20 @@ func (l *Launcher) shareProfile(prof profile.Profile) {
 	}
 	fyne.CurrentApp().Clipboard().SetContent(uri)
 	dialog.ShowInformation(lang.LocalizeKey("common.success", "Success"), lang.LocalizeKey("profile.shared_clipboard", "Share URI copied to clipboard."), l.state.Window)
+}
+
+func (l *Launcher) showImportDialog() {
+	entry := widget.NewMultiLineEntry()
+	entry.PlaceHolder = "mod-of-us://profile/..."
+	entry.SetMinRowsVisible(3)
+
+	dialog.ShowCustomConfirm(lang.LocalizeKey("profile.import_title", "Import Profile"), lang.LocalizeKey("common.add", "Import"), lang.LocalizeKey("common.cancel", "Cancel"), entry, func(confirm bool) {
+		if !confirm {
+			return
+		}
+		l.state.SharedURI = strings.TrimSpace(entry.Text)
+		l.checkSharedURI()
+	}, l.state.Window)
 }
 
 func (l *Launcher) checkSharedURI() {
@@ -221,7 +238,8 @@ func (l *Launcher) Tab() (*container.TabItem, error) {
 
 	footer := container.NewVBox(
 		widget.NewSeparator(),
-		container.NewGridWithColumns(2, l.createProfileButton, l.launchButton),
+		container.NewGridWithColumns(2, l.createProfileButton, l.importProfileButton),
+		l.launchButton,
 		l.progressBar.Canvas(),
 		l.state.ErrorText,
 	)
