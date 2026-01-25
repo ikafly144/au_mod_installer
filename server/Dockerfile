@@ -46,7 +46,7 @@ EXPOSE ${PORT}
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT}${BASE_PATH}/health || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT}${PATH_PREFIX}${BASE_PATH}/health || exit 1
 
 # Run the server
 ENTRYPOINT ["/app/server"]
