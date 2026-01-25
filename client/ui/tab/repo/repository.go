@@ -109,6 +109,7 @@ func NewRepository(state *uicommon.State) *Repository {
 	repo.mainContainer = container.NewStack(repo.listView, repo.detailView)
 	repo.detailView.Hide()
 
+	repo.init()
 	return repo
 }
 

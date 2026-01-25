@@ -27,6 +27,8 @@ import (
 type Settings struct {
 	state               *uicommon.State
 	BranchSelect        *widget.Select
+	ApiServerEntry      *widget.Entry
+	SaveConfigButton    *widget.Button
 	ImportProfileButton *widget.Button
 	ClearCacheButton    *widget.Button
 
@@ -55,13 +57,20 @@ func NewSettings(state *uicommon.State) *Settings {
 	currentBranch := fyne.CurrentApp().Preferences().StringWithFallback("core.update_branch", "stable")
 	branchSelect.SetSelected(currentBranch)
 
+	apiServerEntry := widget.NewEntry()
+	apiServerEntry.PlaceHolder = "https://modofus.sabafly.net/api/v1"
+	apiServerEntry.SetText(fyne.CurrentApp().Preferences().String("api_server"))
+
 	s := &Settings{
 		state:            state,
 		BranchSelect:     branchSelect,
+		ApiServerEntry:   apiServerEntry,
 		uninstallButton:  widget.NewButtonWithIcon(lang.LocalizeKey("installation.uninstall", "Uninstall from Game Folder"), theme.DeleteIcon(), nil), // nil callback initially, set in init
 		progressBar:      progress.NewFyneProgress(widget.NewProgressBar()),
 		epicAccountLabel: widget.NewLabel(""),
 	}
+
+	s.SaveConfigButton = widget.NewButtonWithIcon(lang.LocalizeKey("settings.save", "Save"), theme.DocumentSaveIcon(), s.saveConfig)
 
 	s.epicLoginButton = widget.NewButton(lang.LocalizeKey("settings.epic_login", "Login"), s.showEpicLoginDialog)
 	s.epicLogoutButton = widget.NewButton(lang.LocalizeKey("settings.epic_logout", "Logout"), s.epicLogout)
@@ -136,10 +145,18 @@ func (s *Settings) Tab() (*container.TabItem, error) {
 		container.NewHBox(s.epicLoginButton, s.epicLogoutButton),
 	)
 
+	apiSettingsSection := container.NewVBox(
+		widget.NewRichTextFromMarkdown("## "+lang.LocalizeKey("settings.api_server", "API Server")),
+		settingsEntry(lang.LocalizeKey("settings.server_url", "Server URL"), s.ApiServerEntry),
+		s.SaveConfigButton,
+	)
+
 	list := container.NewVScroll(container.NewVBox(
 		installPathSection,
 		widget.NewSeparator(),
 		settingsEntry(lang.LocalizeKey("settings.update_channel", "Update Channel"), s.BranchSelect),
+		widget.NewSeparator(),
+		apiSettingsSection,
 		widget.NewSeparator(),
 		epicAccountSection,
 		widget.NewSeparator(),
@@ -314,9 +331,17 @@ func (s *Settings) importProfile() {
 	}, s.state.Window)
 }
 
+func (s *Settings) saveConfig() {
+	server := s.ApiServerEntry.Text
+	if server == "" {
+		fyne.CurrentApp().Preferences().RemoveValue("api_server")
+	} else {
+		fyne.CurrentApp().Preferences().SetString("api_server", server)
+	}
+	dialog.ShowInformation(lang.LocalizeKey("common.success", "Success"), lang.LocalizeKey("settings.saved", "Settings saved successfully. Please restart the application."), s.state.Window)
+}
+
 func settingsEntry(title string, content fyne.CanvasObject) fyne.CanvasObject {
 	label := widget.NewLabelWithStyle(title, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	return container.New(layout.NewBorderLayout(nil, nil, label, nil), content, label)
 }
-
-// mod-of-us://profile/eyJpZCI6Ijg1MDM1YzkwLTExYWMtNGVjNC05NjA1LTM2YWU3MjA4ZDAwZSIsIm5hbWUiOiJTTlIiLCJhdXRob3IiOiIiLCJtb2RfdmVyc2lvbnMiOnsiYmVwaW5leCI6eyJpZCI6IjYuMC4wLWJlLjczNSs1ZmVmMzU3IiwibW9kX2lkIjoiYmVwaW5leCIsImNyZWF0ZWRfYXQiOiIwMDAxLTAxLTAxVDAwOjAwOjAwWiIsImZpbGVzIjpbeyJjb21wYXRpYmxlIjpbIng4NiJdLCJmaWxlX3R5cGUiOiJ6aXAiLCJ1cmwiOiJodHRwczovL2J1aWxkcy5iZXBpbmV4LmRldi9wcm9qZWN0cy9iZXBpbmV4X2JlLzczNS9CZXBJbkV4LVVuaXR5LklMMkNQUC13aW4teDg2LTYuMC4wLWJlLjczNSUyQjVmZWYzNTcuemlwIn0seyJjb21wYXRpYmxlIjpbIng2NCJdLCJmaWxlX3R5cGUiOiJ6aXAiLCJ1cmwiOiJodHRwczovL2J1aWxkcy5iZXBpbmV4LmRldi9wcm9qZWN0cy9iZXBpbmV4X2JlLzczNS9CZXBJbkV4LVVuaXR5LklMMkNQUC13aW4teDY0LTYuMC4wLWJlLjczNSUyQjVmZWYzNTcuemlwIn0seyJjb21wYXRpYmxlIjpbIng4NiIsIng2NCJdLCJmaWxlX3R5cGUiOiJub3JtYWwiLCJwYXRoIjoiQmVwSW5FeC9jb25maWcvQmVwSW5FeC5jZmciLCJ1cmwiOiJodHRwczovL2Nkbi5zYWJhZmx5Lm5ldC9hdV9tb2RzL0JlcEluRXguY2ZnIn1dfSwic3VwZXItbmV3LXJvbGVzIjp7ImlkIjoiMy4xLjMuMyIsIm1vZF9pZCI6InN1cGVyLW5ldy1yb2xlcyIsImNyZWF0ZWRfYXQiOiIyMDI2LTAxLTA1VDE0OjE0OjM1LjA2NTAzNjI2NFoiLCJkZXBlbmRlbmNpZXMiOlt7ImlkIjoiYmVwaW5leCIsInR5cGUiOiJyZXF1aXJlZCJ9LHsiaWQiOiJzbnItY29uZmlnIiwidmVyc2lvbiI6IjEiLCJ0eXBlIjoicmVxdWlyZWQifV0sImZpbGVzIjpbeyJjb21wYXRpYmxlIjpbIng4NiIsIng2NCJdLCJmaWxlX3R5cGUiOiJub3JtYWwiLCJwYXRoIjoiQmVwSW5FeC9wbHVnaW5zL1N1cGVyTmV3Um9sZXMuZGxsIiwidXJsIjoiaHR0cHM6Ly9naXRodWIuY29tL1N1cGVyTmV3Um9sZXMvU3VwZXJOZXdSb2xlcy9yZWxlYXNlcy9kb3dubG9hZC8zLjEuMy4zL1N1cGVyTmV3Um9sZXMuZGxsIn1dfX0sInVwZGF0ZWRfYXQiOiIyMDI2LTAxLTIzVDIwOjQ5OjM0LjYzOTkwMjcrMDk6MDAifQ==

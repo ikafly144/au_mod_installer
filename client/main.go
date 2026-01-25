@@ -133,16 +133,20 @@ func realMain(sharedURI string) error {
 		offline   bool
 	)
 
+	a := app.New()
+
 	flag.StringVar(&localMode, "local", "", "Path to local mods.json file for local mode")
-	flag.StringVar(&server, "server", DefaultServer, "URL of the mod server")
+	flag.StringVar(&server, "server", "", "URL of the mod server")
 	flag.BoolVar(&offline, "offline", false, "Run in offline mode (only uninstallation and management of installed mods are available)")
 	flag.Parse()
+
+	if server == "" {
+		server = a.Preferences().StringWithFallback("api_server", DefaultServer)
+	}
 
 	if err := registerScheme(); err != nil {
 		slog.Error("Failed to register scheme", "error", err)
 	}
-
-	a := app.New()
 
 	branch := versioning.BranchFromString(a.Preferences().StringWithFallback("core.update_branch", "stable"))
 
@@ -183,19 +187,22 @@ func realMain(sharedURI string) error {
 			return err
 		}
 		client = f
+	} else if offline {
+		slog.Info("Running in offline mode")
+		client = rest.NewOfflineClient()
 	} else {
 		slog.Info("Running in server mode", "server", server)
 		client = rest.NewClient(server)
-	}
 
-	if _, err := client.GetHealthStatus(); err != nil || offline {
-		slog.Error("Failed to connect to server", "error", err)
-		yes := (&dialog.MsgBuilder{Msg: lang.LocalizeKey("error.server_connection_failed_offline_prompt", "Failed to connect to server: {{.Error}}\nDo you want to continue in offline mode?\n(Only uninstallation and management of installed mods are available)", map[string]any{"Error": err})}).Title(lang.LocalizeKey("error.connection_error", "Connection Error")).YesNo()
-		if yes {
-			slog.Info("Continuing in offline mode")
-			client = rest.NewOfflineClient()
-		} else {
-			return err
+		if _, err := client.GetHealthStatus(); err != nil {
+			slog.Error("Failed to connect to server", "error", err)
+			yes := (&dialog.MsgBuilder{Msg: lang.LocalizeKey("error.server_connection_failed_offline_prompt", "Failed to connect to server: {{.Error}}\nDo you want to continue in offline mode?\n(Only uninstallation and management of installed mods are available)", map[string]any{"Error": err})}).Title(lang.LocalizeKey("error.connection_error", "Connection Error")).YesNo()
+			if yes {
+				slog.Info("Continuing in offline mode")
+				client = rest.NewOfflineClient()
+			} else {
+				return err
+			}
 		}
 	}
 
