@@ -1,5 +1,5 @@
 # Git
-.gitignore
+# .gitignore
 
 # IDE
 .vscode
@@ -29,9 +29,9 @@ local/
 img/
 
 # Docker files
-docker-compose*.yml
-Dockerfile*
-.dockerignore
+# docker-compose*.yml
+# Dockerfile*
+# .dockerignore
 
 # Certificates (for nginx)
 certs/
