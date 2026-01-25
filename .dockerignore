@@ -1,12 +1,6 @@
 # Git
 # .gitignore
 
-# IDE
-.vscode
-.idea
-*.swp
-*.swo
-
 # Binaries
 *.exe
 *.exe~
@@ -17,7 +11,7 @@ server/server
 client/client
 
 # Test files
-*_test.go
+# *_test.go
 *.test
 
 # Documentation
