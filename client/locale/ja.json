@@ -56,6 +56,9 @@
     "launch.error.launch_failed": "Among Usの起動に失敗しました: ",
     "common.select_file": "{{.FileType}}を選択",
     "settings.title": "設定",
+    "settings.api_server": "APIサーバー",
+    "settings.server_url": "サーバーURL",
+    "settings.advanced_settings": "高度な設定",
     "settings.update_channel": "アップデートチャンネル",
     "settings.epic_games_account": "Epic Gamesアカウント",
     "settings.epic_login": "ログイン",
@@ -111,5 +114,7 @@
     "common.add": "追加",
     "repository.select_profile_msg": "Modを追加するプロファイルを選択してください:",
     "repository.added_to_profile": "プロファイル '{{.Profile}}' に追加しました: {{.ModName}} ({{.Version}})",
+    "repository.no_mods_found": "Modが見つかりませんでした。",
+    "repository.failed_to_load": "Modの読み込みに失敗しました: {{.Error}}",
     "launcher.error.no_profile": "起動するプロファイルを選択してください。"
 }

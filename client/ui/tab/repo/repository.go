@@ -117,6 +117,7 @@ func (r *Repository) init() {
 	go func() {
 		if err, _ := r.fetchMods(); err != nil {
 			slog.Error("Failed to refresh mods in repository tab", "error", err)
+			r.state.SetError(fmt.Errorf("%s", lang.LocalizeKey("repository.failed_to_load", "Failed to load mods: {{.Error}}", map[string]any{"Error": err.Error()})))
 		}
 	}()
 }
@@ -131,9 +132,6 @@ func (r *Repository) updateModList(filter string) {
 	mods, err := r.modsBind.Get()
 	if err != nil {
 		slog.Error("Failed to get mods from binding", "error", err)
-		return
-	}
-	if len(mods) == 0 {
 		return
 	}
 
@@ -182,11 +180,15 @@ func (r *Repository) updateModList(filter string) {
 		objs = append(objs, item)
 	}
 
+	if len(objs) == 0 {
+		objs = append(objs, container.NewCenter(widget.NewLabel(lang.LocalizeKey("repository.no_mods_found", "No mods found."))))
+	}
+
 	r.mu.Lock()
 	noMore := r.noMoreMods
 	r.mu.Unlock()
 
-	if !noMore {
+	if !noMore && len(mods) > 0 {
 		objs = append(objs, widget.NewButton(lang.LocalizeKey("repository.load_next", "Load more..."), r.LoadNext))
 	}
 
@@ -393,6 +395,7 @@ func (r *Repository) LoadNext() {
 		slog.Info("Loading next mods in repository tab", "current_mods", mods)
 		if err, ok := r.fetchMods(); err != nil {
 			slog.Error("Failed to load next mods in repository tab", "error", err)
+			r.state.SetError(fmt.Errorf("%s", lang.LocalizeKey("repository.failed_to_load", "Failed to load mods: {{.Error}}", map[string]any{"Error": err.Error()})))
 		} else {
 			if !ok {
 				slog.Info("No more mods to load in repository tab")
@@ -469,5 +472,6 @@ func (r *Repository) reloadMods() {
 	_ = r.modsBind.Set([]modmgr.Mod{})
 	if err, _ := r.fetchMods(); err != nil {
 		slog.Error("Failed to reload mods in repository tab", "error", err)
+		r.state.SetError(fmt.Errorf("%s", lang.LocalizeKey("repository.failed_to_load", "Failed to load mods: {{.Error}}", map[string]any{"Error": err.Error()})))
 	}
 }

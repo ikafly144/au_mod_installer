@@ -145,10 +145,16 @@ func (s *Settings) Tab() (*container.TabItem, error) {
 		container.NewHBox(s.epicLoginButton, s.epicLogoutButton),
 	)
 
-	apiSettingsSection := container.NewVBox(
-		widget.NewRichTextFromMarkdown("## "+lang.LocalizeKey("settings.api_server", "API Server")),
-		settingsEntry(lang.LocalizeKey("settings.server_url", "Server URL"), s.ApiServerEntry),
-		s.SaveConfigButton,
+	advancedSettings := widget.NewAccordion(
+		widget.NewAccordionItem(lang.LocalizeKey("settings.advanced_settings", "Advanced Settings"), container.NewVBox(
+			widget.NewRichTextFromMarkdown("### "+lang.LocalizeKey("settings.api_server", "API Server")),
+			settingsEntry(lang.LocalizeKey("settings.server_url", "Server URL"), s.ApiServerEntry),
+			s.SaveConfigButton,
+			widget.NewSeparator(),
+			settingsEntry(lang.LocalizeKey("settings.legacy_migration", "Legacy Migration"), s.ImportProfileButton),
+			widget.NewSeparator(),
+			uninstallSection,
+		)),
 	)
 
 	list := container.NewVScroll(container.NewVBox(
@@ -156,15 +162,11 @@ func (s *Settings) Tab() (*container.TabItem, error) {
 		widget.NewSeparator(),
 		settingsEntry(lang.LocalizeKey("settings.update_channel", "Update Channel"), s.BranchSelect),
 		widget.NewSeparator(),
-		apiSettingsSection,
-		widget.NewSeparator(),
 		epicAccountSection,
 		widget.NewSeparator(),
 		settingsEntry(lang.LocalizeKey("settings.cache_management", "Cache Management"), s.ClearCacheButton),
 		widget.NewSeparator(),
-		settingsEntry(lang.LocalizeKey("settings.legacy_migration", "Legacy Migration"), s.ImportProfileButton),
-		widget.NewSeparator(),
-		uninstallSection,
+		advancedSettings,
 		s.state.ErrorText,
 	))
 	return container.NewTabItem(lang.LocalizeKey("settings.title", "Settings"), list), nil
