@@ -31,7 +31,7 @@ import (
 	"github.com/ikafly144/au_mod_installer/common/versioning"
 )
 
-var DefaultServer = "https://modofus.sabafly.net/v1"
+var DefaultServer = "https://modofus.sabafly.net/api/v1"
 var pipeName = `\\.\pipe\au_mod_installer_ipc`
 
 func main() {
