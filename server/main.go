@@ -32,7 +32,15 @@ func main() {
 		disabledVersionsStr string
 	)
 
-	flag.StringVar(&addr, "addr", ":8080", "HTTP server address")
+	defaultAddr := ":8080"
+	if port := os.Getenv("PORT"); port != "" {
+		defaultAddr = ":" + port
+	}
+	if envAddr := os.Getenv("ADDR"); envAddr != "" {
+		defaultAddr = envAddr
+	}
+
+	flag.StringVar(&addr, "addr", defaultAddr, "HTTP server address")
 	flag.StringVar(&modsFile, "mods", "mods.json", "Path to mods.json file")
 	flag.StringVar(&valkeyAddr, "valkey", "", "Valkey server address (e.g., localhost:6379). If empty, uses file-based storage")
 	flag.StringVar(&pathPrefix, "path-prefix", "", "URL path prefix (e.g. /api)")

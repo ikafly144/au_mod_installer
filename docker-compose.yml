@@ -35,7 +35,8 @@ services:
       - .env
     environment:
       - TZ=Asia/Tokyo
-    command: ["-addr", ":8180", "-valkey", "valkey:6379"]
+      - PORT=8180
+    command: ["-valkey", "valkey:6379"]
     depends_on:
       valkey:
         condition: service_healthy
