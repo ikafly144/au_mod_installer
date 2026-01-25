@@ -22,11 +22,17 @@ func main() {
 	var (
 		addr       string
 		valkeyAddr string
+		pathPrefix string
 	)
 
 	flag.StringVar(&addr, "addr", ":8081", "HTTP server address")
 	flag.StringVar(&valkeyAddr, "valkey", "localhost:6379", "Valkey server address")
+	flag.StringVar(&pathPrefix, "path-prefix", "", "URL path prefix (e.g. /admin)")
 	flag.Parse()
+
+	if pathPrefix == "" {
+		pathPrefix = os.Getenv("PATH_PREFIX")
+	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
@@ -50,7 +56,7 @@ func main() {
 
 	// Create repository and handler
 	repo := valkeyrepo.NewRepository(client)
-	tmpl := templates.New()
+	tmpl := templates.New(pathPrefix)
 	h := handler.New(repo, tmpl)
 
 	// Setup routes
@@ -86,9 +92,15 @@ func main() {
 	mux.HandleFunc("POST /api/import", h.HandleImport)
 	mux.HandleFunc("GET /api/export", h.HandleExport)
 
+	var rootHandler http.Handler = mux
+	if pathPrefix != "" {
+		slog.Info("enabling path prefix", "prefix", pathPrefix)
+		rootHandler = http.StripPrefix(pathPrefix, mux)
+	}
+
 	server := &http.Server{
 		Addr:    addr,
-		Handler: loggingMiddleware(corsMiddleware(mux)),
+		Handler: loggingMiddleware(corsMiddleware(rootHandler)),
 	}
 
 	// Start server in a goroutine

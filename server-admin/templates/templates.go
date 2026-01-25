@@ -33,11 +33,12 @@ var mimeTypes = map[string]string{
 
 // Templates holds the parsed templates
 type Templates struct {
-	base *template.Template
+	base     *template.Template
+	basePath string
 }
 
 // New creates a new Templates instance
-func New() *Templates {
+func New(basePath string) *Templates {
 	funcMap := template.FuncMap{
 		"json": jsonMarshal,
 	}
@@ -46,7 +47,7 @@ func New() *Templates {
 	tmpl := template.New("base").Funcs(funcMap)
 	tmpl = template.Must(tmpl.ParseFS(templateFiles, "views/layout.go.tmpl"))
 
-	return &Templates{base: tmpl}
+	return &Templates{base: tmpl, basePath: basePath}
 }
 
 // Render renders a template with the given data
@@ -62,6 +63,11 @@ func (t *Templates) Render(w io.Writer, name string, data any) error {
 	pattern := "views/" + name + ".go.tmpl"
 	if _, err := tmpl.ParseFS(templateFiles, pattern); err != nil {
 		return err
+	}
+
+	// Inject BasePath into data if it's a map
+	if m, ok := data.(map[string]any); ok {
+		m["BasePath"] = t.basePath
 	}
 
 	return tmpl.ExecuteTemplate(w, name, data)

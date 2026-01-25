@@ -3,12 +3,12 @@
 {{end}}
 
 {{define "content"}}
-<a href="/" class="back-link">← Mod一覧に戻る</a>
+<a href="{{.BasePath}}/" class="back-link">← Mod一覧に戻る</a>
 
 <div class="card">
     <div class="card-header">
         <h2>バージョン一覧: {{.Mod.Name}}</h2>
-        <a href="/mods/{{.Mod.ID}}/versions/new" class="btn btn-primary">+ 新規バージョン</a>
+        <a href="{{.BasePath}}/mods/{{.Mod.ID}}/versions/new" class="btn btn-primary">+ 新規バージョン</a>
     </div>
     <div class="card-body">
         {{if .Versions}}
@@ -45,7 +45,7 @@
                             {{else}}
                             <button class="btn btn-secondary" onclick="setLatestVersion('{{.ID}}')">Set Latest</button>
                             {{end}}
-                            <a href="/mods/{{$.Mod.ID}}/versions/{{.ID}}/edit" class="btn btn-secondary">編集</a>
+                            <a href="{{$.BasePath}}/mods/{{$.Mod.ID}}/versions/{{.ID}}/edit" class="btn btn-secondary">編集</a>
                             <button class="btn btn-danger" onclick="deleteVersion('{{.ID}}')">削除</button>
                         </td>
                     </tr>
@@ -89,7 +89,7 @@
                         {{if ne .ID $.Mod.LatestVersion}}
                         <button class="btn btn-secondary btn-sm" onclick="setLatestVersion('{{.ID}}')">Set Latest</button>
                         {{end}}
-                        <a href="/mods/{{$.Mod.ID}}/versions/{{.ID}}/edit" class="btn btn-secondary btn-sm">編集</a>
+                        <a href="{{$.BasePath}}/mods/{{$.Mod.ID}}/versions/{{.ID}}/edit" class="btn btn-secondary btn-sm">編集</a>
                         <button class="btn btn-danger btn-sm" onclick="deleteVersion('{{.ID}}')">削除</button>
                     </div>
                 </div>

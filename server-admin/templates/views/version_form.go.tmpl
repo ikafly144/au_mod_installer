@@ -3,7 +3,7 @@
 {{end}}
 
 {{define "content"}}
-<a href="/mods/{{.Mod.ID}}/versions" class="back-link">← バージョン一覧に戻る</a>
+<a href="{{.BasePath}}/mods/{{.Mod.ID}}/versions" class="back-link">← バージョン一覧に戻る</a>
 
 <div class="card">
     <div class="card-header">
@@ -433,7 +433,7 @@
             }
             // Redirect back to list
             setTimeout(() => {
-                window.location.href = `/mods/${modId}/versions`;
+                window.location.href = `{{.BasePath}}/mods/${modId}/versions`;
             }, 500);
         } catch (error) {
             showToast(error.message, 'error');

@@ -28,6 +28,7 @@ func main() {
 		modsFile            string
 		valkeyAddr          string
 		pathPrefix          string
+		basePath            string
 		disabledVersionsStr string
 	)
 
@@ -35,8 +36,16 @@ func main() {
 	flag.StringVar(&modsFile, "mods", "mods.json", "Path to mods.json file")
 	flag.StringVar(&valkeyAddr, "valkey", "", "Valkey server address (e.g., localhost:6379). If empty, uses file-based storage")
 	flag.StringVar(&pathPrefix, "path-prefix", "", "URL path prefix (e.g. /api)")
+	flag.StringVar(&basePath, "base-path", "", "API version base path (e.g. /v1)")
 	flag.StringVar(&disabledVersionsStr, "disabled-versions", "", "Comma-separated list of disabled versions")
 	flag.Parse()
+
+	if pathPrefix == "" {
+		pathPrefix = os.Getenv("PATH_PREFIX")
+	}
+	if basePath == "" {
+		basePath = os.Getenv("BASE_PATH")
+	}
 
 	if disabledVersionsStr == "" {
 		disabledVersionsStr = os.Getenv("DISABLED_VERSIONS")
@@ -104,7 +113,7 @@ func main() {
 
 	h := handler.NewHandler(modService, version, disabledVersions)
 	mux := http.NewServeMux()
-	h.RegisterRoutes(mux)
+	h.RegisterRoutes(mux, basePath)
 
 	var rootHandler http.Handler = mux
 	if pathPrefix != "" {

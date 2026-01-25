@@ -6,15 +6,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{.Title}} - AU Mod Admin</title>
-    <link href="/static/output.css" rel="stylesheet">
+    <link href="{{.BasePath}}/static/output.css" rel="stylesheet">
 </head>
 
 <body class="bg-gray-50 text-gray-800 font-sans antialiased">
     <header class="bg-indigo-600 text-white py-4 mb-8 shadow">
         <div class="container mx-auto px-4 flex flex-col md:flex-row justify-between items-center gap-4">
-            <h1 class="text-xl font-bold"><a href="/" class="hover:text-indigo-100">🎮 AU Mod Repository Admin</a></h1>
+            <h1 class="text-xl font-bold"><a href="{{.BasePath}}/" class="hover:text-indigo-100">🎮 AU Mod Repository Admin</a></h1>
             <div class="flex gap-2 w-full md:w-auto justify-center md:justify-end">
-                <a href="/api/export" class="btn btn-secondary w-full md:w-auto text-center">📤 エクスポート</a>
+                <a href="{{.BasePath}}/api/export" class="btn btn-secondary w-full md:w-auto text-center">📤 エクスポート</a>
                 <button class="btn btn-secondary w-full md:w-auto" onclick="showImportModal()">📥 インポート</button>
             </div>
         </div>
@@ -68,7 +68,7 @@
             };
             if (body) options.body = JSON.stringify(body);
 
-            const response = await fetch(`/api${endpoint}`, options);
+            const response = await fetch(`{{.BasePath}}/api${endpoint}`, options);
             if (!response.ok) {
                 const error = await response.json();
                 throw new Error(error.error || 'API error');

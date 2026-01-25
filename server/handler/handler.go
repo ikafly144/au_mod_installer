@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strconv"
 
+	"strings"
+
 	"github.com/ikafly144/au_mod_installer/common/rest"
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 	"github.com/ikafly144/au_mod_installer/server/service"
@@ -35,12 +37,38 @@ func NewHandler(modService ModServiceInterface, version string, disabledVersions
 	}
 }
 
-func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /health", h.handleHealth)
-	mux.HandleFunc("GET /mods", h.handleGetMods)
-	mux.HandleFunc("GET /mods/{modID}", h.handleGetMod)
-	mux.HandleFunc("GET /mods/{modID}/versions", h.handleGetModVersions)
-	mux.HandleFunc("GET /mods/{modID}/versions/{versionID}", h.handleGetModVersion)
+func (h *Handler) RegisterRoutes(mux *http.ServeMux, basePath string) {
+	// helper to prepend base path
+	p := func(pattern string) string {
+		if basePath == "" {
+			return pattern
+		}
+
+		method, path, found := strings.Cut(pattern, " ")
+		if !found {
+			path = pattern
+			method = ""
+		}
+
+		// Ensure basePath doesn't have trailing slash
+		cleanedBase := strings.TrimRight(basePath, "/")
+		if cleanedBase == "" && strings.HasPrefix(basePath, "/") {
+			// basePath was just "/" or "///"
+			cleanedBase = ""
+		}
+
+		newPath := cleanedBase + path
+		if method != "" {
+			return method + " " + newPath
+		}
+		return newPath
+	}
+
+	mux.HandleFunc(p("GET /health"), h.handleHealth)
+	mux.HandleFunc(p("GET /mods"), h.handleGetMods)
+	mux.HandleFunc(p("GET /mods/{modID}"), h.handleGetMod)
+	mux.HandleFunc(p("GET /mods/{modID}/versions"), h.handleGetModVersions)
+	mux.HandleFunc(p("GET /mods/{modID}/versions/{versionID}"), h.handleGetModVersion)
 }
 
 func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
