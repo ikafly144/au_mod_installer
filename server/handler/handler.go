@@ -16,6 +16,11 @@ import (
 )
 
 // ModServiceInterface defines the interface for mod service operations
+const (
+	DefaultLimit = 50
+	MaxLimit     = 100
+)
+
 type ModServiceInterface interface {
 	GetModList(ctx context.Context, limit int, after string, before string) ([]modmgr.Mod, error)
 	GetMod(ctx context.Context, modID string) (*modmgr.Mod, error)
@@ -82,11 +87,17 @@ func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleGetMods(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 
-	limit := 0
+	limit := DefaultLimit
 	if limitStr := query.Get("limit"); limitStr != "" {
 		if l, err := strconv.Atoi(limitStr); err == nil {
 			limit = l
 		}
+	}
+	if limit <= 0 {
+		limit = DefaultLimit
+	}
+	if limit > MaxLimit {
+		limit = MaxLimit
 	}
 
 	after := query.Get("after")
@@ -140,11 +151,17 @@ func (h *Handler) handleGetModVersions(w http.ResponseWriter, r *http.Request) {
 
 	query := r.URL.Query()
 
-	limit := 0
+	limit := DefaultLimit
 	if limitStr := query.Get("limit"); limitStr != "" {
 		if l, err := strconv.Atoi(limitStr); err == nil {
 			limit = l
 		}
+	}
+	if limit <= 0 {
+		limit = DefaultLimit
+	}
+	if limit > MaxLimit {
+		limit = MaxLimit
 	}
 
 	after := query.Get("after")

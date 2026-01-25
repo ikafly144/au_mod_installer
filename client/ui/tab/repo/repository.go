@@ -33,8 +33,9 @@ type Repository struct {
 	state *uicommon.State
 	mu    sync.Mutex
 
-	lastModID string
-	modsBind  binding.List[modmgr.Mod]
+	lastModID  string
+	noMoreMods bool
+	modsBind   binding.List[modmgr.Mod]
 
 	// Containers
 	mainContainer *fyne.Container // Stack container for switching views
@@ -179,7 +180,14 @@ func (r *Repository) updateModList(filter string) {
 
 		objs = append(objs, item)
 	}
-	objs = append(objs, widget.NewButton(lang.LocalizeKey("repository.load_next", "Load more..."), r.LoadNext))
+
+	r.mu.Lock()
+	noMore := r.noMoreMods
+	r.mu.Unlock()
+
+	if !noMore {
+		objs = append(objs, widget.NewButton(lang.LocalizeKey("repository.load_next", "Load more..."), r.LoadNext))
+	}
 
 	fyne.Do(func() {
 		r.modListContainer.Objects = objs
@@ -372,6 +380,13 @@ func (r *Repository) installModVersion(mod modmgr.Mod, versionID string) {
 }
 
 func (r *Repository) LoadNext() {
+	r.mu.Lock()
+	if r.noMoreMods {
+		r.mu.Unlock()
+		return
+	}
+	r.mu.Unlock()
+
 	go func() {
 		mods, _ := r.modsBind.Get()
 		slog.Info("Loading next mods in repository tab", "current_mods", mods)
@@ -418,6 +433,9 @@ func (r *Repository) fetchMods() (error, bool) {
 			}
 			r.mu.Lock()
 			r.lastModID = mods[len(mods)-1].ID
+			if len(mods) < ModsPerPage {
+				r.noMoreMods = true
+			}
 			r.mu.Unlock()
 
 			if !slices.ContainsFunc(mods, func(m modmgr.Mod) bool {
@@ -429,6 +447,9 @@ func (r *Repository) fetchMods() (error, bool) {
 
 			return nil, true
 		} else {
+			r.mu.Lock()
+			r.noMoreMods = true
+			r.mu.Unlock()
 			slog.Info("No more mods to load")
 			return nil, false
 		}
@@ -441,6 +462,7 @@ func (r *Repository) reloadMods() {
 	slog.Info("Reloading repository mods")
 	r.mu.Lock()
 	r.lastModID = ""
+	r.noMoreMods = false
 	r.mu.Unlock()
 	fyne.DoAndWait(r.modScroll.ScrollToTop)
 	_ = r.modsBind.Set([]modmgr.Mod{})
