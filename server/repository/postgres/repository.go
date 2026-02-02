@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 	"github.com/ikafly144/au_mod_installer/server/model"
 	"github.com/ikafly144/au_mod_installer/server/repository"
@@ -137,13 +138,14 @@ func (r *Repository) DeleteMod(ctx context.Context, modID string) error {
 }
 
 func (r *Repository) SetModVersion(ctx context.Context, modID string, version modmgr.ModVersion) error {
-	return r.pool.BeginFunc(ctx, func(tx pgx.Tx) error {
+	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
 		// Insert version
 		_, err := tx.Exec(ctx, `
 			INSERT INTO mod_versions (mod_id, version_id, created_at)
 			VALUES ($1, $2, $3)
 			ON CONFLICT (mod_id, version_id) DO NOTHING
 		`, modID, version.ID, version.CreatedAt)
+
 		if err != nil {
 			return fmt.Errorf("failed to insert mod version: %w", err)
 		}
@@ -220,9 +222,10 @@ func (r *Repository) GetModVersion(ctx context.Context, modID string, versionID 
 		}
 		// Convert strings to BinaryType
 		for _, c := range compat {
-			file.Compatible = append(file.Compatible, modmgr.BinaryType(c))
+			file.Compatible = append(file.Compatible, aumgr.BinaryType(c))
 		}
 		version.Files = append(version.Files, file)
+
 	}
 
 	// Fetch dependencies
