@@ -9,10 +9,11 @@
 
 
 ## Phase 2: Remote Version Comparison
-- [x] Task: Implement the update check logic in the REST client. 98b75e9
-    - [x] Write Tests: Create unit tests for comparing local versions with remote metadata. 98b75e9
-    - [x] Implement Feature: Add a function to `client/rest/mods.go` to fetch and compare versions. 98b75e9
+- [x] Task: Implement the update check logic in the REST client. 65fb270
+    - [x] Write Tests: Create unit tests for comparing local versions with remote metadata. 65fb270
+    - [x] Implement Feature: Add a function to `client/rest/mods.go` to fetch and compare versions. 65fb270
 - [ ] Task: Conductor - User Manual Verification 'Phase 2: Remote Version Comparison' (Protocol in workflow.md)
+
 
 
 ## Phase 3: UI Integration
