@@ -25,7 +25,7 @@
 
 
 
-## Phase 3: Frontend Rebuild (Bun + Vite + Material Web)
+## Phase 3: Frontend Rebuild (Bun + Vite + Material Web) [checkpoint: 1b302e3]
 - [x] Task: Remove `server-admin/` and initialize `web-frontend/` with Bun + Vite. e9d5bf9
     - [x] Action: `rm -rf server-admin` and `bun create vite web-frontend`. e9d5bf9
 - [x] Task: Setup Material Web and Basic Layout. 8345298
@@ -34,4 +34,6 @@
     - [x] Implement Feature: Create a login form communicating with the Go backend. 0f18e65
 - [x] Task: Implement Mod Dashboard. aa6de95
     - [x] Implement Feature: Fetch and display the user's mods using the new secure API. aa6de95
-- [ ] Task: Conductor - User Manual Verification 'Phase 3: Frontend Rebuild' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 3: Frontend Rebuild' (Protocol in workflow.md) 1b302e3
+
+
