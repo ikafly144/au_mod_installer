@@ -15,8 +15,9 @@ Mod of Us is a mod manager for the game "Among Us". It allows players to easily 
 - **Cross-Platform Potential:** Built with Go and Fyne to target multiple desktop environments.
 
 ## Key Features
-- **Mod Installation & Updates:** Automatic downloading and extraction of mod files into the game directory.
+- **Mod Installation & Updates:** Automatic downloading and extraction of mod files, with integrated update detection for installed mods.
 - **Version Management:** Handling different versions of Among Us to ensure mod compatibility.
+
 - **Profile Management:** Creating and switching between different "sets" of mods (profiles).
 - **Integrated Launcher:** Launching the game directly with the selected mods active.
 - **Admin Dashboard:** A web-based interface for managing the central mod repository and metadata.
