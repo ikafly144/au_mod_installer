@@ -587,29 +587,30 @@ func (l *Launcher) openProfileEditor(prof profile.Profile) {
 	modList := widget.NewList(
 		func() int { return len(currentProfile.Versions()) },
 		func() fyne.CanvasObject {
-			return container.NewBorder(nil, nil, nil, widget.NewButtonWithIcon("", theme.DeleteIcon(), nil), widget.NewLabel("Mod Name"))
+			label := widget.NewLabel("Mod Name")
+			badge := widget.NewLabel("")
+			badge.Hide()
+			return container.NewBorder(nil, nil, nil, widget.NewButtonWithIcon("", theme.DeleteIcon(), nil), container.NewHBox(label, badge))
 		},
 		func(id widget.ListItemID, item fyne.CanvasObject) {
-			if id >= len(currentProfile.Versions()) {
-				return
-			}
-			v := currentProfile.Versions()[id]
-			c := item.(*fyne.Container)
-			label := c.Objects[0].(*widget.Label)
-			delBtn := c.Objects[1].(*widget.Button)
-
-			label.SetText(v.ModID + " (" + v.ID + ")")
-			delBtn.OnTapped = func() {
-				// We can't safely use 'id' or 'v' in closure here if list changes?
-				// But we will refresh the list, so it's fine for one action.
-				currentProfile.RemoveModVersion(v.ModID)
-				// Force refresh of the dialog content or list
-				// Since we are inside the list callback, we need to be careful.
-				// But OnTapped is called later.
-				// We will trigger a refresh of the list widget from outside.
-			}
+			// This will be overridden by UpdateItem below
 		},
 	)
+
+	updatesAvailable := make(map[string]string) // ModID -> LatestVersionID
+	go func() {
+		installed := make(map[string]string)
+		for _, v := range currentProfile.Versions() {
+			installed[v.ModID] = v.ID
+		}
+		updates, err := l.state.Rest.CheckForUpdates(installed)
+		if err == nil {
+			for modID, latest := range updates {
+				updatesAvailable[modID] = latest.ID
+			}
+			modList.Refresh()
+		}
+	}()
 
 	// Hook up update item to ensure closure correctness
 	modList.UpdateItem = func(id widget.ListItemID, item fyne.CanvasObject) {
@@ -618,10 +619,21 @@ func (l *Launcher) openProfileEditor(prof profile.Profile) {
 		}
 		v := currentProfile.Versions()[id]
 		c := item.(*fyne.Container)
-		label := c.Objects[0].(*widget.Label)
+		hbox := c.Objects[0].(*fyne.Container)
+		label := hbox.Objects[0].(*widget.Label)
+		badge := hbox.Objects[1].(*widget.Label)
 		delBtn := c.Objects[1].(*widget.Button)
 
 		label.SetText(v.ModID + " (" + v.ID + ")")
+
+		if latestID, ok := updatesAvailable[v.ModID]; ok {
+			badge.SetText(lang.LocalizeKey("repository.update_available", "Update Available") + " (" + latestID + ")")
+			badge.Importance = widget.WarningImportance
+			badge.Show()
+		} else {
+			badge.Hide()
+		}
+
 		delBtn.OnTapped = func() {
 			currentProfile.RemoveModVersion(v.ModID)
 			modList.Refresh()
