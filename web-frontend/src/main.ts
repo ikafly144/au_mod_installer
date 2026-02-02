@@ -6,11 +6,14 @@ import '@material/web/icon/icon.js';
 import '@material/web/iconbutton/icon-button.js';
 import '@material/web/textfield/outlined-text-field.js';
 import '@material/web/labs/card/elevated-card.js';
+import '@material/web/list/list.js';
+import '@material/web/list/list-item.js';
 import { MdOutlinedTextField } from '@material/web/textfield/outlined-text-field.js';
-import { login } from './api';
+import { login, getMods } from './api';
 import { isLoggedIn, setSession, logout, getUser } from './auth';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
+
 
 function renderLogin() {
     app.innerHTML = `
@@ -59,8 +62,8 @@ function renderDashboard() {
   </div>
   <div class="main-content">
      <md-elevated-card style="padding: 16px; margin: 16px;">
-        <h2>Dashboard</h2>
-        <p>Welcome to the admin panel.</p>
+        <h2>Mods Repository</h2>
+        <div id="mods-list">Loading mods...</div>
      </md-elevated-card>
   </div>
 `;
@@ -68,7 +71,39 @@ function renderDashboard() {
     document.getElementById('logout-btn')!.addEventListener('click', () => {
         logout();
     });
+
+    loadMods();
 }
+
+async function loadMods() {
+    const modsListEl = document.getElementById('mods-list');
+    if (!modsListEl) return;
+
+    try {
+        const mods = await getMods();
+        if (mods.length === 0) {
+            modsListEl.innerHTML = '<p>No mods found.</p>';
+            return;
+        }
+
+        let html = '<md-list>';
+        mods.forEach((mod: any) => {
+            html += `
+            <md-list-item>
+                <div slot="headline">${mod.name}</div>
+                <div slot="supporting-text">${mod.description || 'No description'}</div>
+                <div slot="trailing-supporting-text">${mod.author}</div>
+            </md-list-item>
+            <div style="height: 1px; background-color: #333;"></div>
+            `;
+        });
+        html += '</md-list>';
+        modsListEl.innerHTML = html;
+    } catch (e: any) {
+        modsListEl.innerHTML = `<p style="color: red;">Error loading mods: ${e.message}</p>`;
+    }
+}
+
 
 if (isLoggedIn()) {
     renderDashboard();
