@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
+	"github.com/ikafly144/au_mod_installer/server/model"
 )
 
 type ModWithVersions struct {
@@ -34,21 +35,33 @@ type ModRepository interface {
 	// Close closes the repository connection
 	Close()
 
-	// Admin operations can be added here
-
-	// Mod operations
-
 	// GetAllMods retrieves all mods
 	GetAllMods(ctx context.Context) ([]modmgr.Mod, error)
 
 	// DeleteMod deletes a mod by ID
 	DeleteMod(ctx context.Context, modID string) error
 
-	// Version operations
-
 	// GetAllModVersions retrieves all versions of a mod
 	GetAllModVersions(ctx context.Context, modID string) ([]modmgr.ModVersion, error)
 
 	// DeleteVersion deletes a specific version of a mod
 	DeleteVersion(ctx context.Context, modID, versionID string) error
+}
+
+// UserRepository defines the interface for user data storage
+type UserRepository interface {
+	// GetUser retrieves a user by ID
+	GetUser(ctx context.Context, id int) (*model.User, error)
+
+	// GetUserByUsername retrieves a user by username
+	GetUserByUsername(ctx context.Context, username string) (*model.User, error)
+
+	// CreateUser stores a new user
+	CreateUser(ctx context.Context, user model.User) error
+
+	// UpdateUser updates an existing user
+	UpdateUser(ctx context.Context, user model.User) error
+
+	// DeleteUser deletes a user by ID
+	DeleteUser(ctx context.Context, id int) error
 }

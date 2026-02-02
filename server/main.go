@@ -12,13 +12,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/valkey-io/valkey-go"
-
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 	"github.com/ikafly144/au_mod_installer/server/handler"
 	"github.com/ikafly144/au_mod_installer/server/middleware"
-	valkeyrepo "github.com/ikafly144/au_mod_installer/server/repository/valkey"
+	"github.com/ikafly144/au_mod_installer/server/repository/postgres"
 	"github.com/ikafly144/au_mod_installer/server/service"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() {
@@ -26,7 +25,7 @@ func main() {
 	var (
 		addr                string
 		modsFile            string
-		valkeyAddr          string
+		databaseURL         string
 		pathPrefix          string
 		basePath            string
 		disabledVersionsStr string
@@ -42,11 +41,15 @@ func main() {
 
 	flag.StringVar(&addr, "addr", defaultAddr, "HTTP server address")
 	flag.StringVar(&modsFile, "mods", "mods.json", "Path to mods.json file")
-	flag.StringVar(&valkeyAddr, "valkey", "", "Valkey server address (e.g., localhost:6379). If empty, uses file-based storage")
+	flag.StringVar(&databaseURL, "database-url", "", "PostgreSQL database URL (e.g., postgres://user:pass@localhost:5432/dbname). If empty, uses file-based storage")
 	flag.StringVar(&pathPrefix, "path-prefix", "", "URL path prefix (e.g. /api)")
 	flag.StringVar(&basePath, "base-path", "", "API version base path (e.g. /v1)")
 	flag.StringVar(&disabledVersionsStr, "disabled-versions", "", "Comma-separated list of disabled versions")
 	flag.Parse()
+
+	if databaseURL == "" {
+		databaseURL = os.Getenv("DATABASE_URL")
+	}
 
 	if pathPrefix == "" {
 		pathPrefix = os.Getenv("PATH_PREFIX")
@@ -80,35 +83,32 @@ func main() {
 
 	var modService handler.ModServiceInterface
 
-	if valkeyAddr != "" {
-		// Use Valkey-based storage
-		slog.Info("connecting to Valkey", "addr", valkeyAddr)
+	if databaseURL != "" {
+		// Use PostgreSQL-based storage
+		slog.Info("connecting to PostgreSQL", "url", databaseURL)
 
-		client, err := valkey.NewClient(valkey.ClientOption{
-			InitAddress: []string{valkeyAddr},
-		})
+		pool, err := pgxpool.New(ctx, databaseURL)
 		if err != nil {
-			slog.Error("failed to connect to Valkey", "error", err)
+			slog.Error("failed to connect to PostgreSQL", "error", err)
 			os.Exit(1)
 		}
-		defer client.Close()
+		defer pool.Close()
 
-		repo := valkeyrepo.NewRepository(client)
+		repo := postgres.NewRepository(pool)
 
 		// Load initial data from file if it exists
 		if modsFile != "" {
 			if _, err := os.Stat(modsFile); err == nil {
-				slog.Info("loading mods from file into Valkey", "file", modsFile)
-				if err := valkeyrepo.LoadModsFromFile(ctx, repo, modsFile); err != nil {
-					slog.Error("failed to load mods from file", "error", err)
-					os.Exit(1)
-				}
+				slog.Info("loading mods from file into PostgreSQL", "file", modsFile)
+				// TODO: Implement LoadModsFromFile for PostgreSQL if needed
+				slog.Warn("Initial data loading from file not yet implemented for PostgreSQL")
 			}
 		}
 
 		modService = service.NewModServiceWithRepo(repo)
-		slog.Info("using Valkey storage")
+		slog.Info("using PostgreSQL storage")
 	} else {
+
 		// Use file-based storage (backward compatibility)
 		fileService, err := service.NewModService(modsFile)
 		if err != nil {
