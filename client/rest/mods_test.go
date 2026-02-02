@@ -1,51 +1,43 @@
 package rest
 
 import (
-	"os"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestCheckForUpdates(t *testing.T) {
-	// Create a temporary file for FileClient
-	tempFile, err := os.CreateTemp("", "mods_test_*.json")
-	require.NoError(t, err)
-	defer os.Remove(tempFile.Name())
-
-	// Sample data
-	data := `[
-		{
-			"id": "mod-1",
-			"name": "Mod 1",
-			"latest_version": "v1.1.0",
-			"versions": [
-				{"id": "v1.0.0", "mod_id": "mod-1"},
-				{"id": "v1.1.0", "mod_id": "mod-1"}
-			]
-		},
-		{
-			"id": "mod-2",
-			"name": "Mod 2",
-			"latest_version": "v2.0.0",
-			"versions": [
-				{"id": "v2.0.0", "mod_id": "mod-2"}
-			]
+func TestClientImpl_CheckForUpdates(t *testing.T) {
+	// モックサーバーのセットアップ
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/mods/mod-1":
+			// Mod 1 の詳細（最新バージョンは v1.1.0）
+			mod := modmgr.Mod{ID: "mod-1", LatestVersion: "v1.1.0"}
+			json.NewEncoder(w).Encode(mod)
+		case r.URL.Path == "/mods/mod-1/versions/v1.1.0":
+			// Mod 1 の最新バージョンの詳細
+			version := modmgr.ModVersion{ID: "v1.1.0", ModID: "mod-1"}
+			json.NewEncoder(w).Encode(version)
+		case r.URL.Path == "/mods/mod-2":
+			// Mod 2 の詳細（最新バージョンは v2.0.0）
+			mod := modmgr.Mod{ID: "mod-2", LatestVersion: "v2.0.0"}
+			json.NewEncoder(w).Encode(mod)
+		default:
+			w.WriteHeader(http.StatusNotFound)
 		}
-	]`
-	_, err = tempFile.WriteString(data)
-	require.NoError(t, err)
-	tempFile.Close()
+	}))
+	defer server.Close()
 
-	client, err := NewFileClient(tempFile.Name())
-	require.NoError(t, err)
-	err = client.LoadData()
-	require.NoError(t, err)
+	client := NewClient(server.URL)
 
 	installed := map[string]string{
-		"mod-1": "v1.0.0", // Update available
-		"mod-2": "v2.0.0", // Up to date
+		"mod-1": "v1.0.0", // アップデートあり
+		"mod-2": "v2.0.0", // 最新
 	}
 
 	updates, err := client.CheckForUpdates(installed)
