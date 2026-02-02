@@ -4,5 +4,6 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-- [ ] **Track: Implement a robust mod update checking mechanism**
+- [~] **Track: Implement a robust mod update checking mechanism**
   *Link: [./tracks/mod_update_check_20260203/](./tracks/mod_update_check_20260203/)*
+
