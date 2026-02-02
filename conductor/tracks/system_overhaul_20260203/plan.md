@@ -30,8 +30,8 @@
     - [x] Action: `rm -rf server-admin` and `bun create vite web-frontend`. e9d5bf9
 - [x] Task: Setup Material Web and Basic Layout. 8345298
     - [x] Implement Feature: Install `@material/web` and create a base layout with a navigation drawer. 8345298
-- [ ] Task: Implement Login Page.
-    - [ ] Implement Feature: Create a login form communicating with the Go backend.
+- [x] Task: Implement Login Page. 0f18e65
+    - [x] Implement Feature: Create a login form communicating with the Go backend. 0f18e65
 - [ ] Task: Implement Mod Dashboard.
     - [ ] Implement Feature: Fetch and display the user's mods using the new secure API.
 - [ ] Task: Conductor - User Manual Verification 'Phase 3: Frontend Rebuild' (Protocol in workflow.md)
