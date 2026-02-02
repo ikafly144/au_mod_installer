@@ -40,3 +40,7 @@ func (c *OfflineClient) GetModVersion(modID string, versionID string) (*modmgr.M
 func (c *OfflineClient) GetLatestModVersion(modID string) (*modmgr.ModVersion, error) {
 	return nil, errors.New("offline mode: latest mod version details not available")
 }
+
+func (c *OfflineClient) CheckForUpdates(installedVersions map[string]string) (map[string]*modmgr.ModVersion, error) {
+	return nil, errors.New("offline mode: update check not available")
+}

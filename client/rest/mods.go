@@ -54,3 +54,17 @@ func (c *clientImpl) GetLatestModVersion(modID string) (*modmgr.ModVersion, erro
 	}
 	return c.GetModVersion(modID, mod.LatestVersion)
 }
+
+func (c *clientImpl) CheckForUpdates(installedVersions map[string]string) (map[string]*modmgr.ModVersion, error) {
+	updates := make(map[string]*modmgr.ModVersion)
+	for modID, currentVersion := range installedVersions {
+		latest, err := c.GetLatestModVersion(modID)
+		if err != nil {
+			continue
+		}
+		if latest != nil && latest.ID != currentVersion {
+			updates[modID] = latest
+		}
+	}
+	return updates, nil
+}
