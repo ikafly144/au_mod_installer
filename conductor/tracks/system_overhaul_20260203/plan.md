@@ -1,13 +1,14 @@
 # Implementation Plan: System Overhaul - Auth & Modern Web Frontend
 
-## Phase 1: Backend Infrastructure (PostgreSQL & Models)
+## Phase 1: Backend Infrastructure (PostgreSQL & Models) [checkpoint: 366f8bf]
 - [x] Task: Remove Valkey dependencies and initialize PostgreSQL connection in `server/`. 18923d6
     - [x] Write Tests: Create integration tests for PostgreSQL connection (using a mock or Docker test container). 18923d6
     - [x] Implement Feature: Update `server/repository/repository.go` and implement a PostgreSQL repository. 18923d6
 - [x] Task: Define User and Mod models for PostgreSQL. 18923d6
     - [x] Write Tests: Create tests for User model CRUD operations. 18923d6
     - [x] Implement Feature: Create `server/model/user.go` and migration scripts. 18923d6
-- [ ] Task: Conductor - User Manual Verification 'Phase 1: Backend Infrastructure' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 1: Backend Infrastructure' (Protocol in workflow.md) 366f8bf
+
 
 
 ## Phase 2: Authentication & API Security
