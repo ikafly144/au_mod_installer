@@ -115,6 +115,7 @@
     "repository.select_profile_msg": "Modを追加するプロファイルを選択してください:",
     "repository.added_to_profile": "プロファイル '{{.Profile}}' に追加しました: {{.ModName}} ({{.Version}})",
     "repository.no_mods_found": "Modが見つかりませんでした。",
-    "repository.failed_to_load": "Modの読み込みに失敗しました: {{.Error}}",
+        "repository.failed_to_load": "Modの読み込みに失敗しました: {{.Error}}",
+    "repository.update_available": "アップデート利用可能",
     "launcher.error.no_profile": "起動するプロファイルを選択してください。"
 }

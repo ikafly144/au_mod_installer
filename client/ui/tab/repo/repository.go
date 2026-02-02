@@ -109,6 +109,10 @@ func NewRepository(state *uicommon.State) *Repository {
 	repo.mainContainer = container.NewStack(repo.listView, repo.detailView)
 	repo.detailView.Hide()
 
+	state.ActiveProfile.AddListener(binding.NewDataListener(func() {
+		repo.updateModList(repo.searchBar.Text)
+	}))
+
 	repo.init()
 	return repo
 }
@@ -151,8 +155,28 @@ func (r *Repository) updateModList(filter string) {
 		// while the BorderLayout stretches the container itself.
 		img := container.NewCenter(imgRect)
 
+		titleLabel := widget.NewLabelWithStyle(mod.Name, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+
+		updateBadge := widget.NewLabel("")
+		updateBadge.Hide()
+
+		activeProfileIDStr, _ := r.state.ActiveProfile.Get()
+		if activeProfileIDStr != "" {
+			if activeID, err := uuid.Parse(activeProfileIDStr); err == nil {
+				if activeProfile, ok := r.state.ProfileManager.Get(activeID); ok {
+					if installedVersion, ok := activeProfile.ModVersions[mod.ID]; ok {
+						if installedVersion.ID != mod.LatestVersion {
+							updateBadge.SetText(lang.LocalizeKey("repository.update_available", "Update Available"))
+							updateBadge.Importance = widget.WarningImportance
+							updateBadge.Show()
+						}
+					}
+				}
+			}
+		}
+
 		textContainer := container.NewVBox(
-			widget.NewLabelWithStyle(mod.Name, fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+			container.NewHBox(titleLabel, updateBadge),
 			widget.NewLabel(mod.Author),
 			widget.NewLabel(mod.Description),
 		)
