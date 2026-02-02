@@ -6,24 +6,74 @@ import '@material/web/icon/icon.js';
 import '@material/web/iconbutton/icon-button.js';
 import '@material/web/textfield/outlined-text-field.js';
 import '@material/web/labs/card/elevated-card.js';
+import { MdOutlinedTextField } from '@material/web/textfield/outlined-text-field.js';
+import { login } from './api';
+import { isLoggedIn, setSession, logout, getUser } from './auth';
 
-document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
+const app = document.querySelector<HTMLDivElement>('#app')!;
+
+function renderLogin() {
+    app.innerHTML = `
+    <div style="display: flex; justify-content: center; align-items: center; height: 100vh;">
+      <md-elevated-card style="padding: 24px; min-width: 300px; display: flex; flex-direction: column; gap: 16px;">
+        <h2 style="margin: 0; text-align: center;">Login</h2>
+        <md-outlined-text-field label="Username" id="username" type="text"></md-outlined-text-field>
+        <md-outlined-text-field label="Password" id="password" type="password"></md-outlined-text-field>
+        <div id="error-msg" style="color: red; font-size: 0.9em; display: none;"></div>
+        <md-filled-button id="login-btn">Login</md-filled-button>
+      </md-elevated-card>
+    </div>
+  `;
+
+    const usernameInput = document.getElementById('username') as MdOutlinedTextField;
+    const passwordInput = document.getElementById('password') as MdOutlinedTextField;
+    const loginBtn = document.getElementById('login-btn')!;
+    const errorMsg = document.getElementById('error-msg')!;
+
+    loginBtn.addEventListener('click', async () => {
+        errorMsg.style.display = 'none';
+        try {
+            const resp = await login(usernameInput.value, passwordInput.value);
+            setSession(resp.token, resp.user);
+            renderDashboard();
+        } catch (e: any) {
+            errorMsg.textContent = e.message;
+            errorMsg.style.display = 'block';
+        }
+    });
+}
+
+function renderDashboard() {
+    const user = getUser();
+    app.innerHTML = `
   <div class="app-bar">
     <md-icon-button>
         <md-icon>menu</md-icon>
     </md-icon-button>
     <span class="title">Au Mod Installer Admin</span>
     <div style="flex: 1;"></div>
-    <md-icon-button>
-        <md-icon>account_circle</md-icon>
+    <span style="margin-right: 16px;">${user?.username || 'User'}</span>
+    <md-icon-button id="logout-btn">
+        <md-icon>logout</md-icon>
     </md-icon-button>
   </div>
   <div class="main-content">
      <md-elevated-card style="padding: 16px; margin: 16px;">
-        <h2>Welcome</h2>
-        <p>Material Web is set up.</p>
-        <md-filled-button>Click Me</md-filled-button>
+        <h2>Dashboard</h2>
+        <p>Welcome to the admin panel.</p>
      </md-elevated-card>
   </div>
-`
+`;
+
+    document.getElementById('logout-btn')!.addEventListener('click', () => {
+        logout();
+    });
+}
+
+if (isLoggedIn()) {
+    renderDashboard();
+} else {
+    renderLogin();
+}
+
 
