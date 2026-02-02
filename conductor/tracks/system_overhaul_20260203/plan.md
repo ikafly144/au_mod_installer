@@ -28,8 +28,8 @@
 ## Phase 3: Frontend Rebuild (Bun + Vite + Material Web)
 - [x] Task: Remove `server-admin/` and initialize `web-frontend/` with Bun + Vite. e9d5bf9
     - [x] Action: `rm -rf server-admin` and `bun create vite web-frontend`. e9d5bf9
-- [ ] Task: Setup Material Web and Basic Layout.
-    - [ ] Implement Feature: Install `@material/web` and create a base layout with a navigation drawer.
+- [x] Task: Setup Material Web and Basic Layout. 8345298
+    - [x] Implement Feature: Install `@material/web` and create a base layout with a navigation drawer. 8345298
 - [ ] Task: Implement Login Page.
     - [ ] Implement Feature: Create a login form communicating with the Go backend.
 - [ ] Task: Implement Mod Dashboard.
