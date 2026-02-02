@@ -37,7 +37,11 @@ type RegisterRequest struct {
 
 func (s *AuthService) Register(ctx context.Context, req RegisterRequest) (*model.User, error) {
 	// Check if user exists
-	if _, err := s.userRepo.GetUserByUsername(ctx, req.Username); err == nil {
+	existingUser, err := s.userRepo.GetUserByUsername(ctx, req.Username)
+	if err != nil {
+		return nil, err
+	}
+	if existingUser != nil {
 		return nil, ErrUsernameTaken
 	}
 
@@ -83,6 +87,9 @@ func (s *AuthService) Login(ctx context.Context, req LoginRequest) (*LoginRespon
 	if err != nil {
 		// Differentiate between not found and other errors?
 		// For security, usually return invalid credentials
+		return nil, ErrInvalidCredentials
+	}
+	if user == nil {
 		return nil, ErrInvalidCredentials
 	}
 

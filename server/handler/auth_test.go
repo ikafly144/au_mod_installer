@@ -60,13 +60,13 @@ func TestAuthHandler_Register(t *testing.T) {
 	// Mock GetUserByUsername to return error (not found) for first check, then return user for second check
 	// This is tricky with testify/mock if arguments are same.
 	// But Register calls GetUserByUsername twice. First to check if exists, second to return it.
-	// 1. check: returns error (good)
+	// 1. check: returns nil, nil (user not found)
 	// 2. return: returns user (good)
 
 	// Since arguments are same "newuser", we need to sequence them?
 	// testify/mock .Once() helps.
 
-	mockRepo.On("GetUserByUsername", mock.Anything, "newuser").Return(nil, service.ErrUserNotFound).Once()
+	mockRepo.On("GetUserByUsername", mock.Anything, "newuser").Return(nil, nil).Once()
 	mockRepo.On("CreateUser", mock.Anything, mock.MatchedBy(func(u model.User) bool {
 		return u.Username == "newuser"
 	})).Return(nil)
