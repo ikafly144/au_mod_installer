@@ -4,8 +4,10 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-- [ ] **Track: System Overhaul: Auth & Modern Web Frontend**
+- [~] **Track: System Overhaul: Auth & Modern Web Frontend**
   *Link: [./tracks/system_overhaul_20260203/](./tracks/system_overhaul_20260203/)*
+
+
 
 
 

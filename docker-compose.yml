@@ -36,7 +36,7 @@ services:
       - "8180:8180"
     env_file:
       - .env
-        environment:
+    environment:
       - TZ=Asia/Tokyo
       - PORT=8180
       - DATABASE_URL=postgres://postgres:password@postgres:5432/au_mod_installer?sslmode=disable
