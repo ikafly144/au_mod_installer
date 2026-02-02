@@ -11,16 +11,17 @@
 
 
 ## Phase 2: Authentication & API Security
-- [ ] Task: Implement User Registration and Login endpoints.
-    - [ ] Write Tests: Create `httptest` cases for `/api/v1/login` and `/api/v1/register`.
-    - [ ] Implement Feature: Add handlers in `server/handler/auth.go` and JWT/Session logic.
-- [ ] Task: Implement Authentication Middleware.
-    - [ ] Write Tests: Create tests for middleware denying unauthenticated access.
-    - [ ] Implement Feature: Add `AuthMiddleware` in `server/middleware/middleware.go`.
-- [ ] Task: Secure existing Mod management endpoints.
-    - [ ] Write Tests: Update existing mod tests to require authentication.
-    - [ ] Implement Feature: Apply middleware to `POST/PUT/DELETE` endpoints in `server/main.go` (router).
+- [x] Task: Implement User Registration and Login endpoints. 1bf2f41
+    - [x] Write Tests: Create `httptest` cases for `/api/v1/login` and `/api/v1/register`. 1bf2f41
+    - [x] Implement Feature: Add handlers in `server/handler/auth.go` and JWT/Session logic. 1bf2f41
+- [x] Task: Implement Authentication Middleware. 1bf2f41
+    - [x] Write Tests: Create tests for middleware denying unauthenticated access. 1bf2f41
+    - [x] Implement Feature: Add `AuthMiddleware` in `server/middleware/middleware.go`. 1bf2f41
+- [x] Task: Secure existing Mod management endpoints. 1bf2f41
+    - [x] Write Tests: Update existing mod tests to require authentication. 1bf2f41
+    - [x] Implement Feature: Apply middleware to `POST/PUT/DELETE` endpoints in `server/main.go` (router). 1bf2f41
 - [ ] Task: Conductor - User Manual Verification 'Phase 2: Authentication & API Security' (Protocol in workflow.md)
+
 
 ## Phase 3: Frontend Rebuild (Bun + Vite + Material Web)
 - [ ] Task: Remove `server-admin/` and initialize `web-frontend/` with Bun + Vite.
