@@ -24,7 +24,6 @@ func main() {
 	slog.Info("Starting Among Us Mod Installer server", "version", version, "revision", revision)
 	var (
 		addr                string
-		modsFile            string
 		databaseURL         string
 		pathPrefix          string
 		basePath            string
@@ -41,7 +40,6 @@ func main() {
 	}
 
 	flag.StringVar(&addr, "addr", defaultAddr, "HTTP server address")
-	flag.StringVar(&modsFile, "mods", "mods.json", "Path to mods.json file")
 	flag.StringVar(&databaseURL, "database-url", "", "PostgreSQL database URL (e.g., postgres://user:pass@localhost:5432/dbname). If empty, uses file-based storage")
 	flag.StringVar(&pathPrefix, "path-prefix", "", "URL path prefix (e.g. /api)")
 	flag.StringVar(&basePath, "base-path", "", "API version base path (e.g. /v1)")
@@ -102,15 +100,6 @@ func main() {
 
 		repo := postgres.NewRepository(pool)
 
-		// Load initial data from file if it exists
-		if modsFile != "" {
-			if _, err := os.Stat(modsFile); err == nil {
-				slog.Info("loading mods from file into PostgreSQL", "file", modsFile)
-				// TODO: Implement LoadModsFromFile for PostgreSQL if needed
-				slog.Warn("Initial data loading from file not yet implemented for PostgreSQL")
-			}
-		}
-
 		modService = service.NewModServiceWithRepo(repo)
 		if jwtSecret != "" {
 			authService = service.NewAuthService(repo, jwtSecret)
@@ -121,13 +110,13 @@ func main() {
 	} else {
 
 		// Use file-based storage (backward compatibility)
-		fileService, err := service.NewModService(modsFile)
+		fileService, err := service.NewModService("mods.json")
 		if err != nil {
 			slog.Error("failed to create mod service", "error", err)
 			os.Exit(1)
 		}
 		modService = &fileModServiceAdapter{fileService}
-		slog.Info("using file-based storage", "file", modsFile)
+		slog.Info("using file-based storage", "file", "mods.json")
 	}
 
 	h := handler.NewHandler(modService, version, disabledVersions)
