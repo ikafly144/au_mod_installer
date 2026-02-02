@@ -9,16 +9,24 @@ import (
 	"github.com/ikafly144/au_mod_installer/server/model"
 	"github.com/ikafly144/au_mod_installer/server/repository"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
+type pgxPool interface {
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	Begin(ctx context.Context) (pgx.Tx, error)
+	Close()
+}
+
 type Repository struct {
-	pool *pgxpool.Pool
+	pool pgxPool
 }
 
 var _ repository.ModRepository = (*Repository)(nil)
 
-func NewRepository(pool *pgxpool.Pool) *Repository {
+func NewRepository(pool pgxPool) *Repository {
 	return &Repository{pool: pool}
 }
 
@@ -29,8 +37,9 @@ func (r *Repository) Close() {
 func (r *Repository) GetMod(ctx context.Context, modID string) (*modmgr.Mod, error) {
 	query := `SELECT id, name, description, author_name, type, thumbnail_url, website_url, latest_version_id, created_at, updated_at FROM mods WHERE id = $1`
 	var mod modmgr.Mod
+	var modType string
 	err := r.pool.QueryRow(ctx, query, modID).Scan(
-		&mod.ID, &mod.Name, &mod.Description, &mod.Author, &mod.Type, &mod.Thumbnail, &mod.Website, &mod.LatestVersion, &mod.CreatedAt, &mod.UpdatedAt,
+		&mod.ID, &mod.Name, &mod.Description, &mod.Author, &modType, &mod.Thumbnail, &mod.Website, &mod.LatestVersion, &mod.CreatedAt, &mod.UpdatedAt,
 	)
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -38,6 +47,7 @@ func (r *Repository) GetMod(ctx context.Context, modID string) (*modmgr.Mod, err
 		}
 		return nil, fmt.Errorf("failed to get mod: %w", err)
 	}
+	mod.Type = modmgr.ModType(modType)
 	return &mod, nil
 }
 
@@ -66,12 +76,14 @@ func (r *Repository) GetModList(ctx context.Context, limit int, after string, be
 	var mods []modmgr.Mod
 	for rows.Next() {
 		var mod modmgr.Mod
+		var modType string
 		err := rows.Scan(
-			&mod.ID, &mod.Name, &mod.Description, &mod.Author, &mod.Type, &mod.Thumbnail, &mod.Website, &mod.LatestVersion, &mod.CreatedAt, &mod.UpdatedAt,
+			&mod.ID, &mod.Name, &mod.Description, &mod.Author, &modType, &mod.Thumbnail, &mod.Website, &mod.LatestVersion, &mod.CreatedAt, &mod.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan mod: %w", err)
 		}
+		mod.Type = modmgr.ModType(modType)
 		mods = append(mods, mod)
 	}
 
@@ -96,14 +108,17 @@ func (r *Repository) GetAllMods(ctx context.Context) ([]modmgr.Mod, error) {
 	var mods []modmgr.Mod
 	for rows.Next() {
 		var mod modmgr.Mod
+		var modType string
 		err := rows.Scan(
-			&mod.ID, &mod.Name, &mod.Description, &mod.Author, &mod.Type, &mod.Thumbnail, &mod.Website, &mod.LatestVersion, &mod.CreatedAt, &mod.UpdatedAt,
+			&mod.ID, &mod.Name, &mod.Description, &mod.Author, &modType, &mod.Thumbnail, &mod.Website, &mod.LatestVersion, &mod.CreatedAt, &mod.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan mod: %w", err)
 		}
+		mod.Type = modmgr.ModType(modType)
 		mods = append(mods, mod)
 	}
+
 	return mods, nil
 }
 
