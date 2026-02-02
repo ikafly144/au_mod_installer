@@ -29,6 +29,7 @@ func main() {
 		pathPrefix          string
 		basePath            string
 		disabledVersionsStr string
+		jwtSecret           string
 	)
 
 	defaultAddr := ":8080"
@@ -45,10 +46,14 @@ func main() {
 	flag.StringVar(&pathPrefix, "path-prefix", "", "URL path prefix (e.g. /api)")
 	flag.StringVar(&basePath, "base-path", "", "API version base path (e.g. /v1)")
 	flag.StringVar(&disabledVersionsStr, "disabled-versions", "", "Comma-separated list of disabled versions")
+	flag.StringVar(&jwtSecret, "jwt-secret", "", "JWT secret key")
 	flag.Parse()
 
 	if databaseURL == "" {
 		databaseURL = os.Getenv("DATABASE_URL")
+	}
+	if jwtSecret == "" {
+		jwtSecret = os.Getenv("JWT_SECRET")
 	}
 
 	if pathPrefix == "" {
@@ -82,6 +87,7 @@ func main() {
 	defer stop()
 
 	var modService handler.ModServiceInterface
+	var authService *service.AuthService
 
 	if databaseURL != "" {
 		// Use PostgreSQL-based storage
@@ -106,6 +112,11 @@ func main() {
 		}
 
 		modService = service.NewModServiceWithRepo(repo)
+		if jwtSecret != "" {
+			authService = service.NewAuthService(repo, jwtSecret)
+		} else {
+			slog.Warn("JWT secret not provided, authentication will be disabled")
+		}
 		slog.Info("using PostgreSQL storage")
 	} else {
 
@@ -123,7 +134,13 @@ func main() {
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux, basePath)
 
+	if authService != nil {
+		authHandler := handler.NewAuthHandler(authService)
+		authHandler.RegisterRoutes(mux, basePath)
+	}
+
 	var rootHandler http.Handler = mux
+
 	if pathPrefix != "" {
 		slog.Info("enabling path prefix", "prefix", pathPrefix)
 		rootHandler = http.StripPrefix(pathPrefix, mux)

@@ -6,18 +6,21 @@ require (
 	fyne.io/fyne/v2 v2.7.1
 	github.com/Microsoft/go-winio v0.6.2
 	github.com/TheTitanrain/w32 v0.0.0-20200114052255-2654d97dbd3d
+	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/go-github/v80 v80.0.0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.8.0
 	github.com/josephspurrier/goversioninfo v1.5.0
 	github.com/minio/selfupdate v0.6.0
 	github.com/nightlyone/lockfile v1.0.0
+	github.com/pashagolub/pgxmock/v3 v3.4.0
 	github.com/sqweek/dialog v0.0.0-20240226140203-065105509627
 	github.com/stretchr/testify v1.11.1
-	github.com/valkey-io/valkey-go v1.0.70
+	github.com/tj/assert v0.0.3
 	github.com/zzl/go-win32api v1.2.0
+	golang.org/x/crypto v0.47.0
 	golang.org/x/mod v0.31.0
-	golang.org/x/sys v0.39.0
+	golang.org/x/sys v0.40.0
 )
 
 require (
@@ -56,21 +59,20 @@ require (
 	github.com/natefinch/atomic v1.0.1 // indirect
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646 // indirect
 	github.com/nicksnyder/go-i18n/v2 v2.6.0 // indirect
-	github.com/pashagolub/pgxmock/v3 v3.4.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/rymdport/portal v0.4.2 // indirect
 	github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c // indirect
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef // indirect
+	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/urfave/cli/v2 v2.27.1 // indirect
 	github.com/xrash/smetrics v0.0.0-20201216005158-039620a65673 // indirect
 	github.com/yuin/goldmark v1.7.13 // indirect
-	golang.org/x/crypto v0.46.0 // indirect
 	golang.org/x/image v0.32.0 // indirect
 	golang.org/x/net v0.48.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
-	golang.org/x/text v0.32.0 // indirect
+	golang.org/x/text v0.33.0 // indirect
 	golang.org/x/tools v0.40.0 // indirect
 	golang.org/x/tools/go/vcs v0.1.0-deprecated // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect

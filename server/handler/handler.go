@@ -77,7 +77,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux, basePath string) {
 }
 
 func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, rest.HealthStatus{
+	WriteJSON(w, http.StatusOK, rest.HealthStatus{
 		Status:           "OK",
 		WorkingVersion:   h.version,
 		DisabledVersions: h.disabledVersions,
@@ -106,46 +106,46 @@ func (h *Handler) handleGetMods(w http.ResponseWriter, r *http.Request) {
 	mods, err := h.modService.GetModList(r.Context(), limit, after, before)
 	if err != nil {
 		if errors.Is(err, service.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "mods not found")
+			WriteError(w, http.StatusNotFound, "mods not found")
 			return
 		} else {
-			writeError(w, http.StatusInternalServerError, err.Error())
+			WriteError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 	}
 
-	writeJSON(w, http.StatusOK, mods)
+	WriteJSON(w, http.StatusOK, mods)
 }
 
 func (h *Handler) handleGetMod(w http.ResponseWriter, r *http.Request) {
 	modID := r.PathValue("modID")
 	if modID == "" {
-		writeError(w, http.StatusBadRequest, "modID is required")
+		WriteError(w, http.StatusBadRequest, "modID is required")
 		return
 	}
 
 	mod, err := h.modService.GetMod(r.Context(), modID)
 	if err != nil {
 		if errors.Is(err, service.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "mods not found")
+			WriteError(w, http.StatusNotFound, "mods not found")
 			return
 		} else {
-			writeError(w, http.StatusInternalServerError, err.Error())
+			WriteError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 	}
 	if mod == nil {
-		writeError(w, http.StatusNotFound, "mod not found")
+		WriteError(w, http.StatusNotFound, "mod not found")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, mod)
+	WriteJSON(w, http.StatusOK, mod)
 }
 
 func (h *Handler) handleGetModVersions(w http.ResponseWriter, r *http.Request) {
 	modID := r.PathValue("modID")
 	if modID == "" {
-		writeError(w, http.StatusBadRequest, "modID is required")
+		WriteError(w, http.StatusBadRequest, "modID is required")
 		return
 	}
 
@@ -169,15 +169,15 @@ func (h *Handler) handleGetModVersions(w http.ResponseWriter, r *http.Request) {
 	versions, err := h.modService.GetModVersions(r.Context(), modID, limit, after)
 	if err != nil {
 		if errors.Is(err, service.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "mods not found")
+			WriteError(w, http.StatusNotFound, "mods not found")
 			return
 		} else {
-			writeError(w, http.StatusInternalServerError, err.Error())
+			WriteError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 	}
 
-	writeJSON(w, http.StatusOK, versions)
+	WriteJSON(w, http.StatusOK, versions)
 }
 
 func (h *Handler) handleGetModVersion(w http.ResponseWriter, r *http.Request) {
@@ -185,37 +185,37 @@ func (h *Handler) handleGetModVersion(w http.ResponseWriter, r *http.Request) {
 	versionID := r.PathValue("versionID")
 
 	if modID == "" {
-		writeError(w, http.StatusBadRequest, "modID is required")
+		WriteError(w, http.StatusBadRequest, "modID is required")
 		return
 	}
 	if versionID == "" {
-		writeError(w, http.StatusBadRequest, "versionID is required")
+		WriteError(w, http.StatusBadRequest, "versionID is required")
 		return
 	}
 
 	version, err := h.modService.GetModVersion(r.Context(), modID, versionID)
 	if err != nil {
 		if errors.Is(err, service.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "version not found")
+			WriteError(w, http.StatusNotFound, "version not found")
 			return
 		} else {
-			writeError(w, http.StatusInternalServerError, err.Error())
+			WriteError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 	}
 	if version == nil {
-		writeError(w, http.StatusNotFound, "version not found")
+		WriteError(w, http.StatusNotFound, "version not found")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, version)
+	WriteJSON(w, http.StatusOK, version)
 }
 
 type errorResponse struct {
 	Error string `json:"error"`
 }
 
-func writeJSON(w http.ResponseWriter, status int, data any) {
+func WriteJSON(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(data); err != nil {
@@ -223,6 +223,6 @@ func writeJSON(w http.ResponseWriter, status int, data any) {
 	}
 }
 
-func writeError(w http.ResponseWriter, status int, message string) {
-	writeJSON(w, status, errorResponse{Error: message})
+func WriteError(w http.ResponseWriter, status int, message string) {
+	WriteJSON(w, status, errorResponse{Error: message})
 }
