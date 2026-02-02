@@ -32,6 +32,6 @@
     - [x] Implement Feature: Install `@material/web` and create a base layout with a navigation drawer. 8345298
 - [x] Task: Implement Login Page. 0f18e65
     - [x] Implement Feature: Create a login form communicating with the Go backend. 0f18e65
-- [ ] Task: Implement Mod Dashboard.
-    - [ ] Implement Feature: Fetch and display the user's mods using the new secure API.
+- [x] Task: Implement Mod Dashboard. aa6de95
+    - [x] Implement Feature: Fetch and display the user's mods using the new secure API. aa6de95
 - [ ] Task: Conductor - User Manual Verification 'Phase 3: Frontend Rebuild' (Protocol in workflow.md)
