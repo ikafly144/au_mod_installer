@@ -1,0 +1,39 @@
+# Implementation Plan: System Overhaul - Auth & Modern Web Frontend
+
+## Phase 1: Backend Infrastructure (PostgreSQL & Models) [checkpoint: 366f8bf]
+- [x] Task: Remove Valkey dependencies and initialize PostgreSQL connection in `server/`. 18923d6
+    - [x] Write Tests: Create integration tests for PostgreSQL connection (using a mock or Docker test container). 18923d6
+    - [x] Implement Feature: Update `server/repository/repository.go` and implement a PostgreSQL repository. 18923d6
+- [x] Task: Define User and Mod models for PostgreSQL. 18923d6
+    - [x] Write Tests: Create tests for User model CRUD operations. 18923d6
+    - [x] Implement Feature: Create `server/model/user.go` and migration scripts. 18923d6
+- [x] Task: Conductor - User Manual Verification 'Phase 1: Backend Infrastructure' (Protocol in workflow.md) 366f8bf
+
+
+
+## Phase 2: Authentication & API Security [checkpoint: 34aba9c]
+- [x] Task: Implement User Registration and Login endpoints. 1bf2f41
+    - [x] Write Tests: Create `httptest` cases for `/api/v1/login` and `/api/v1/register`. 1bf2f41
+    - [x] Implement Feature: Add handlers in `server/handler/auth.go` and JWT/Session logic. 1bf2f41
+- [x] Task: Implement Authentication Middleware. 1bf2f41
+    - [x] Write Tests: Create tests for middleware denying unauthenticated access. 1bf2f41
+    - [x] Implement Feature: Add `AuthMiddleware` in `server/middleware/middleware.go`. 1bf2f41
+- [x] Task: Secure existing Mod management endpoints. 1bf2f41
+    - [x] Write Tests: Update existing mod tests to require authentication. 1bf2f41
+    - [x] Implement Feature: Apply middleware to `POST/PUT/DELETE` endpoints in `server/main.go` (router). 1bf2f41
+- [x] Task: Conductor - User Manual Verification 'Phase 2: Authentication & API Security' (Protocol in workflow.md) 34aba9c
+
+
+
+## Phase 3: Frontend Rebuild (Bun + Vite + Material Web) [checkpoint: 1b302e3]
+- [x] Task: Remove `server-admin/` and initialize `web-frontend/` with Bun + Vite. e9d5bf9
+    - [x] Action: `rm -rf server-admin` and `bun create vite web-frontend`. e9d5bf9
+- [x] Task: Setup Material Web and Basic Layout. 8345298
+    - [x] Implement Feature: Install `@material/web` and create a base layout with a navigation drawer. 8345298
+- [x] Task: Implement Login Page. 0f18e65
+    - [x] Implement Feature: Create a login form communicating with the Go backend. 0f18e65
+- [x] Task: Implement Mod Dashboard. aa6de95
+    - [x] Implement Feature: Fetch and display the user's mods using the new secure API. aa6de95
+- [x] Task: Conductor - User Manual Verification 'Phase 3: Frontend Rebuild' (Protocol in workflow.md) 1b302e3
+
+
