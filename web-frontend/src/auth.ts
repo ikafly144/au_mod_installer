@@ -12,8 +12,15 @@ export function getToken(): string | null {
 
 export function getUser(): any | null {
     const u = localStorage.getItem(USER_KEY);
-    return u ? JSON.parse(u) : null;
+    if (!u || u === 'undefined') return null;
+    try {
+        return JSON.parse(u);
+    } catch (e) {
+        console.error("Failed to parse user from local storage", e);
+        return null;
+    }
 }
+
 
 export function logout() {
     localStorage.removeItem(TOKEN_KEY);
