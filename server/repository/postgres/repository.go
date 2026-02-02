@@ -231,16 +231,17 @@ func (r *Repository) GetModVersion(ctx context.Context, modID string, versionID 
 	defer rows.Close()
 	for rows.Next() {
 		var file modmgr.ModFile
+		var fileType string
 		var compat []string
-		if err := rows.Scan(&file.FileType, &file.Path, &file.URL, &compat); err != nil {
+		if err := rows.Scan(&fileType, &file.Path, &file.URL, &compat); err != nil {
 			return nil, fmt.Errorf("failed to scan mod file: %w", err)
 		}
+		file.FileType = modmgr.FileType(fileType)
 		// Convert strings to BinaryType
 		for _, c := range compat {
 			file.Compatible = append(file.Compatible, aumgr.BinaryType(c))
 		}
 		version.Files = append(version.Files, file)
-
 	}
 
 	// Fetch dependencies
@@ -251,9 +252,11 @@ func (r *Repository) GetModVersion(ctx context.Context, modID string, versionID 
 	defer depRows.Close()
 	for depRows.Next() {
 		var dep modmgr.ModDependency
-		if err := depRows.Scan(&dep.ID, &dep.Version, &dep.Type); err != nil {
+		var depType string
+		if err := depRows.Scan(&dep.ID, &dep.Version, &depType); err != nil {
 			return nil, fmt.Errorf("failed to scan mod dependency: %w", err)
 		}
+		dep.Type = modmgr.ModDependencyType(depType)
 		version.Dependencies = append(version.Dependencies, dep)
 	}
 
