@@ -18,7 +18,8 @@
 
 
 ## Phase 3: UI Integration
-- [ ] Task: Display update status in the Fyne UI.
-    - [ ] Write Tests: Create unit tests for UI state updates (if feasible with Fyne).
-    - [ ] Implement Feature: Update `client/ui/tab/repo/repository.go` to show "Update Available" labels.
+- [x] Task: Display update status in the Fyne UI. e536e00
+    - [x] Write Tests: Create unit tests for UI state updates (if feasible with Fyne). e536e00
+    - [x] Implement Feature: Update `client/ui/tab/repo/repository.go` to show "Update Available" labels. e536e00
 - [ ] Task: Conductor - User Manual Verification 'Phase 3: UI Integration' (Protocol in workflow.md)
+
