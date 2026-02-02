@@ -1,12 +1,41 @@
 :root {
-  --md-sys-color-primary: #a8c7fa;
-  --md-sys-color-on-primary: #062e6f;
-  --md-sys-color-primary-container: #214488;
-  --md-sys-color-on-primary-container: #d6e3ff;
-  --md-sys-color-background: #111318;
-  --md-sys-color-on-background: #e2e2e9;
-  --md-sys-color-surface: #111318;
-  --md-sys-color-on-surface: #e2e2e9;
+  /* Material 3 Dark Theme Baseline */
+  --md-sys-color-primary: #d0bcff;
+  --md-sys-color-on-primary: #381e72;
+  --md-sys-color-primary-container: #4f378b;
+  --md-sys-color-on-primary-container: #eaddff;
+  
+  --md-sys-color-secondary: #ccc2dc;
+  --md-sys-color-on-secondary: #332d41;
+  --md-sys-color-secondary-container: #4a4458;
+  --md-sys-color-on-secondary-container: #e8def8;
+
+  --md-sys-color-tertiary: #efb8c8;
+  --md-sys-color-on-tertiary: #492532;
+  --md-sys-color-tertiary-container: #633b48;
+  --md-sys-color-on-tertiary-container: #ffd8e4;
+
+  --md-sys-color-error: #f2b8b5;
+  --md-sys-color-on-error: #601410;
+  --md-sys-color-error-container: #8c1d18;
+  --md-sys-color-on-error-container: #f9dedc;
+
+  --md-sys-color-background: #141218;
+  --md-sys-color-on-background: #e6e1e5;
+  
+  --md-sys-color-surface: #141218;
+  --md-sys-color-on-surface: #e6e1e5;
+  --md-sys-color-surface-variant: #49454f;
+  --md-sys-color-on-surface-variant: #cac4d0;
+  
+  --md-sys-color-outline: #938f99;
+  --md-sys-color-outline-variant: #49454f;
+
+  --md-sys-color-surface-container-lowest: #0f0d13;
+  --md-sys-color-surface-container-low: #1d1b20;
+  --md-sys-color-surface-container: #211f26;
+  --md-sys-color-surface-container-high: #2b2930;
+  --md-sys-color-surface-container-highest: #36343b;
 
   font-family: 'Roboto', sans-serif;
   background-color: var(--md-sys-color-background);
@@ -42,8 +71,9 @@ body {
   display: flex;
   align-items: center;
   padding: 8px 16px;
-  background-color: var(--md-sys-color-surface);
-  border-bottom: 1px solid #444;
+  background-color: var(--md-sys-color-surface-container);
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+  color: var(--md-sys-color-on-surface);
 }
 
 .title {
@@ -51,4 +81,5 @@ body {
   font-size: 1.25rem;
   font-weight: 500;
 }
+
 
