@@ -100,6 +100,12 @@ func main() {
 
 		repo := postgres.NewRepository(pool)
 
+		if err := repo.Migrate(ctx); err != nil {
+			slog.Error("failed to run database migrations", "error", err)
+			os.Exit(1)
+		}
+		slog.Info("database migrations applied successfully")
+
 		modService = service.NewModServiceWithRepo(repo)
 		if jwtSecret != "" {
 			authService = service.NewAuthService(repo, jwtSecret)

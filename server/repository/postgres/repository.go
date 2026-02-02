@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 
 	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
@@ -24,10 +25,21 @@ type Repository struct {
 	pool pgxPool
 }
 
+//go:embed schema.sql
+var schemaSQL string
+
 var _ repository.ModRepository = (*Repository)(nil)
 
 func NewRepository(pool pgxPool) *Repository {
 	return &Repository{pool: pool}
+}
+
+func (r *Repository) Migrate(ctx context.Context) error {
+	_, err := r.pool.Exec(ctx, schemaSQL)
+	if err != nil {
+		return fmt.Errorf("failed to execute migration: %w", err)
+	}
+	return nil
 }
 
 func (r *Repository) Close() {
