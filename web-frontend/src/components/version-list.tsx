@@ -1,19 +1,17 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { getModVersions, deleteVersion } from '@/api'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Plus, Trash2 } from 'lucide-react'
-import { VersionDialog } from './version-dialog'
 import { useToast } from '@/hooks/use-toast'
 
-interface VersionListProps {
-  modID: string
-}
-
-export function VersionList({ modID }: VersionListProps) {
+export function VersionList({ modID }: { modID: string }) {
   const [versions, setVersions] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const navigate = useNavigate()
   const { toast } = useToast()
+
 
   const fetchVersions = async () => {
         try {
@@ -52,14 +50,13 @@ export function VersionList({ modID }: VersionListProps) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-500">Versions</h3>
-        <VersionDialog modID={modID} onSuccess={fetchVersions}>
-          <Button size="xs" variant="outline" className="h-8">
-            <Plus className="h-3 w-3 mr-1" /> Upload
-          </Button>
-        </VersionDialog>
+        <Button size="xs" variant="outline" className="h-8" onClick={() => navigate(`/mods/${modID}/versions/new`)}>
+          <Plus className="h-3 w-3 mr-1" /> Upload
+        </Button>
       </div>
+
 
       {loading ? (
         <div className="text-sm text-slate-500 py-2">Loading versions...</div>

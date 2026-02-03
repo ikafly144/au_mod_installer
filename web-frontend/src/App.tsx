@@ -6,7 +6,9 @@ import Dashboard from './components/dashboard'
 import { Layout } from './components/layout'
 import { CreateModPage } from './pages/mods/CreateModPage'
 import { EditModPage } from './pages/mods/EditModPage'
+import { UploadVersionPage } from './pages/mods/UploadVersionPage'
 import DashboardOverview from './pages/DashboardOverview'
+
 import SettingsPage from './pages/SettingsPage'
 import SystemPage from './pages/SystemPage'
 import { Toaster } from './components/ui/toaster'
@@ -82,7 +84,7 @@ function App() {
         <Navigate to="/login" replace />
       )
     },
-    {
+        {
       path: "/mods/:id/edit",
       element: authenticated ? (
         <Layout>
@@ -92,6 +94,17 @@ function App() {
         <Navigate to="/login" replace />
       )
     },
+    {
+      path: "/mods/:id/versions/new",
+      element: authenticated ? (
+        <Layout>
+          <UploadVersionPage />
+        </Layout>
+      ) : (
+        <Navigate to="/login" replace />
+      )
+    },
+
 
     {
       path: "*",

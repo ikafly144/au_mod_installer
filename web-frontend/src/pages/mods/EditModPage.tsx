@@ -9,8 +9,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { useToast } from '@/hooks/use-toast'
 import { ArrowLeft } from 'lucide-react'
 import { VersionList } from '@/components/version-list'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Skeleton } from '@/components/ui/skeleton'
 
 export function EditModPage() {
+
   const { id } = useParams<{ id: string }>()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -77,8 +80,19 @@ export function EditModPage() {
     }
   }
 
-  if (loading) {
-    return <div className="flex items-center justify-center h-64">Loading mod details...</div>
+    if (loading) {
+    return (
+      <div className="max-w-4xl mx-auto space-y-8">
+        <div className="flex items-center gap-4">
+          <Skeleton className="h-10 w-10 rounded-full" />
+          <Skeleton className="h-10 w-64" />
+        </div>
+        <div className="space-y-4">
+          <Skeleton className="h-10 w-[200px]" />
+          <Skeleton className="h-[400px] w-full" />
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -90,73 +104,83 @@ export function EditModPage() {
         <h1 className="text-3xl font-bold tracking-tight">Edit Mod: {formData.name}</h1>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <Card>
-          <CardHeader>
-            <CardTitle>Mod Details</CardTitle>
-            <CardDescription>Update the core information for this mod.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid gap-2">
-                <Label htmlFor="id">ID (Read-only)</Label>
-                <Input id="id" value={formData.id} disabled />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="name">Name</Label>
-                <Input
-                  id="name"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="author">Author</Label>
-                <Input
-                  id="author"
-                  value={formData.author}
-                  onChange={(e) => setFormData({ ...formData, author: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="description">Description</Label>
-                <Textarea
-                  id="description"
-                  className="min-h-[100px]"
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="website">Website URL</Label>
-                <Input
-                  id="website"
-                  type="url"
-                  value={formData.website}
-                  onChange={(e) => setFormData({ ...formData, website: e.target.value })}
-                />
-              </div>
-              <div className="pt-4">
-                <Button type="submit" disabled={saving} className="w-full">
-                  {saving ? 'Saving...' : 'Update Mod Details'}
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
+      <Tabs defaultValue="details" className="w-full">
+        <TabsList className="grid w-full max-w-[400px] grid-cols-2">
+          <TabsTrigger value="details">Mod Details</TabsTrigger>
+          <TabsTrigger value="versions">Versions</TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="details" className="mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Mod Details</CardTitle>
+              <CardDescription>Update the core information for this mod.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="id">ID (Read-only)</Label>
+                  <Input id="id" value={formData.id} disabled />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="name">Name</Label>
+                  <Input
+                    id="name"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="author">Author</Label>
+                  <Input
+                    id="author"
+                    value={formData.author}
+                    onChange={(e) => setFormData({ ...formData, author: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="description">Description</Label>
+                  <Textarea
+                    id="description"
+                    className="min-h-[100px]"
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="website">Website URL</Label>
+                  <Input
+                    id="website"
+                    type="url"
+                    value={formData.website}
+                    onChange={(e) => setFormData({ ...formData, website: e.target.value })}
+                  />
+                </div>
+                <div className="pt-4">
+                  <Button type="submit" disabled={saving} className="w-full">
+                    {saving ? 'Saving...' : 'Update Mod Details'}
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Versions</CardTitle>
-            <CardDescription>Manage files and versions for this mod.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <VersionList modID={id!} />
-          </CardContent>
-        </Card>
-      </div>
+        <TabsContent value="versions" className="mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Versions</CardTitle>
+              <CardDescription>Manage files and versions for this mod.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <VersionList modID={id!} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }
+

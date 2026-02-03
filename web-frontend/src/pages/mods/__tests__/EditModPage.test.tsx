@@ -38,11 +38,12 @@ describe('EditModPage', () => {
       </MemoryRouter>
     )
     
-    expect(screen.getByText('Loading mod details...')).toBeInTheDocument()
+        expect(screen.getAllByTestId('skeleton')).toHaveLength(4)
     
     await waitFor(() => {
       expect(screen.getByText('Edit Mod: Test Mod')).toBeInTheDocument()
     })
+
     
     expect(screen.getByDisplayValue('test-mod')).toBeInTheDocument()
     expect(screen.getByDisplayValue('Test Mod')).toBeInTheDocument()
