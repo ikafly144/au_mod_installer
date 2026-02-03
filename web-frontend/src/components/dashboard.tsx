@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { getMods, deleteMod } from '@/api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Plus, Edit, Trash2, ChevronDown, ChevronUp } from 'lucide-react'
-import { ModDialog } from './mod-dialog'
 import { VersionList } from './version-list'
 import { useToast } from '@/hooks/use-toast'
 
@@ -13,7 +13,9 @@ export default function Dashboard() {
   const [mods, setMods] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedModId, setExpandedModId] = useState<string | null>(null)
+  const navigate = useNavigate()
   const { toast } = useToast()
+
 
     const fetchMods = async () => {
     try {
@@ -52,14 +54,13 @@ export default function Dashboard() {
 
     return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold tracking-tight">Mods Repository</h2>
-        <ModDialog onSuccess={fetchMods}>
-          <Button size="sm">
-            <Plus className="h-4 w-4 mr-2" /> Create Mod
-          </Button>
-        </ModDialog>
+        <Button size="sm" onClick={() => navigate('/mods/new')}>
+          <Plus className="h-4 w-4 mr-2" /> Create Mod
+        </Button>
       </div>
+
 
       <Card>
         <CardContent className="p-0">
@@ -90,18 +91,17 @@ export default function Dashboard() {
                       <TableCell className="font-medium">{mod.name}</TableCell>
                       <TableCell>{mod.author}</TableCell>
                       <TableCell className="hidden md:table-cell">{mod.type}</TableCell>
-                      <TableCell className="text-right">
+                                            <TableCell className="text-right">
                         <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
-                          <ModDialog mod={mod} onSuccess={fetchMods}>
-                            <Button variant="ghost" size="icon">
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                          </ModDialog>
+                          <Button variant="ghost" size="icon" onClick={() => navigate(`/mods/${mod.id}/edit`)}>
+                            <Edit className="h-4 w-4" />
+                          </Button>
                           <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600" onClick={() => handleDeleteMod(mod.id)}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
                       </TableCell>
+
                     </TableRow>
                     {expandedModId === mod.id && (
                       <TableRow>

@@ -4,7 +4,10 @@ import { isLoggedIn } from './auth'
 import LoginPage from './components/login-page'
 import Dashboard from './components/dashboard'
 import { Layout } from './components/layout'
+import { CreateModPage } from './pages/mods/CreateModPage'
+import { EditModPage } from './pages/mods/EditModPage'
 import { Toaster } from './components/ui/toaster'
+
 
 function App() {
   const [authenticated, setAuthenticated] = useState(false)
@@ -34,7 +37,7 @@ function App() {
         <Navigate to="/login" replace />
       )
     },
-    {
+        {
       path: "/mods",
       element: authenticated ? (
         <Layout>
@@ -44,6 +47,27 @@ function App() {
         <Navigate to="/login" replace />
       )
     },
+    {
+      path: "/mods/new",
+      element: authenticated ? (
+        <Layout>
+          <CreateModPage />
+        </Layout>
+      ) : (
+        <Navigate to="/login" replace />
+      )
+    },
+    {
+      path: "/mods/:id/edit",
+      element: authenticated ? (
+        <Layout>
+          <EditModPage />
+        </Layout>
+      ) : (
+        <Navigate to="/login" replace />
+      )
+    },
+
     {
       path: "*",
       element: <Navigate to="/" replace />
