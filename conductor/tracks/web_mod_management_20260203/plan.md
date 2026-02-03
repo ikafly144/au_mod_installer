@@ -18,8 +18,8 @@
 ## Phase 2: Frontend Mod Management
 - [x] Task: Update `api.ts` with Mod CRUD methods. [0d0a003]
     - [x] Add `createMod`, `updateMod`, `deleteMod`.
-- [ ] Task: Implement "Create Mod" Dialog.
-    - [ ] Create a dialog with fields: ID, Name, Description, Author, Type (client/server), Website URL.
+- [x] Task: Implement "Create Mod" Dialog. [3a2ef6d]
+    - [x] Create a dialog with fields: ID, Name, Description, Author, Type (client/server), Website URL.
 - [ ] Task: Implement "Edit Mod" and "Delete Mod" UI.
     - [ ] Add Edit/Delete buttons to the Mod List items.
 
