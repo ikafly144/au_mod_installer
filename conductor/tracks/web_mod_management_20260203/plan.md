@@ -4,8 +4,8 @@
 - [x] Task: Implement Mod Write Operations in `ModService` and `Repository`. [7a2af58]
     - [x] Implement `CreateMod`, `UpdateMod`, `DeleteMod` in `server/repository/postgres/repository.go`.
     - [x] Add these methods to `ModServiceInterface`.
-- [ ] Task: Implement Version Write Operations in `ModService` and `Repository`.
-    - [ ] Implement `CreateModVersion` (metadata only first?), `DeleteModVersion` in repository.
+- [x] Task: Implement Version Write Operations in `ModService` and `Repository`. [8bd5fc9]
+    - [x] Implement `CreateModVersion` (metadata only first?), `DeleteModVersion` in repository.
 - [ ] Task: Add API Handlers for Mod Management.
     - [ ] Add `handleCreateMod`, `handleUpdateMod`, `handleDeleteMod` to `server/handler/handler.go`.
     - [ ] Register routes `POST /mods`, `PUT /mods/{modID}`, `DELETE /mods/{modID}`.
