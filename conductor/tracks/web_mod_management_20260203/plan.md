@@ -22,7 +22,7 @@
     - [x] Create a dialog with fields: ID, Name, Description, Author, Type (client/server), Website URL.
 - [x] Task: Implement "Edit Mod" and "Delete Mod" UI. [d1f20c3]
     - [x] Add Edit/Delete buttons to the Mod List items.
-## Phase 3: Frontend Version Management
+## Phase 3: Frontend Version Management [checkpoint: 7aa25f9]
 - [x] Task: Update `api.ts` with Version methods. [0d0a003]
     - [x] Add `createVersion` (handle file upload), `deleteVersion`.
 - [x] Task: Implement Version List UI. [f2e0c1f]
