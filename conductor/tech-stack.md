@@ -14,9 +14,12 @@
 - **Runtime:** Bun - Fast all-in-one JavaScript runtime.
 - **Build Tool:** Vite - Next generation frontend tooling.
 - **Framework:** React (TypeScript).
+- **Routing:** React Router.
 - **Styling:** Tailwind CSS.
 - **UI Framework:** shadcn/ui (Radix UI).
+- **Testing:** Vitest + React Testing Library.
 - **Communication:** REST API (Consuming the Go backend).
+
 
 
 ## Infrastructure & Tools
