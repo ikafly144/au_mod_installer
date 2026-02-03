@@ -1,0 +1,8 @@
+{
+  "track_id": "web_ui_shadcn_refactor_20260203",
+  "type": "feature",
+  "status": "new",
+  "created_at": "2026-02-03T15:00:00Z",
+  "updated_at": "2026-02-03T15:00:00Z",
+  "description": "web-frontend/でUIをよりよくするために、shadcnのコンポーネントを使ってページを改善します。Sidebarを導入してください。MODやバージョンのの追加・編集をダイアログではなく、ページで行うようにしてください。独自定義のcomponentでshadcnと重複しているものはshadcnに切り替えてください。"
+}
