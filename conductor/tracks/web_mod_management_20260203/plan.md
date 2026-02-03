@@ -12,9 +12,8 @@
 - [x] Task: Add API Handlers for Version Management. [9a435d7]
     - [x] Add `handleCreateModVersion`, `handleDeleteModVersion`.
     - [x] Register routes `POST /mods/{modID}/versions`, `DELETE /mods/{modID}/versions/{versionID}`.
-- [ ] Task: Secure Write Endpoints.
-    - [ ] Wrap these new handlers with `AuthMiddleware`.
-
+- [x] Task: Secure Write Endpoints. [9a435d7]
+    - [x] Wrap these new handlers with `AuthMiddleware`.
 ## Phase 2: Frontend Mod Management
 - [ ] Task: Update `api.ts` with Mod CRUD methods.
     - [ ] Add `createMod`, `updateMod`, `deleteMod`.
