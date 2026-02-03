@@ -30,4 +30,6 @@
 - [x] Task: Implement "Upload Version" UI. [f2e0c1f]
     - [x] File picker, Version ID input, Dependencies input (JSON?).
 ## Phase 4: Integration & Verification
-- [ ] Task: Conductor - User Manual Verification 'Web Frontend & Backend: Mod & Version Management' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Web Frontend & Backend: Mod & Version Management' (Protocol in workflow.md) [7aa25f9]
+
+
