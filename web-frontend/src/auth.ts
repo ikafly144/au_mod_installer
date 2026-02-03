@@ -21,7 +21,6 @@ export function getUser(): any | null {
     }
 }
 
-
 export function logout() {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
