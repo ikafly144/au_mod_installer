@@ -171,3 +171,84 @@ export async function getMods(): Promise<any[]> {
 }
 
 
+
+export async function updateMod(modID: string, mod: any): Promise<any> {
+    const token = getToken();
+    const headers: any = { 'Content-Type': 'application/json' };
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${API_BASE}/mods/${modID}`, {
+        method: 'PUT',
+        headers: headers,
+        body: JSON.stringify(mod)
+    });
+
+    const text = await response.text();
+    if (!response.ok) {
+        try {
+            const error = JSON.parse(text);
+            throw new Error(error.error || 'Failed to update mod');
+        } catch (e) {
+            throw new Error(`Failed to update mod: ${text || response.statusText}`);
+        }
+    }
+
+    try {
+        return JSON.parse(text);
+    } catch (e) {
+        throw new Error(`Invalid server response: ${text}`);
+    }
+}
+
+export async function deleteVersion(modID: string, versionID: string): Promise<void> {
+    const token = getToken();
+    const headers: any = {};
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${API_BASE}/mods/${modID}/versions/${versionID}`, {
+        method: 'DELETE',
+        headers: headers
+    });
+
+    if (!response.ok) {
+        const text = await response.text();
+        try {
+            const error = JSON.parse(text);
+            throw new Error(error.error || 'Failed to delete version');
+        } catch (e) {
+            throw new Error(`Failed to delete version: ${text || response.statusText}`);
+        }
+    }
+}
+
+export async function getModVersions(modID: string): Promise<any[]> {
+    const token = getToken();
+    const headers: any = {};
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${API_BASE}/mods/${modID}/versions`, {
+        headers: headers
+    });
+
+    const text = await response.text();
+    if (!response.ok) {
+        try {
+            const error = JSON.parse(text);
+            throw new Error(error.error || 'Failed to fetch versions');
+        } catch (e) {
+            throw new Error(`Failed to fetch versions: ${text || response.statusText}`);
+        }
+    }
+
+    try {
+        return JSON.parse(text);
+    } catch (e) {
+        throw new Error(`Invalid server response: ${text}`);
+    }
+}
