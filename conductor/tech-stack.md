@@ -13,8 +13,11 @@
 ## Web Frontend (Admin Console)
 - **Runtime:** Bun - Fast all-in-one JavaScript runtime.
 - **Build Tool:** Vite - Next generation frontend tooling.
-- **UI Framework:** @material/web (Material Design 3 Web Components).
+- **Framework:** React (TypeScript).
+- **Styling:** Tailwind CSS.
+- **UI Framework:** shadcn/ui (Radix UI).
 - **Communication:** REST API (Consuming the Go backend).
+
 
 ## Infrastructure & Tools
 - **Containerization:** Docker & Docker Compose - Used for local development and deployment of the server-side components.
