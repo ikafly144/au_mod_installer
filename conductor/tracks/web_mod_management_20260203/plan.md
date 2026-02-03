@@ -25,10 +25,9 @@
 ## Phase 3: Frontend Version Management
 - [x] Task: Update `api.ts` with Version methods. [0d0a003]
     - [x] Add `createVersion` (handle file upload), `deleteVersion`.
-- [ ] Task: Implement Version List UI.
-    - [ ] Show versions when a mod is expanded or in a detail view.
-- [ ] Task: Implement "Upload Version" UI.
-    - [ ] File picker, Version ID input, Dependencies input (JSON?).
-
+- [x] Task: Implement Version List UI. [f2e0c1f]
+    - [x] Show versions when a mod is expanded or in a detail view.
+- [x] Task: Implement "Upload Version" UI. [f2e0c1f]
+    - [x] File picker, Version ID input, Dependencies input (JSON?).
 ## Phase 4: Integration & Verification
 - [ ] Task: Conductor - User Manual Verification 'Web Frontend & Backend: Mod & Version Management' (Protocol in workflow.md)
