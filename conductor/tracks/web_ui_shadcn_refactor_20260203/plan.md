@@ -16,17 +16,18 @@
 - [x] Task: Conductor - User Manual Verification 'Phase 2: Layout & Sidebar Implementation' (Protocol in workflow.md)
 )
 
-## Phase 3: Transition to Page-based Mod Management
-- [ ] Task: Implement Create and Edit Mod Pages.
+## Phase 3: Transition to Page-based Mod Management [checkpoint: 29ce4d2]
+- [x] Task: Implement Create and Edit Mod Pages. [c51bb90]
     - [ ] Write Tests: Create tests for new routes `/mods/new` and `/mods/:id/edit` ensuring they render the correct forms.
     - [ ] Implement Feature: Create `src/pages/mods/CreateModPage.tsx` and `src/pages/mods/EditModPage.tsx`, porting logic from `ModDialog`.
-- [ ] Task: Integrate Version Management into Edit Mod Page.
+- [x] Task: Integrate Version Management into Edit Mod Page. [c51bb90]
     - [ ] Write Tests: Verify that the version list and upload functionality are accessible from the Edit Mod page.
     - [ ] Implement Feature: Add a Version Management section (or tabs) to `EditModPage.tsx`, utilizing logic from `VersionDialog` and `VersionList`.
-- [ ] Task: Remove Legacy Dialogs and Update Dashboard.
+- [x] Task: Remove Legacy Dialogs and Update Dashboard. [ef24258]
     - [ ] Write Tests: Ensure the Dashboard correctly navigates to the new pages instead of opening dialogs.
     - [ ] Implement Feature: Update `Dashboard.tsx` to use navigation links for Create/Edit actions and remove `ModDialog` and `VersionDialog` components.
-- [ ] Task: Conductor - User Manual Verification 'Phase 3: Transition to Page-based Mod Management' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Phase 3: Transition to Page-based Mod Management' (Protocol in workflow.md)
+
 
 ## Phase 4: Placeholder Pages & Finalization
 - [ ] Task: Create placeholders for Dashboard, Settings, and System Configuration.
