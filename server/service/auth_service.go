@@ -30,12 +30,13 @@ func NewAuthService(userRepo repository.UserRepository, jwtSecret string) *AuthS
 }
 
 type RegisterRequest struct {
-	Username    string
-	Password    string
-	DisplayName string
+	Username    string `json:"username"`
+	Password    string `json:"password"`
+	DisplayName string `json:"display_name"`
 }
 
 func (s *AuthService) Register(ctx context.Context, req RegisterRequest) (*model.User, error) {
+
 	// Check if user exists
 	existingUser, err := s.userRepo.GetUserByUsername(ctx, req.Username)
 	if err != nil {
@@ -73,13 +74,13 @@ func (s *AuthService) Register(ctx context.Context, req RegisterRequest) (*model
 }
 
 type LoginRequest struct {
-	Username string
-	Password string
+	Username string `json:"username"`
+	Password string `json:"password"`
 }
 
 type LoginResponse struct {
-	Token string
-	User  *model.User
+	Token string      `json:"token"`
+	User  *model.User `json:"user"`
 }
 
 func (s *AuthService) Login(ctx context.Context, req LoginRequest) (*LoginResponse, error) {
