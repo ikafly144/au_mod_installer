@@ -16,8 +16,8 @@
     - [x] Wrap these new handlers with `AuthMiddleware`.
 
 ## Phase 2: Frontend Mod Management
-- [ ] Task: Update `api.ts` with Mod CRUD methods.
-    - [ ] Add `createMod`, `updateMod`, `deleteMod`.
+- [x] Task: Update `api.ts` with Mod CRUD methods. [0d0a003]
+    - [x] Add `createMod`, `updateMod`, `deleteMod`.
 - [ ] Task: Implement "Create Mod" Dialog.
     - [ ] Create a dialog with fields: ID, Name, Description, Author, Type (client/server), Website URL.
 - [ ] Task: Implement "Edit Mod" and "Delete Mod" UI.
