@@ -134,6 +134,38 @@ func (r *Repository) GetAllMods(ctx context.Context) ([]modmgr.Mod, error) {
 	return mods, nil
 }
 
+func (r *Repository) CreateMod(ctx context.Context, mod modmgr.Mod) error {
+	query := `
+		INSERT INTO mods (id, name, description, author_name, type, thumbnail_url, website_url, latest_version_id, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+	`
+	_, err := r.pool.Exec(ctx, query, mod.ID, mod.Name, mod.Description, mod.Author, string(mod.Type), mod.Thumbnail, mod.Website, mod.LatestVersion)
+	if err != nil {
+		return fmt.Errorf("failed to create mod: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) UpdateMod(ctx context.Context, mod modmgr.Mod) error {
+	query := `
+		UPDATE mods SET
+			name = $1,
+			description = $2,
+			author_name = $3,
+			type = $4,
+			thumbnail_url = $5,
+			website_url = $6,
+			latest_version_id = $7,
+			updated_at = NOW()
+		WHERE id = $8
+	`
+	_, err := r.pool.Exec(ctx, query, mod.Name, mod.Description, mod.Author, string(mod.Type), mod.Thumbnail, mod.Website, mod.LatestVersion, mod.ID)
+	if err != nil {
+		return fmt.Errorf("failed to update mod: %w", err)
+	}
+	return nil
+}
+
 func (r *Repository) SetMod(ctx context.Context, mod modmgr.Mod) error {
 	query := `
 		INSERT INTO mods (id, name, description, author_name, type, thumbnail_url, website_url, latest_version_id, updated_at)
@@ -164,7 +196,12 @@ func (r *Repository) DeleteMod(ctx context.Context, modID string) error {
 	return nil
 }
 
+func (r *Repository) CreateModVersion(ctx context.Context, modID string, version modmgr.ModVersion) error {
+	return r.SetModVersion(ctx, modID, version)
+}
+
 func (r *Repository) SetModVersion(ctx context.Context, modID string, version modmgr.ModVersion) error {
+
 	return pgx.BeginFunc(ctx, r.pool, func(tx pgx.Tx) error {
 		// Insert version
 		_, err := tx.Exec(ctx, `
@@ -331,7 +368,12 @@ func (r *Repository) GetAllModVersions(ctx context.Context, modID string) ([]mod
 	return r.GetModVersions(ctx, modID, 0, "")
 }
 
+func (r *Repository) DeleteModVersion(ctx context.Context, modID, versionID string) error {
+	return r.DeleteVersion(ctx, modID, versionID)
+}
+
 func (r *Repository) DeleteVersion(ctx context.Context, modID, versionID string) error {
+
 	_, err := r.pool.Exec(ctx, `DELETE FROM mod_versions WHERE mod_id = $1 AND version_id = $2`, modID, versionID)
 	return err
 }

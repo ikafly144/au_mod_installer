@@ -26,10 +26,19 @@ type ModRepository interface {
 	// GetModVersions retrieves all versions of a mod with pagination
 	GetModVersions(ctx context.Context, modID string, limit int, after string) ([]modmgr.ModVersion, error)
 
-	// SetMod stores a mod
+	// CreateMod stores a new mod
+	CreateMod(ctx context.Context, mod modmgr.Mod) error
+
+	// UpdateMod updates an existing mod
+	UpdateMod(ctx context.Context, mod modmgr.Mod) error
+
+	// SetMod stores a mod (deprecated: use CreateMod or UpdateMod)
 	SetMod(ctx context.Context, mod modmgr.Mod) error
 
-	// SetModVersion stores a mod version
+	// CreateModVersion stores a new mod version
+	CreateModVersion(ctx context.Context, modID string, version modmgr.ModVersion) error
+
+	// SetModVersion stores a mod version (deprecated: use CreateModVersion)
 	SetModVersion(ctx context.Context, modID string, version modmgr.ModVersion) error
 
 	// Close closes the repository connection
@@ -44,7 +53,10 @@ type ModRepository interface {
 	// GetAllModVersions retrieves all versions of a mod
 	GetAllModVersions(ctx context.Context, modID string) ([]modmgr.ModVersion, error)
 
-	// DeleteVersion deletes a specific version of a mod
+	// DeleteModVersion deletes a specific version of a mod
+	DeleteModVersion(ctx context.Context, modID, versionID string) error
+
+	// DeleteVersion deletes a specific version of a mod (deprecated: use DeleteModVersion)
 	DeleteVersion(ctx context.Context, modID, versionID string) error
 }
 

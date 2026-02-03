@@ -57,7 +57,28 @@ func (s *ModService) GetModVersion(ctx context.Context, modID string, versionID 
 	return s.repo.GetModVersion(ctx, modID, versionID)
 }
 
+func (s *ModService) CreateMod(ctx context.Context, mod modmgr.Mod) error {
+	return s.repo.CreateMod(ctx, mod)
+}
+
+func (s *ModService) UpdateMod(ctx context.Context, mod modmgr.Mod) error {
+	return s.repo.UpdateMod(ctx, mod)
+}
+
+func (s *ModService) DeleteMod(ctx context.Context, modID string) error {
+	return s.repo.DeleteMod(ctx, modID)
+}
+
+func (s *ModService) CreateModVersion(ctx context.Context, modID string, version modmgr.ModVersion) error {
+	return s.repo.CreateModVersion(ctx, modID, version)
+}
+
+func (s *ModService) DeleteModVersion(ctx context.Context, modID string, versionID string) error {
+	return s.repo.DeleteModVersion(ctx, modID, versionID)
+}
+
 // FileModService is a file-based implementation for backward compatibility
+
 type FileModService struct {
 	file         string
 	modStore     map[string]modmgr.Mod
@@ -113,7 +134,7 @@ func (s *FileModService) loadData() error {
 	return nil
 }
 
-func (s *FileModService) GetModList(limit int, after string, before string) ([]modmgr.Mod, error) {
+func (s *FileModService) GetModList(ctx context.Context, limit int, after string, before string) ([]modmgr.Mod, error) {
 	var mods []modmgr.Mod
 
 	startIndex := 0
@@ -152,7 +173,7 @@ func (s *FileModService) GetModList(limit int, after string, before string) ([]m
 	return mods, nil
 }
 
-func (s *FileModService) GetMod(modID string) (*modmgr.Mod, error) {
+func (s *FileModService) GetMod(ctx context.Context, modID string) (*modmgr.Mod, error) {
 	m, ok := s.modStore[modID]
 	if !ok {
 		return nil, ErrNotFound
@@ -160,7 +181,7 @@ func (s *FileModService) GetMod(modID string) (*modmgr.Mod, error) {
 	return &m, nil
 }
 
-func (s *FileModService) GetModVersions(modID string, limit int, after string) ([]modmgr.ModVersion, error) {
+func (s *FileModService) GetModVersions(ctx context.Context, modID string, limit int, after string) ([]modmgr.ModVersion, error) {
 	versionsMap, ok := s.versionStore[modID]
 	if !ok {
 		return []modmgr.ModVersion{}, ErrNotFound
@@ -200,7 +221,7 @@ func (s *FileModService) GetModVersions(modID string, limit int, after string) (
 	return result, nil
 }
 
-func (s *FileModService) GetModVersion(modID string, versionID string) (*modmgr.ModVersion, error) {
+func (s *FileModService) GetModVersion(ctx context.Context, modID string, versionID string) (*modmgr.ModVersion, error) {
 	versionsMap, ok := s.versionStore[modID]
 	if !ok {
 		return nil, ErrNotFound
@@ -215,4 +236,24 @@ func (s *FileModService) GetModVersion(modID string, versionID string) (*modmgr.
 // ReloadData reloads the mod data from the file
 func (s *FileModService) ReloadData() error {
 	return s.loadData()
+}
+
+func (s *FileModService) CreateMod(ctx context.Context, mod modmgr.Mod) error {
+	return errors.New("not implemented")
+}
+
+func (s *FileModService) UpdateMod(ctx context.Context, mod modmgr.Mod) error {
+	return errors.New("not implemented")
+}
+
+func (s *FileModService) DeleteMod(ctx context.Context, modID string) error {
+	return errors.New("not implemented")
+}
+
+func (s *FileModService) CreateModVersion(ctx context.Context, modID string, version modmgr.ModVersion) error {
+	return errors.New("not implemented")
+}
+
+func (s *FileModService) DeleteModVersion(ctx context.Context, modID string, versionID string) error {
+	return errors.New("not implemented")
 }

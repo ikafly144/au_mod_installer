@@ -126,10 +126,20 @@ func main() {
 	}
 
 	h := handler.NewHandler(modService, version, disabledVersions)
+	if jwtSecret != "" {
+		mw := middleware.NewAuthMiddleware(jwtSecret)
+		h.SetAuthMiddleware(mw)
+	}
+
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux, basePath)
 
+	// Serve uploads directory
+	fs := http.FileServer(http.Dir("uploads"))
+	mux.Handle("/uploads/", http.StripPrefix("/uploads/", fs))
+
 	if authService != nil {
+
 		authHandler := handler.NewAuthHandler(authService)
 		authHandler.RegisterRoutes(mux, basePath)
 	}
@@ -181,17 +191,37 @@ type fileModServiceAdapter struct {
 }
 
 func (a *fileModServiceAdapter) GetModList(ctx context.Context, limit int, after string, before string) ([]modmgr.Mod, error) {
-	return a.FileModService.GetModList(limit, after, before)
+	return a.FileModService.GetModList(ctx, limit, after, before)
 }
 
 func (a *fileModServiceAdapter) GetMod(ctx context.Context, modID string) (*modmgr.Mod, error) {
-	return a.FileModService.GetMod(modID)
+	return a.FileModService.GetMod(ctx, modID)
 }
 
 func (a *fileModServiceAdapter) GetModVersions(ctx context.Context, modID string, limit int, after string) ([]modmgr.ModVersion, error) {
-	return a.FileModService.GetModVersions(modID, limit, after)
+	return a.FileModService.GetModVersions(ctx, modID, limit, after)
 }
 
 func (a *fileModServiceAdapter) GetModVersion(ctx context.Context, modID string, versionID string) (*modmgr.ModVersion, error) {
-	return a.FileModService.GetModVersion(modID, versionID)
+	return a.FileModService.GetModVersion(ctx, modID, versionID)
+}
+
+func (a *fileModServiceAdapter) CreateMod(ctx context.Context, mod modmgr.Mod) error {
+	return errors.New("write operations not supported in file mode")
+}
+
+func (a *fileModServiceAdapter) UpdateMod(ctx context.Context, mod modmgr.Mod) error {
+	return errors.New("write operations not supported in file mode")
+}
+
+func (a *fileModServiceAdapter) DeleteMod(ctx context.Context, modID string) error {
+	return errors.New("write operations not supported in file mode")
+}
+
+func (a *fileModServiceAdapter) CreateModVersion(ctx context.Context, modID string, version modmgr.ModVersion) error {
+	return errors.New("write operations not supported in file mode")
+}
+
+func (a *fileModServiceAdapter) DeleteModVersion(ctx context.Context, modID string, versionID string) error {
+	return errors.New("write operations not supported in file mode")
 }
