@@ -8,11 +8,14 @@ import '@material/web/textfield/outlined-text-field.js';
 import '@material/web/labs/card/elevated-card.js';
 import '@material/web/list/list.js';
 import '@material/web/list/list-item.js';
+import '@material/web/fab/fab.js';
 import { MdOutlinedTextField } from '@material/web/textfield/outlined-text-field.js';
 import { login, getMods } from './api';
 import { isLoggedIn, setSession, logout, getUser } from './auth';
+import { showCreateModDialog } from './mod-dialog';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
+
 
 
 function renderLogin() {
@@ -60,10 +63,15 @@ function renderDashboard() {
         <md-icon>logout</md-icon>
     </md-icon-button>
   </div>
-  <div class="main-content">
+    <div class="main-content">
      <md-elevated-card style="padding: 16px; margin: 16px;">
-        <h2>Mods Repository</h2>
-        <div id="mods-list">Loading mods...</div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h2 style="margin: 0;">Mods Repository</h2>
+            <md-fab id="create-mod-btn" size="small">
+                <md-icon slot="icon">add</md-icon>
+            </md-fab>
+        </div>
+        <div id="mods-list" style="margin-top: 16px;">Loading mods...</div>
      </md-elevated-card>
   </div>
 `;
@@ -72,8 +80,15 @@ function renderDashboard() {
         logout();
     });
 
+    document.getElementById('create-mod-btn')!.addEventListener('click', () => {
+        showCreateModDialog(() => {
+            loadMods(); // Reload list on success
+        });
+    });
+
     loadMods();
 }
+
 
 async function loadMods() {
     const modsListEl = document.getElementById('mods-list');
