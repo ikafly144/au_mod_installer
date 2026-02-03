@@ -249,3 +249,93 @@ func TestHandler_DeleteMod_Error(t *testing.T) {
 		assert.Equal(t, http.StatusInternalServerError, w.Code)
 	})
 }
+
+func TestHandler_CreateModVersion(t *testing.T) {
+	mockSvc := new(MockModService)
+	h := NewHandler(mockSvc, "v1.0.0", nil)
+
+	modID := "test-mod"
+	version := modmgr.ModVersion{ID: "v1.0.0"}
+	body, _ := json.Marshal(version)
+
+	t.Run("Success", func(t *testing.T) {
+		req := httptest.NewRequest("POST", "/mods/"+modID+"/versions", bytes.NewReader(body))
+		req.SetPathValue("modID", modID)
+		mockSvc.On("CreateModVersion", mock.Anything, modID, mock.Anything).Return(nil).Once()
+		w := httptest.NewRecorder()
+		h.handleCreateModVersion(w, req)
+		assert.Equal(t, http.StatusCreated, w.Code)
+	})
+
+	t.Run("MissingModID", func(t *testing.T) {
+		req := httptest.NewRequest("POST", "/mods//versions", bytes.NewReader(body))
+		req.SetPathValue("modID", "")
+		w := httptest.NewRecorder()
+		h.handleCreateModVersion(w, req)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("InvalidJSON", func(t *testing.T) {
+		req := httptest.NewRequest("POST", "/mods/"+modID+"/versions", bytes.NewReader([]byte("{invalid}")))
+		req.SetPathValue("modID", modID)
+		w := httptest.NewRecorder()
+		h.handleCreateModVersion(w, req)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("MissingVersionID", func(t *testing.T) {
+		version := modmgr.ModVersion{ID: ""}
+		body, _ := json.Marshal(version)
+		req := httptest.NewRequest("POST", "/mods/"+modID+"/versions", bytes.NewReader(body))
+		req.SetPathValue("modID", modID)
+		w := httptest.NewRecorder()
+		h.handleCreateModVersion(w, req)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("ServiceError", func(t *testing.T) {
+		req := httptest.NewRequest("POST", "/mods/"+modID+"/versions", bytes.NewReader(body))
+		req.SetPathValue("modID", modID)
+		mockSvc.On("CreateModVersion", mock.Anything, modID, mock.Anything).Return(errors.New("db error")).Once()
+		w := httptest.NewRecorder()
+		h.handleCreateModVersion(w, req)
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+	})
+}
+
+func TestHandler_DeleteModVersion(t *testing.T) {
+	mockSvc := new(MockModService)
+	h := NewHandler(mockSvc, "v1.0.0", nil)
+
+	modID := "test-mod"
+	versionID := "v1.0.0"
+
+	t.Run("Success", func(t *testing.T) {
+		req := httptest.NewRequest("DELETE", "/mods/"+modID+"/versions/"+versionID, nil)
+		req.SetPathValue("modID", modID)
+		req.SetPathValue("versionID", versionID)
+		mockSvc.On("DeleteModVersion", mock.Anything, modID, versionID).Return(nil).Once()
+		w := httptest.NewRecorder()
+		h.handleDeleteModVersion(w, req)
+		assert.Equal(t, http.StatusNoContent, w.Code)
+	})
+
+	t.Run("MissingParams", func(t *testing.T) {
+		req := httptest.NewRequest("DELETE", "/mods///versions/", nil)
+		req.SetPathValue("modID", "")
+		req.SetPathValue("versionID", "")
+		w := httptest.NewRecorder()
+		h.handleDeleteModVersion(w, req)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("ServiceError", func(t *testing.T) {
+		req := httptest.NewRequest("DELETE", "/mods/"+modID+"/versions/"+versionID, nil)
+		req.SetPathValue("modID", modID)
+		req.SetPathValue("versionID", versionID)
+		mockSvc.On("DeleteModVersion", mock.Anything, modID, versionID).Return(errors.New("db error")).Once()
+		w := httptest.NewRecorder()
+		h.handleDeleteModVersion(w, req)
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+	})
+}
