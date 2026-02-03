@@ -1,9 +1,9 @@
 # Implementation Plan: Web Frontend & Backend - Mod & Version Management
 
 ## Phase 1: Backend API Implementation (CRUD)
-- [ ] Task: Implement Mod Write Operations in `ModService` and `Repository`.
-    - [ ] Implement `CreateMod`, `UpdateMod`, `DeleteMod` in `server/repository/postgres/repository.go`.
-    - [ ] Add these methods to `ModServiceInterface`.
+- [x] Task: Implement Mod Write Operations in `ModService` and `Repository`. [7a2af58]
+    - [x] Implement `CreateMod`, `UpdateMod`, `DeleteMod` in `server/repository/postgres/repository.go`.
+    - [x] Add these methods to `ModServiceInterface`.
 - [ ] Task: Implement Version Write Operations in `ModService` and `Repository`.
     - [ ] Implement `CreateModVersion` (metadata only first?), `DeleteModVersion` in repository.
 - [ ] Task: Add API Handlers for Mod Management.
