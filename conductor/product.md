@@ -19,7 +19,8 @@ Mod of Us is a mod manager for the game "Among Us". It allows players to easily 
 - **Version Management:** Handling different versions of Among Us to ensure mod compatibility.
 - **Profile Management:** Creating and switching between different "sets" of mods (profiles).
 - **Integrated Launcher:** Launching the game directly with the selected mods active.
-- **Web Dashboard:** A modern web-based interface for managing the repository, featuring mod developer accounts and authentication.
+- **Web Dashboard:** A modern web-based interface for managing the repository, featuring a persistent sidebar navigation, dedicated pages for mod and version management, and mod developer authentication.
+
 
 ## Success Metrics
 
