@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 	"github.com/pashagolub/pgxmock/v3"
@@ -126,6 +127,62 @@ func TestRepository_DeleteMod(t *testing.T) {
 		WillReturnResult(pgxmock.NewResult("DELETE", 1))
 
 	err = repo.DeleteMod(ctx, modID)
+	assert.NoError(t, err)
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("there were unfulfilled expectations: %s", err)
+	}
+}
+
+func TestRepository_CreateModVersion(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	require.NoError(t, err)
+	defer mock.Close()
+
+	repo := NewRepository(mock)
+	ctx := context.Background()
+
+	modID := "test-mod"
+	version := modmgr.ModVersion{
+		ID:        "v1.0.0",
+		ModID:     modID,
+		CreatedAt: time.Now(),
+	}
+
+	mock.ExpectBegin()
+	mock.ExpectExec("INSERT INTO mod_versions").
+		WithArgs(modID, version.ID, version.CreatedAt).
+		WillReturnResult(pgxmock.NewResult("INSERT", 1))
+	mock.ExpectExec("DELETE FROM mod_files").WithArgs(modID, version.ID).WillReturnResult(pgxmock.NewResult("DELETE", 0))
+	mock.ExpectExec("DELETE FROM mod_dependencies").WithArgs(modID, version.ID).WillReturnResult(pgxmock.NewResult("DELETE", 0))
+	mock.ExpectExec("DELETE FROM mod_version_game_versions").WithArgs(modID, version.ID).WillReturnResult(pgxmock.NewResult("DELETE", 0))
+	mock.ExpectCommit()
+	mock.ExpectRollback()
+
+	err = repo.CreateModVersion(ctx, modID, version)
+	assert.NoError(t, err)
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("there were unfulfilled expectations: %s", err)
+	}
+}
+
+func TestRepository_DeleteModVersion(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	require.NoError(t, err)
+	defer mock.Close()
+
+	repo := NewRepository(mock)
+	ctx := context.Background()
+
+	modID := "test-mod"
+	versionID := "v1.0.0"
+
+	mock.ExpectExec("DELETE FROM mod_versions WHERE mod_id = \\$1 AND version_id = \\$2").
+		WithArgs(modID, versionID).
+		WillReturnResult(pgxmock.NewResult("DELETE", 1))
+
+	err = repo.DeleteModVersion(ctx, modID, versionID)
 	assert.NoError(t, err)
 
 	if err := mock.ExpectationsWereMet(); err != nil {
