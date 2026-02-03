@@ -20,9 +20,8 @@
     - [x] Add `createMod`, `updateMod`, `deleteMod`.
 - [x] Task: Implement "Create Mod" Dialog. [3a2ef6d]
     - [x] Create a dialog with fields: ID, Name, Description, Author, Type (client/server), Website URL.
-- [ ] Task: Implement "Edit Mod" and "Delete Mod" UI.
-    - [ ] Add Edit/Delete buttons to the Mod List items.
-
+- [x] Task: Implement "Edit Mod" and "Delete Mod" UI. [d1f20c3]
+    - [x] Add Edit/Delete buttons to the Mod List items.
 ## Phase 3: Frontend Version Management
 - [ ] Task: Update `api.ts` with Version methods.
     - [ ] Add `createVersion` (handle file upload), `deleteVersion`.
