@@ -23,8 +23,8 @@
 - [x] Task: Implement "Edit Mod" and "Delete Mod" UI. [d1f20c3]
     - [x] Add Edit/Delete buttons to the Mod List items.
 ## Phase 3: Frontend Version Management
-- [ ] Task: Update `api.ts` with Version methods.
-    - [ ] Add `createVersion` (handle file upload), `deleteVersion`.
+- [x] Task: Update `api.ts` with Version methods. [0d0a003]
+    - [x] Add `createVersion` (handle file upload), `deleteVersion`.
 - [ ] Task: Implement Version List UI.
     - [ ] Show versions when a mod is expanded or in a detail view.
 - [ ] Task: Implement "Upload Version" UI.
