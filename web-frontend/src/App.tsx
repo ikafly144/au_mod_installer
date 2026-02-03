@@ -6,7 +6,11 @@ import Dashboard from './components/dashboard'
 import { Layout } from './components/layout'
 import { CreateModPage } from './pages/mods/CreateModPage'
 import { EditModPage } from './pages/mods/EditModPage'
+import DashboardOverview from './pages/DashboardOverview'
+import SettingsPage from './pages/SettingsPage'
+import SystemPage from './pages/SystemPage'
 import { Toaster } from './components/ui/toaster'
+
 
 
 function App() {
@@ -27,17 +31,17 @@ function App() {
         <LoginPage onLogin={() => setAuthenticated(true)} />
       )
     },
-    {
+        {
       path: "/",
       element: authenticated ? (
         <Layout>
-          <Dashboard />
+          <DashboardOverview />
         </Layout>
       ) : (
         <Navigate to="/login" replace />
       )
     },
-        {
+    {
       path: "/mods",
       element: authenticated ? (
         <Layout>
@@ -47,6 +51,27 @@ function App() {
         <Navigate to="/login" replace />
       )
     },
+    {
+      path: "/settings",
+      element: authenticated ? (
+        <Layout>
+          <SettingsPage />
+        </Layout>
+      ) : (
+        <Navigate to="/login" replace />
+      )
+    },
+    {
+      path: "/system",
+      element: authenticated ? (
+        <Layout>
+          <SystemPage />
+        </Layout>
+      ) : (
+        <Navigate to="/login" replace />
+      )
+    },
+
     {
       path: "/mods/new",
       element: authenticated ? (
