@@ -9,9 +9,9 @@
 - [x] Task: Add API Handlers for Mod Management. [495feda]
     - [x] Add `handleCreateMod`, `handleUpdateMod`, `handleDeleteMod` to `server/handler/handler.go`.
     - [x] Register routes `POST /mods`, `PUT /mods/{modID}`, `DELETE /mods/{modID}`.
-- [ ] Task: Add API Handlers for Version Management.
-    - [ ] Add `handleCreateModVersion`, `handleDeleteModVersion`.
-    - [ ] Register routes `POST /mods/{modID}/versions`, `DELETE /mods/{modID}/versions/{versionID}`.
+- [x] Task: Add API Handlers for Version Management. [9a435d7]
+    - [x] Add `handleCreateModVersion`, `handleDeleteModVersion`.
+    - [x] Register routes `POST /mods/{modID}/versions`, `DELETE /mods/{modID}/versions/{versionID}`.
 - [ ] Task: Secure Write Endpoints.
     - [ ] Wrap these new handlers with `AuthMiddleware`.
 
