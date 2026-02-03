@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { isLoggedIn } from './auth'
 import LoginPage from './components/login-page'
 import Dashboard from './components/dashboard'
+import { Layout } from './components/layout'
 import { Toaster } from './components/ui/toaster'
 
 function App() {
@@ -18,14 +20,50 @@ function App() {
   }
 
   return (
-    <>
-      {authenticated ? (
-        <Dashboard />
-      ) : (
-        <LoginPage onLogin={() => setAuthenticated(true)} />
-      )}
+    <BrowserRouter>
+      <Routes>
+        <Route
+          path="/login"
+          element={
+            authenticated ? (
+              <Navigate to="/" replace />
+            ) : (
+              <LoginPage onLogin={() => setAuthenticated(true)} />
+            )
+          }
+        />
+        <Route
+          path="/"
+          element={
+            authenticated ? (
+              <Layout>
+                <Dashboard />
+              </Layout>
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+        {/* Placeholders for other routes */}
+        <Route
+          path="/mods"
+          element={
+            authenticated ? (
+              <Layout>
+                <Dashboard />
+              </Layout>
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+        <Route
+          path="*"
+          element={<Navigate to="/" replace />}
+        />
+      </Routes>
       <Toaster />
-    </>
+    </BrowserRouter>
   )
 }
 

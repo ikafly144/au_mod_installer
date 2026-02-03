@@ -16,10 +16,11 @@ export function VersionList({ modID }: VersionListProps) {
   const { toast } = useToast()
 
   const fetchVersions = async () => {
-    try {
+        try {
       const data = await getModVersions(modID)
-      setVersions(data)
+      setVersions(data || [])
     } catch (e: any) {
+
       toast({
         variant: 'destructive',
         title: 'Error loading versions',
