@@ -1,6 +1,16 @@
-import { render, screen } from '@testing-library/react'
+/** @vitest-environment jsdom */
+import { render, screen, cleanup } from '@testing-library/react'
 import { Button } from '../button'
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, afterEach } from 'vitest'
+import * as matchers from '@testing-library/jest-dom/matchers'
+
+expect.extend(matchers)
+
+afterEach(() => {
+  cleanup()
+})
+
+
 
 describe('Button', () => {
   it('renders correctly', () => {
