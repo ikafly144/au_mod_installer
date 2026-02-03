@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react'
 import { getMods, deleteMod } from '@/api'
-import { logout, getUser } from '@/auth'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Plus, LogOut, Edit, Trash2, ChevronDown, ChevronUp } from 'lucide-react'
+import { Plus, Edit, Trash2, ChevronDown, ChevronUp } from 'lucide-react'
 import { ModDialog } from './mod-dialog'
 import { VersionList } from './version-list'
 import { useToast } from '@/hooks/use-toast'
@@ -14,7 +13,6 @@ export default function Dashboard() {
   const [mods, setMods] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedModId, setExpandedModId] = useState<string | null>(null)
-  const user = getUser()
   const { toast } = useToast()
 
     const fetchMods = async () => {

@@ -6,14 +6,12 @@ import { PanelLeft } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Separator } from "@/components/ui/separator"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 const SIDEBAR_WIDTH = "16rem"
-const SIDEBAR_WIDTH_MOBILE = "18rem"
 const SIDEBAR_WIDTH_ICON = "3rem"
 const SIDEBAR_KEYBOARD_SHORTCUT = "b"
+
 
 type SidebarContext = {
   state: "expanded" | "collapsed"
@@ -45,7 +43,7 @@ const SidebarProvider = React.forwardRef<
   }
 >(
   (
-    {
+        {
       defaultOpen = true,
       open: openProp,
       onOpenChange: setOpenProp,
@@ -56,8 +54,9 @@ const SidebarProvider = React.forwardRef<
     },
     ref
   ) => {
-    const [isMobile, setIsMobile] = React.useState(false)
+    const isMobile = false // TODO: Implement mobile detection
     const [openMobile, setOpenMobile] = React.useState(false)
+
 
     // This is the internal state of the sidebar.
     // We use openProp and setOpenProp for control from outside the component.
@@ -298,8 +297,9 @@ SidebarGroup.displayName = "SidebarGroup"
 
 const SidebarGroupLabel = React.forwardRef<
   HTMLDivElement,
-  React.ComponentProps<"div") & { asChild?: boolean }
+  React.ComponentProps<"div"> & { asChild?: boolean }
 >(({ className, asChild = false, ...props }, ref) => {
+
   const Comp = asChild ? Slot : "div"
 
   return (
@@ -442,7 +442,26 @@ const SidebarHeader = React.forwardRef<
 ))
 SidebarHeader.displayName = "SidebarHeader"
 
+const SidebarInset = React.forwardRef<
+  HTMLDivElement,
+  React.ComponentProps<"main">
+>(({ className, ...props }, ref) => {
+  return (
+    <main
+      ref={ref}
+      className={cn(
+        "relative flex min-h-svh flex-1 flex-col bg-background",
+        "peer-data-[variant=inset]:min-h-[calc(100svh-theme(spacing.4))] md:peer-data-[variant=inset]:m-2 md:peer-data-[state=collapsed]:peer-data-[variant=inset]:ml-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow",
+        className
+      )}
+      {...props}
+    />
+  )
+})
+SidebarInset.displayName = "SidebarInset"
+
 export {
+
   Sidebar,
   SidebarContent,
   SidebarFooter,
@@ -450,6 +469,7 @@ export {
   SidebarGroupContent,
   SidebarGroupLabel,
   SidebarHeader,
+  SidebarInset,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -457,3 +477,4 @@ export {
   SidebarTrigger,
   useSidebar,
 }
+
