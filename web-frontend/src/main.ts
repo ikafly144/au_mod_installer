@@ -10,9 +10,10 @@ import '@material/web/list/list.js';
 import '@material/web/list/list-item.js';
 import '@material/web/fab/fab.js';
 import { MdOutlinedTextField } from '@material/web/textfield/outlined-text-field.js';
-import { login, getMods } from './api';
+import { login, getMods, deleteMod } from './api';
 import { isLoggedIn, setSession, logout, getUser } from './auth';
-import { showCreateModDialog } from './mod-dialog';
+import { showModDialog } from './mod-dialog';
+
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 
@@ -80,11 +81,12 @@ function renderDashboard() {
         logout();
     });
 
-    document.getElementById('create-mod-btn')!.addEventListener('click', () => {
-        showCreateModDialog(() => {
+        document.getElementById('create-mod-btn')!.addEventListener('click', () => {
+        showModDialog(() => {
             loadMods(); // Reload list on success
         });
     });
+
 
     loadMods();
 }
@@ -108,16 +110,49 @@ async function loadMods() {
                 <div slot="headline">${mod.name}</div>
                 <div slot="supporting-text">${mod.description || 'No description'}</div>
                 <div slot="trailing-supporting-text">${mod.author}</div>
+                <div slot="end" style="display: flex; gap: 8px;">
+                    <md-icon-button class="edit-mod-btn" data-id="${mod.id}">
+                        <md-icon>edit</md-icon>
+                    </md-icon-button>
+                    <md-icon-button class="delete-mod-btn" data-id="${mod.id}" style="--md-icon-button-icon-color: red;">
+                        <md-icon>delete</md-icon>
+                    </md-icon-button>
+                </div>
             </md-list-item>
             <div style="height: 1px; background-color: #333;"></div>
             `;
         });
         html += '</md-list>';
         modsListEl.innerHTML = html;
+
+        // Add event listeners
+        modsListEl.querySelectorAll('.edit-mod-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const modID = btn.getAttribute('data-id');
+                const mod = mods.find((m: any) => m.id === modID);
+                showModDialog(() => loadMods(), mod);
+            });
+        });
+
+        modsListEl.querySelectorAll('.delete-mod-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const modID = btn.getAttribute('data-id');
+                if (confirm(`Are you sure you want to delete mod ${modID}?`)) {
+                    try {
+                        await deleteMod(modID!);
+                        loadMods();
+                    } catch (e: any) {
+                        alert(e.message);
+                    }
+                }
+            });
+        });
+
     } catch (e: any) {
         modsListEl.innerHTML = `<p style="color: red;">Error loading mods: ${e.message}</p>`;
     }
 }
+
 
 
 if (isLoggedIn()) {
