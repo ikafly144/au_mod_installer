@@ -6,9 +6,9 @@
     - [x] Add these methods to `ModServiceInterface`.
 - [x] Task: Implement Version Write Operations in `ModService` and `Repository`. [8bd5fc9]
     - [x] Implement `CreateModVersion` (metadata only first?), `DeleteModVersion` in repository.
-- [ ] Task: Add API Handlers for Mod Management.
-    - [ ] Add `handleCreateMod`, `handleUpdateMod`, `handleDeleteMod` to `server/handler/handler.go`.
-    - [ ] Register routes `POST /mods`, `PUT /mods/{modID}`, `DELETE /mods/{modID}`.
+- [x] Task: Add API Handlers for Mod Management. [495feda]
+    - [x] Add `handleCreateMod`, `handleUpdateMod`, `handleDeleteMod` to `server/handler/handler.go`.
+    - [x] Register routes `POST /mods`, `PUT /mods/{modID}`, `DELETE /mods/{modID}`.
 - [ ] Task: Add API Handlers for Version Management.
     - [ ] Add `handleCreateModVersion`, `handleDeleteModVersion`.
     - [ ] Register routes `POST /mods/{modID}/versions`, `DELETE /mods/{modID}/versions/{versionID}`.
