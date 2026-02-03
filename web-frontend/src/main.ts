@@ -10,9 +10,11 @@ import '@material/web/list/list.js';
 import '@material/web/list/list-item.js';
 import '@material/web/fab/fab.js';
 import { MdOutlinedTextField } from '@material/web/textfield/outlined-text-field.js';
-import { login, getMods, deleteMod } from './api';
+import { login, getMods, deleteMod, getModVersions, deleteVersion } from './api';
 import { isLoggedIn, setSession, logout, getUser } from './auth';
 import { showModDialog } from './mod-dialog';
+import { showCreateVersionDialog } from './version-dialog';
+
 
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
@@ -111,14 +113,24 @@ async function loadMods() {
                 <div slot="supporting-text">${mod.description || 'No description'}</div>
                 <div slot="trailing-supporting-text">${mod.author}</div>
                 <div slot="end" style="display: flex; gap: 8px;">
-                    <md-icon-button class="edit-mod-btn" data-id="${mod.id}">
+                    <md-icon-button class="view-versions-btn" data-id="${mod.id}" title="View Versions">
+                        <md-icon>list</md-icon>
+                    </md-icon-button>
+                    <md-icon-button class="edit-mod-btn" data-id="${mod.id}" title="Edit Mod">
                         <md-icon>edit</md-icon>
                     </md-icon-button>
-                    <md-icon-button class="delete-mod-btn" data-id="${mod.id}" style="--md-icon-button-icon-color: red;">
+                    <md-icon-button class="delete-mod-btn" data-id="${mod.id}" style="--md-icon-button-icon-color: red;" title="Delete Mod">
                         <md-icon>delete</md-icon>
                     </md-icon-button>
                 </div>
             </md-list-item>
+            <div id="versions-container-${mod.id}" style="display: none; padding-left: 32px; background-color: #1a1a1a;">
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px;">
+                    <h3 style="margin: 0; font-size: 1rem;">Versions</h3>
+                    <md-filled-button class="upload-version-btn" data-id="${mod.id}" style="--md-filled-button-container-height: 32px;">Upload Version</md-filled-button>
+                </div>
+                <div class="versions-list" data-id="${mod.id}">Loading versions...</div>
+            </div>
             <div style="height: 1px; background-color: #333;"></div>
             `;
         });
@@ -126,6 +138,26 @@ async function loadMods() {
         modsListEl.innerHTML = html;
 
         // Add event listeners
+        modsListEl.querySelectorAll('.view-versions-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const modID = btn.getAttribute('data-id')!;
+                const container = document.getElementById(`versions-container-${modID}`)!;
+                if (container.style.display === 'none') {
+                    container.style.display = 'block';
+                    loadVersions(modID);
+                } else {
+                    container.style.display = 'none';
+                }
+            });
+        });
+
+        modsListEl.querySelectorAll('.upload-version-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const modID = btn.getAttribute('data-id')!;
+                showCreateVersionDialog(modID, () => loadVersions(modID));
+            });
+        });
+
         modsListEl.querySelectorAll('.edit-mod-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 const modID = btn.getAttribute('data-id');
@@ -152,6 +184,52 @@ async function loadMods() {
         modsListEl.innerHTML = `<p style="color: red;">Error loading mods: ${e.message}</p>`;
     }
 }
+
+async function loadVersions(modID: string) {
+    const container = document.querySelector(`.versions-list[data-id="${modID}"]`)!;
+    try {
+        const versions = await getModVersions(modID);
+        if (versions.length === 0) {
+            container.innerHTML = '<p style="padding: 8px;">No versions found.</p>';
+            return;
+        }
+
+        let html = '<md-list>';
+        versions.forEach((v: any) => {
+            html += `
+            <md-list-item>
+                <div slot="headline">${v.id}</div>
+                <div slot="supporting-text">Created: ${new Date(v.created_at).toLocaleString()}</div>
+                <div slot="end">
+                    <md-icon-button class="delete-version-btn" data-mod-id="${modID}" data-ver-id="${v.id}" style="--md-icon-button-icon-color: red;">
+                        <md-icon>delete</md-icon>
+                    </md-icon-button>
+                </div>
+            </md-list-item>
+            `;
+        });
+        html += '</md-list>';
+        container.innerHTML = html;
+
+        container.querySelectorAll('.delete-version-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const mid = btn.getAttribute('data-mod-id')!;
+                const vid = btn.getAttribute('data-ver-id')!;
+                if (confirm(`Are you sure you want to delete version ${vid}?`)) {
+                    try {
+                        await deleteVersion(mid, vid);
+                        loadVersions(mid);
+                    } catch (e: any) {
+                        alert(e.message);
+                    }
+                }
+            });
+        });
+    } catch (e: any) {
+        container.innerHTML = `<p style="color: red; padding: 8px;">Error loading versions: ${e.message}</p>`;
+    }
+}
+
 
 
 
