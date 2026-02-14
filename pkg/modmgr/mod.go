@@ -8,14 +8,15 @@ import (
 )
 
 type Mod struct {
-	ID        string    `json:"id"`                  // Mod unique ID
-	Type      ModType   `json:"type,omitempty"`      // Mod type
-	Name      string    `json:"name"`                // Mod name
-	Author    string    `json:"author"`              // Author name
-	Thumbnail string    `json:"thumbnail,omitempty"` // URL to thumbnail image (optional)
-	Website   string    `json:"website,omitempty"`   // Mod website URL (optional)
-	CreatedAt time.Time `json:"created_at"`          // Creation timestamp
-	UpdatedAt time.Time `json:"updated_at"`          // Last update timestamp
+	ID         string    `json:"id"`                    // Mod unique ID
+	Type       ModType   `json:"type,omitempty"`        // Mod type
+	Name       string    `json:"name"`                  // Mod name
+	Author     string    `json:"author"`                // Author name
+	Thumbnail  string    `json:"thumbnail,omitempty"`   // URL to thumbnail image (optional)
+	Website    string    `json:"website,omitempty"`     // Mod website URL (optional)
+	GitHubRepo string    `json:"github_repo,omitempty"` // GitHub repository (owner/repo format)
+	CreatedAt  time.Time `json:"created_at"`            // Creation timestamp
+	UpdatedAt  time.Time `json:"updated_at"`            // Last update timestamp
 
 	LatestVersion string `json:"latest_version,omitempty"` // Latest version ID (optional)
 	Description   string `json:"description,omitempty"`    // Mod description

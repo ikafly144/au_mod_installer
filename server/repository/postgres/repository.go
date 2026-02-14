@@ -47,11 +47,11 @@ func (r *Repository) Close() {
 }
 
 func (r *Repository) GetMod(ctx context.Context, modID string) (*modmgr.Mod, error) {
-	query := `SELECT id, name, description, author_name, type, thumbnail_url, website_url, latest_version_id, created_at, updated_at FROM mods WHERE id = $1`
+	query := `SELECT id, name, description, author_name, type, thumbnail_url, website_url, github_repo, latest_version_id, created_at, updated_at FROM mods WHERE id = $1`
 	var mod modmgr.Mod
 	var modType string
 	err := r.pool.QueryRow(ctx, query, modID).Scan(
-		&mod.ID, &mod.Name, &mod.Description, &mod.Author, &modType, &mod.Thumbnail, &mod.Website, &mod.LatestVersion, &mod.CreatedAt, &mod.UpdatedAt,
+		&mod.ID, &mod.Name, &mod.Description, &mod.Author, &modType, &mod.Thumbnail, &mod.Website, &mod.GitHubRepo, &mod.LatestVersion, &mod.CreatedAt, &mod.UpdatedAt,
 	)
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -69,13 +69,13 @@ func (r *Repository) GetModList(ctx context.Context, limit int, after string, be
 
 	// Simple pagination for now
 	if after != "" {
-		query = `SELECT id, name, description, author_name, type, thumbnail_url, website_url, latest_version_id, created_at, updated_at FROM mods WHERE id > $1 ORDER BY id ASC LIMIT $2`
+		query = `SELECT id, name, description, author_name, type, thumbnail_url, website_url, github_repo, latest_version_id, created_at, updated_at FROM mods WHERE id > $1 ORDER BY id ASC LIMIT $2`
 		args = append(args, after, limit)
 	} else if before != "" {
-		query = `SELECT id, name, description, author_name, type, thumbnail_url, website_url, latest_version_id, created_at, updated_at FROM mods WHERE id < $1 ORDER BY id DESC LIMIT $2`
+		query = `SELECT id, name, description, author_name, type, thumbnail_url, website_url, github_repo, latest_version_id, created_at, updated_at FROM mods WHERE id < $1 ORDER BY id DESC LIMIT $2`
 		args = append(args, before, limit)
 	} else {
-		query = `SELECT id, name, description, author_name, type, thumbnail_url, website_url, latest_version_id, created_at, updated_at FROM mods ORDER BY id ASC LIMIT $1`
+		query = `SELECT id, name, description, author_name, type, thumbnail_url, website_url, github_repo, latest_version_id, created_at, updated_at FROM mods ORDER BY id ASC LIMIT $1`
 		args = append(args, limit)
 	}
 
@@ -90,7 +90,7 @@ func (r *Repository) GetModList(ctx context.Context, limit int, after string, be
 		var mod modmgr.Mod
 		var modType string
 		err := rows.Scan(
-			&mod.ID, &mod.Name, &mod.Description, &mod.Author, &modType, &mod.Thumbnail, &mod.Website, &mod.LatestVersion, &mod.CreatedAt, &mod.UpdatedAt,
+			&mod.ID, &mod.Name, &mod.Description, &mod.Author, &modType, &mod.Thumbnail, &mod.Website, &mod.GitHubRepo, &mod.LatestVersion, &mod.CreatedAt, &mod.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan mod: %w", err)
@@ -110,7 +110,7 @@ func (r *Repository) GetModList(ctx context.Context, limit int, after string, be
 }
 
 func (r *Repository) GetAllMods(ctx context.Context) ([]modmgr.Mod, error) {
-	query := `SELECT id, name, description, author_name, type, thumbnail_url, website_url, latest_version_id, created_at, updated_at FROM mods ORDER BY id ASC`
+	query := `SELECT id, name, description, author_name, type, thumbnail_url, website_url, github_repo, latest_version_id, created_at, updated_at FROM mods ORDER BY id ASC`
 	rows, err := r.pool.Query(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query all mods: %w", err)
@@ -122,7 +122,7 @@ func (r *Repository) GetAllMods(ctx context.Context) ([]modmgr.Mod, error) {
 		var mod modmgr.Mod
 		var modType string
 		err := rows.Scan(
-			&mod.ID, &mod.Name, &mod.Description, &mod.Author, &modType, &mod.Thumbnail, &mod.Website, &mod.LatestVersion, &mod.CreatedAt, &mod.UpdatedAt,
+			&mod.ID, &mod.Name, &mod.Description, &mod.Author, &modType, &mod.Thumbnail, &mod.Website, &mod.GitHubRepo, &mod.LatestVersion, &mod.CreatedAt, &mod.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan mod: %w", err)
@@ -136,10 +136,10 @@ func (r *Repository) GetAllMods(ctx context.Context) ([]modmgr.Mod, error) {
 
 func (r *Repository) CreateMod(ctx context.Context, mod modmgr.Mod) error {
 	query := `
-		INSERT INTO mods (id, name, description, author_name, type, thumbnail_url, website_url, latest_version_id, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+		INSERT INTO mods (id, name, description, author_name, type, thumbnail_url, website_url, github_repo, latest_version_id, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
 	`
-	_, err := r.pool.Exec(ctx, query, mod.ID, mod.Name, mod.Description, mod.Author, string(mod.Type), mod.Thumbnail, mod.Website, mod.LatestVersion)
+	_, err := r.pool.Exec(ctx, query, mod.ID, mod.Name, mod.Description, mod.Author, string(mod.Type), mod.Thumbnail, mod.Website, mod.GitHubRepo, mod.LatestVersion)
 	if err != nil {
 		return fmt.Errorf("failed to create mod: %w", err)
 	}
@@ -155,11 +155,12 @@ func (r *Repository) UpdateMod(ctx context.Context, mod modmgr.Mod) error {
 			type = $4,
 			thumbnail_url = $5,
 			website_url = $6,
-			latest_version_id = $7,
+			github_repo = $7,
+			latest_version_id = $8,
 			updated_at = NOW()
-		WHERE id = $8
+		WHERE id = $9
 	`
-	_, err := r.pool.Exec(ctx, query, mod.Name, mod.Description, mod.Author, string(mod.Type), mod.Thumbnail, mod.Website, mod.LatestVersion, mod.ID)
+	_, err := r.pool.Exec(ctx, query, mod.Name, mod.Description, mod.Author, string(mod.Type), mod.Thumbnail, mod.Website, mod.GitHubRepo, mod.LatestVersion, mod.ID)
 	if err != nil {
 		return fmt.Errorf("failed to update mod: %w", err)
 	}
@@ -168,8 +169,8 @@ func (r *Repository) UpdateMod(ctx context.Context, mod modmgr.Mod) error {
 
 func (r *Repository) SetMod(ctx context.Context, mod modmgr.Mod) error {
 	query := `
-		INSERT INTO mods (id, name, description, author_name, type, thumbnail_url, website_url, latest_version_id, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+		INSERT INTO mods (id, name, description, author_name, type, thumbnail_url, website_url, github_repo, latest_version_id, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
 		ON CONFLICT (id) DO UPDATE SET
 			name = EXCLUDED.name,
 			description = EXCLUDED.description,
@@ -177,10 +178,11 @@ func (r *Repository) SetMod(ctx context.Context, mod modmgr.Mod) error {
 			type = EXCLUDED.type,
 			thumbnail_url = EXCLUDED.thumbnail_url,
 			website_url = EXCLUDED.website_url,
+			github_repo = EXCLUDED.github_repo,
 			latest_version_id = EXCLUDED.latest_version_id,
 			updated_at = NOW()
 	`
-	_, err := r.pool.Exec(ctx, query, mod.ID, mod.Name, mod.Description, mod.Author, mod.Type, mod.Thumbnail, mod.Website, mod.LatestVersion)
+	_, err := r.pool.Exec(ctx, query, mod.ID, mod.Name, mod.Description, mod.Author, mod.Type, mod.Thumbnail, mod.Website, mod.GitHubRepo, mod.LatestVersion)
 	if err != nil {
 		return fmt.Errorf("failed to set mod: %w", err)
 	}
@@ -381,9 +383,9 @@ func (r *Repository) DeleteVersion(ctx context.Context, modID, versionID string)
 // UserRepository implementation
 
 func (r *Repository) GetUser(ctx context.Context, id int) (*model.User, error) {
-	query := `SELECT id, username, password_hash, display_name, is_admin, created_at, updated_at FROM users WHERE id = $1`
+	query := `SELECT id, discord_id, username, display_name, avatar_url, is_admin, created_at, updated_at FROM users WHERE id = $1`
 	var u model.User
-	err := r.pool.QueryRow(ctx, query, id).Scan(&u.ID, &u.Username, &u.PasswordHash, &u.DisplayName, &u.IsAdmin, &u.CreatedAt, &u.UpdatedAt)
+	err := r.pool.QueryRow(ctx, query, id).Scan(&u.ID, &u.DiscordID, &u.Username, &u.DisplayName, &u.AvatarURL, &u.IsAdmin, &u.CreatedAt, &u.UpdatedAt)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, nil
@@ -393,22 +395,22 @@ func (r *Repository) GetUser(ctx context.Context, id int) (*model.User, error) {
 	return &u, nil
 }
 
-func (r *Repository) GetUserByUsername(ctx context.Context, username string) (*model.User, error) {
-	query := `SELECT id, username, password_hash, display_name, is_admin, created_at, updated_at FROM users WHERE username = $1`
+func (r *Repository) GetUserByDiscordID(ctx context.Context, discordID string) (*model.User, error) {
+	query := `SELECT id, discord_id, username, display_name, avatar_url, is_admin, created_at, updated_at FROM users WHERE discord_id = $1`
 	var u model.User
-	err := r.pool.QueryRow(ctx, query, username).Scan(&u.ID, &u.Username, &u.PasswordHash, &u.DisplayName, &u.IsAdmin, &u.CreatedAt, &u.UpdatedAt)
+	err := r.pool.QueryRow(ctx, query, discordID).Scan(&u.ID, &u.DiscordID, &u.Username, &u.DisplayName, &u.AvatarURL, &u.IsAdmin, &u.CreatedAt, &u.UpdatedAt)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("failed to get user by username: %w", err)
+		return nil, fmt.Errorf("failed to get user by discord ID: %w", err)
 	}
 	return &u, nil
 }
 
 func (r *Repository) CreateUser(ctx context.Context, u model.User) error {
-	query := `INSERT INTO users (username, password_hash, display_name, is_admin, created_at, updated_at) VALUES ($1, $2, $3, $4, NOW(), NOW())`
-	_, err := r.pool.Exec(ctx, query, u.Username, u.PasswordHash, u.DisplayName, u.IsAdmin)
+	query := `INSERT INTO users (discord_id, username, display_name, avatar_url, is_admin, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, NOW(), NOW())`
+	_, err := r.pool.Exec(ctx, query, u.DiscordID, u.Username, u.DisplayName, u.AvatarURL, u.IsAdmin)
 	if err != nil {
 		return fmt.Errorf("failed to create user: %w", err)
 	}
@@ -416,8 +418,8 @@ func (r *Repository) CreateUser(ctx context.Context, u model.User) error {
 }
 
 func (r *Repository) UpdateUser(ctx context.Context, u model.User) error {
-	query := `UPDATE users SET username = $1, password_hash = $2, display_name = $3, is_admin = $4, updated_at = NOW() WHERE id = $5`
-	_, err := r.pool.Exec(ctx, query, u.Username, u.PasswordHash, u.DisplayName, u.IsAdmin, u.ID)
+	query := `UPDATE users SET discord_id = $1, username = $2, display_name = $3, avatar_url = $4, is_admin = $5, updated_at = NOW() WHERE id = $6`
+	_, err := r.pool.Exec(ctx, query, u.DiscordID, u.Username, u.DisplayName, u.AvatarURL, u.IsAdmin, u.ID)
 	if err != nil {
 		return fmt.Errorf("failed to update user: %w", err)
 	}
@@ -431,4 +433,61 @@ func (r *Repository) DeleteUser(ctx context.Context, id int) error {
 		return fmt.Errorf("failed to delete user: %w", err)
 	}
 	return nil
+}
+func (r *Repository) UpdateModVersion(ctx context.Context, modID string, version modmgr.ModVersion) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	// We don't update created_at or id, but we might want to update other fields if they existed
+	// For now, we mainly update the related tables (files, dependencies, game versions)
+	// Ideally we should have an updated_at column, but the schema might not support it yet for versions.
+	// Let's assume re-inserting the related data is the main goal.
+
+	// First, delete existing related data
+	if _, err := tx.Exec(ctx, `DELETE FROM mod_files WHERE mod_id = $1 AND version_id = $2`, modID, version.ID); err != nil {
+		return fmt.Errorf("failed to delete mod files: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM mod_dependencies WHERE mod_id = $1 AND version_id = $2`, modID, version.ID); err != nil {
+		return fmt.Errorf("failed to delete mod dependencies: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM mod_version_game_versions WHERE mod_id = $1 AND version_id = $2`, modID, version.ID); err != nil {
+		return fmt.Errorf("failed to delete mod game versions: %w", err)
+	}
+
+	// Re-insert related data
+	for _, file := range version.Files {
+		compat := make([]string, len(file.Compatible))
+		for i, c := range file.Compatible {
+			compat[i] = string(c)
+		}
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO mod_files (mod_id, version_id, url, path, file_type, compatible_binary_types)
+			VALUES ($1, $2, $3, $4, $5, $6)
+		`, modID, version.ID, file.URL, file.Path, file.FileType, compat); err != nil {
+			return fmt.Errorf("failed to insert mod file: %w", err)
+		}
+	}
+
+	for _, dep := range version.Dependencies {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO mod_dependencies (mod_id, version_id, dependency_id, dependency_version, type)
+			VALUES ($1, $2, $3, $4, $5)
+		`, modID, version.ID, dep.ID, dep.Version, dep.Type); err != nil {
+			return fmt.Errorf("failed to insert mod dependency: %w", err)
+		}
+	}
+
+	for _, gv := range version.GameVersions {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO mod_version_game_versions (mod_id, version_id, game_version)
+			VALUES ($1, $2, $3)
+		`, modID, version.ID, gv); err != nil {
+			return fmt.Errorf("failed to insert mod game version: %w", err)
+		}
+	}
+
+	return tx.Commit(ctx)
 }

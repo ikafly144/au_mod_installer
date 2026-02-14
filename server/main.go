@@ -15,9 +15,8 @@ import (
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 	"github.com/ikafly144/au_mod_installer/server/handler"
 	"github.com/ikafly144/au_mod_installer/server/middleware"
-	"github.com/ikafly144/au_mod_installer/server/repository/postgres"
+	repo "github.com/ikafly144/au_mod_installer/server/repository/gorm"
 	"github.com/ikafly144/au_mod_installer/server/service"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() {
@@ -29,6 +28,10 @@ func main() {
 		basePath            string
 		disabledVersionsStr string
 		jwtSecret           string
+		discordClientID     string
+		discordClientSecret string
+		discordRedirectURI  string
+		discordAdminIDsStr  string
 	)
 
 	defaultAddr := ":8080"
@@ -45,6 +48,10 @@ func main() {
 	flag.StringVar(&basePath, "base-path", "", "API version base path (e.g. /v1)")
 	flag.StringVar(&disabledVersionsStr, "disabled-versions", "", "Comma-separated list of disabled versions")
 	flag.StringVar(&jwtSecret, "jwt-secret", "", "JWT secret key")
+	flag.StringVar(&discordClientID, "discord-client-id", "", "Discord OAuth client ID")
+	flag.StringVar(&discordClientSecret, "discord-client-secret", "", "Discord OAuth client secret")
+	flag.StringVar(&discordRedirectURI, "discord-redirect-uri", "", "Discord OAuth redirect URI")
+	flag.StringVar(&discordAdminIDsStr, "discord-admin-ids", "", "Comma-separated list of Discord user IDs to grant admin")
 	flag.Parse()
 
 	if databaseURL == "" {
@@ -52,6 +59,18 @@ func main() {
 	}
 	if jwtSecret == "" {
 		jwtSecret = os.Getenv("JWT_SECRET")
+	}
+	if discordClientID == "" {
+		discordClientID = os.Getenv("DISCORD_CLIENT_ID")
+	}
+	if discordClientSecret == "" {
+		discordClientSecret = os.Getenv("DISCORD_CLIENT_SECRET")
+	}
+	if discordRedirectURI == "" {
+		discordRedirectURI = os.Getenv("DISCORD_REDIRECT_URI")
+	}
+	if discordAdminIDsStr == "" {
+		discordAdminIDsStr = os.Getenv("DISCORD_ADMIN_IDS")
 	}
 
 	if pathPrefix == "" {
@@ -88,29 +107,39 @@ func main() {
 	var authService *service.AuthService
 
 	if databaseURL != "" {
-		// Use PostgreSQL-based storage
-		slog.Info("connecting to PostgreSQL", "url", databaseURL)
+		// Use PostgreSQL-based storage (GORM)
+		slog.Info("connecting to PostgreSQL via GORM", "url", databaseURL)
 
-		pool, err := pgxpool.New(ctx, databaseURL)
+		r, err := repo.NewRepository(databaseURL)
 		if err != nil {
-			slog.Error("failed to connect to PostgreSQL", "error", err)
+			slog.Error("failed to connect to database", "error", err)
 			os.Exit(1)
 		}
-		defer pool.Close()
+		defer r.Close()
 
-		repo := postgres.NewRepository(pool)
+		slog.Info("database connected and migrations applied")
 
-		if err := repo.Migrate(ctx); err != nil {
-			slog.Error("failed to run database migrations", "error", err)
-			os.Exit(1)
-		}
-		slog.Info("database migrations applied successfully")
-
-		modService = service.NewModServiceWithRepo(repo)
-		if jwtSecret != "" {
-			authService = service.NewAuthService(repo, jwtSecret)
+		modService = service.NewModServiceWithRepo(r)
+		if jwtSecret != "" && discordClientID != "" && discordClientSecret != "" && discordRedirectURI != "" {
+			var adminIDs []string
+			if discordAdminIDsStr != "" {
+				for _, id := range strings.Split(discordAdminIDsStr, ",") {
+					if trimmed := strings.TrimSpace(id); trimmed != "" {
+						adminIDs = append(adminIDs, trimmed)
+					}
+				}
+				slog.Info("discord admin IDs configured", "count", len(adminIDs))
+			}
+			authService = service.NewAuthService(service.AuthServiceConfig{
+				UserRepo:            r,
+				JWTSecret:           jwtSecret,
+				DiscordClientID:     discordClientID,
+				DiscordClientSecret: discordClientSecret,
+				DiscordRedirectURI:  discordRedirectURI,
+				AdminDiscordIDs:     adminIDs,
+			})
 		} else {
-			slog.Warn("JWT secret not provided, authentication will be disabled")
+			slog.Warn("Discord OAuth or JWT secret not configured, authentication will be disabled")
 		}
 		slog.Info("using PostgreSQL storage")
 	} else {
@@ -133,10 +162,6 @@ func main() {
 
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux, basePath)
-
-	// Serve uploads directory
-	fs := http.FileServer(http.Dir("uploads"))
-	mux.Handle("/uploads/", http.StripPrefix("/uploads/", fs))
 
 	if authService != nil {
 

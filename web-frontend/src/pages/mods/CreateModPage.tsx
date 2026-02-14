@@ -20,6 +20,7 @@ export function CreateModPage() {
     author: '',
     description: '',
     website: '',
+    github_repo: '',
     type: 'mod'
   })
 
@@ -111,6 +112,18 @@ export function CreateModPage() {
                 value={formData.website}
                 onChange={(e) => setFormData({ ...formData, website: e.target.value })}
               />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="github_repo">GitHub Repository</Label>
+              <Input
+                id="github_repo"
+                placeholder="owner/repo"
+                value={formData.github_repo}
+                onChange={(e) => setFormData({ ...formData, github_repo: e.target.value })}
+              />
+              <p className="text-sm text-muted-foreground">
+                Link a GitHub repository to import versions from releases (e.g. <code>ikafly144/my-mod</code>)
+              </p>
             </div>
             <div className="pt-4 flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => navigate('/mods')}>

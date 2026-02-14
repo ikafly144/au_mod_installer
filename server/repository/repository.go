@@ -41,6 +41,9 @@ type ModRepository interface {
 	// SetModVersion stores a mod version (deprecated: use CreateModVersion)
 	SetModVersion(ctx context.Context, modID string, version modmgr.ModVersion) error
 
+	// UpdateModVersion updates an existing mod version
+	UpdateModVersion(ctx context.Context, modID string, version modmgr.ModVersion) error
+
 	// Close closes the repository connection
 	Close()
 
@@ -65,8 +68,8 @@ type UserRepository interface {
 	// GetUser retrieves a user by ID
 	GetUser(ctx context.Context, id int) (*model.User, error)
 
-	// GetUserByUsername retrieves a user by username
-	GetUserByUsername(ctx context.Context, username string) (*model.User, error)
+	// GetUserByDiscordID retrieves a user by Discord ID
+	GetUserByDiscordID(ctx context.Context, discordID string) (*model.User, error)
 
 	// CreateUser stores a new user
 	CreateUser(ctx context.Context, user model.User) error

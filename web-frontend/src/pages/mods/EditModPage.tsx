@@ -26,6 +26,7 @@ export function EditModPage() {
     author: '',
     description: '',
     website: '',
+    github_repo: '',
     type: 'mod'
   })
 
@@ -44,6 +45,7 @@ export function EditModPage() {
         author: mod.author || '',
         description: mod.description || '',
         website: mod.website || '',
+        github_repo: mod.github_repo || '',
         type: mod.type || 'mod'
       })
     } catch (e: any) {
@@ -157,6 +159,18 @@ export function EditModPage() {
                     value={formData.website}
                     onChange={(e) => setFormData({ ...formData, website: e.target.value })}
                   />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="github_repo">GitHub Repository</Label>
+                  <Input
+                    id="github_repo"
+                    placeholder="owner/repo"
+                    value={formData.github_repo}
+                    onChange={(e) => setFormData({ ...formData, github_repo: e.target.value })}
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Link a GitHub repository to import versions from releases (e.g. <code>ikafly144/my-mod</code>)
+                  </p>
                 </div>
                 <div className="pt-4">
                   <Button type="submit" disabled={saving} className="w-full">

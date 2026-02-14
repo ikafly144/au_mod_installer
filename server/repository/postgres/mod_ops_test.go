@@ -28,7 +28,7 @@ func TestRepository_CreateMod(t *testing.T) {
 	}
 
 	mock.ExpectExec("INSERT INTO mods").
-		WithArgs(mod.ID, mod.Name, mod.Description, mod.Author, string(mod.Type), mod.Thumbnail, mod.Website, mod.LatestVersion).
+		WithArgs(mod.ID, mod.Name, mod.Description, mod.Author, string(mod.Type), mod.Thumbnail, mod.Website, mod.GitHubRepo, mod.LatestVersion).
 		WillReturnResult(pgxmock.NewResult("INSERT", 1))
 
 	err = repo.CreateMod(ctx, mod)
@@ -56,7 +56,7 @@ func TestRepository_UpdateMod(t *testing.T) {
 	}
 
 	mock.ExpectExec("UPDATE mods").
-		WithArgs(mod.Name, mod.Description, mod.Author, string(mod.Type), mod.Thumbnail, mod.Website, mod.LatestVersion, mod.ID).
+		WithArgs(mod.Name, mod.Description, mod.Author, string(mod.Type), mod.Thumbnail, mod.Website, mod.GitHubRepo, mod.LatestVersion, mod.ID).
 		WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 
 	err = repo.UpdateMod(ctx, mod)
@@ -78,7 +78,7 @@ func TestRepository_CreateMod_Error(t *testing.T) {
 	mod := modmgr.Mod{ID: "error-mod"}
 
 	mock.ExpectExec("INSERT INTO mods").
-		WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
+		WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
 		WillReturnError(assert.AnError)
 
 	err = repo.CreateMod(ctx, mod)
@@ -100,7 +100,7 @@ func TestRepository_UpdateMod_Error(t *testing.T) {
 	mod := modmgr.Mod{ID: "error-mod"}
 
 	mock.ExpectExec("UPDATE mods").
-		WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
+		WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg()).
 		WillReturnError(assert.AnError)
 
 	err = repo.UpdateMod(ctx, mod)

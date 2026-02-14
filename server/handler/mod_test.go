@@ -55,6 +55,11 @@ func (m *MockModService) UpdateMod(ctx context.Context, mod modmgr.Mod) error {
 	return args.Error(0)
 }
 
+func (m *MockModService) UpdateModVersion(ctx context.Context, modID string, version modmgr.ModVersion) error {
+	args := m.Called(ctx, modID, version)
+	return args.Error(0)
+}
+
 func (m *MockModService) DeleteMod(ctx context.Context, modID string) error {
 	args := m.Called(ctx, modID)
 	return args.Error(0)

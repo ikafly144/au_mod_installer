@@ -4,14 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"log/slog"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strconv"
-
 	"strings"
+	"time"
 
 	"github.com/ikafly144/au_mod_installer/common/rest"
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
@@ -35,11 +32,13 @@ type ModServiceInterface interface {
 	UpdateMod(ctx context.Context, mod modmgr.Mod) error
 	DeleteMod(ctx context.Context, modID string) error
 	CreateModVersion(ctx context.Context, modID string, version modmgr.ModVersion) error
+	UpdateModVersion(ctx context.Context, modID string, version modmgr.ModVersion) error
 	DeleteModVersion(ctx context.Context, modID string, versionID string) error
 }
 
 type Handler struct {
 	modService       ModServiceInterface
+	githubService    *service.GitHubService
 	version          string
 	disabledVersions []string
 	authMiddleware   *middleware.AuthMiddleware
@@ -48,6 +47,7 @@ type Handler struct {
 func NewHandler(modService ModServiceInterface, version string, disabledVersions []string) *Handler {
 	return &Handler{
 		modService:       modService,
+		githubService:    service.NewGitHubService(),
 		version:          version,
 		disabledVersions: disabledVersions,
 	}
@@ -105,8 +105,10 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux, basePath string) {
 	mux.Handle(p("PUT /mods/{modID}"), secure(h.handleUpdateMod))
 	mux.Handle(p("DELETE /mods/{modID}"), secure(h.handleDeleteMod))
 	mux.Handle(p("POST /mods/{modID}/versions"), secure(h.handleCreateModVersion))
+	mux.Handle(p("PUT /mods/{modID}/versions/{versionID}"), secure(h.handleUpdateModVersion))
 	mux.Handle(p("DELETE /mods/{modID}/versions/{versionID}"), secure(h.handleDeleteModVersion))
-	mux.Handle(p("POST /upload"), secure(h.handleUpload))
+	mux.Handle(p("GET /mods/{modID}/github/releases"), secure(h.handleGetGitHubReleases))
+	mux.Handle(p("POST /mods/{modID}/versions/from-github"), secure(h.handleCreateVersionFromGitHub))
 }
 
 func (h *Handler) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -334,6 +336,40 @@ func (h *Handler) handleCreateModVersion(w http.ResponseWriter, r *http.Request)
 	WriteJSON(w, http.StatusCreated, version)
 }
 
+func (h *Handler) handleUpdateModVersion(w http.ResponseWriter, r *http.Request) {
+	modID := r.PathValue("modID")
+	versionID := r.PathValue("versionID")
+
+	if modID == "" || versionID == "" {
+		WriteError(w, http.StatusBadRequest, "modID and versionID are required")
+		return
+	}
+
+	var version modmgr.ModVersion
+	if err := json.NewDecoder(r.Body).Decode(&version); err != nil {
+		WriteError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if version.ID != versionID {
+		WriteError(w, http.StatusBadRequest, "version id mismatch")
+		return
+	}
+	// Ensure ModID is set correctly even if JSON has it wrong/missing
+	version.ModID = modID
+
+	if err := h.modService.UpdateModVersion(r.Context(), modID, version); err != nil {
+		if errors.Is(err, service.ErrNotFound) {
+			WriteError(w, http.StatusNotFound, "version not found")
+			return
+		}
+		WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	WriteJSON(w, http.StatusOK, version)
+}
+
 func (h *Handler) handleDeleteModVersion(w http.ResponseWriter, r *http.Request) {
 	modID := r.PathValue("modID")
 	versionID := r.PathValue("versionID")
@@ -351,47 +387,123 @@ func (h *Handler) handleDeleteModVersion(w http.ResponseWriter, r *http.Request)
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *Handler) handleUpload(w http.ResponseWriter, r *http.Request) {
-	// Limit 50MB
-	if err := r.ParseMultipartForm(50 << 20); err != nil {
-		WriteError(w, http.StatusBadRequest, "failed to parse multipart form")
+func (h *Handler) handleGetGitHubReleases(w http.ResponseWriter, r *http.Request) {
+	modID := r.PathValue("modID")
+	if modID == "" {
+		WriteError(w, http.StatusBadRequest, "modID is required")
 		return
 	}
 
-	file, header, err := r.FormFile("file")
-
+	mod, err := h.modService.GetMod(r.Context(), modID)
 	if err != nil {
-		WriteError(w, http.StatusBadRequest, "file is required")
+		if errors.Is(err, service.ErrNotFound) {
+			WriteError(w, http.StatusNotFound, "mod not found")
+			return
+		}
+		WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	defer file.Close()
-
-	uploadDir := "uploads"
-	if err := os.MkdirAll(uploadDir, 0755); err != nil {
-		WriteError(w, http.StatusInternalServerError, "failed to create upload dir")
+	if mod == nil {
+		WriteError(w, http.StatusNotFound, "mod not found")
 		return
 	}
 
-	// Simple filename sanitization
-	filename := filepath.Base(header.Filename)
-	filePath := filepath.Join(uploadDir, filename)
+	if mod.GitHubRepo == "" {
+		WriteError(w, http.StatusBadRequest, "mod has no linked GitHub repository")
+		return
+	}
 
-	dst, err := os.Create(filePath)
+	parts := strings.SplitN(mod.GitHubRepo, "/", 2)
+	if len(parts) != 2 {
+		WriteError(w, http.StatusBadRequest, "invalid github_repo format, expected owner/repo")
+		return
+	}
+
+	releases, err := h.githubService.ListReleases(parts[0], parts[1])
 	if err != nil {
-		WriteError(w, http.StatusInternalServerError, "failed to save file")
-		return
-	}
-	defer dst.Close()
-
-	if _, err := io.Copy(dst, file); err != nil {
-		WriteError(w, http.StatusInternalServerError, "failed to copy file content")
+		WriteError(w, http.StatusBadGateway, err.Error())
 		return
 	}
 
-	// Generate URL (relative or absolute)
-	// Assuming /uploads is served at /uploads
-	url := "/uploads/" + filename
-	WriteJSON(w, http.StatusCreated, map[string]string{"url": url})
+	WriteJSON(w, http.StatusOK, releases)
+}
+
+func (h *Handler) handleCreateVersionFromGitHub(w http.ResponseWriter, r *http.Request) {
+	modID := r.PathValue("modID")
+	if modID == "" {
+		WriteError(w, http.StatusBadRequest, "modID is required")
+		return
+	}
+
+	var req struct {
+		Tag string `json:"tag"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		WriteError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Tag == "" {
+		WriteError(w, http.StatusBadRequest, "tag is required")
+		return
+	}
+
+	mod, err := h.modService.GetMod(r.Context(), modID)
+	if err != nil {
+		if errors.Is(err, service.ErrNotFound) {
+			WriteError(w, http.StatusNotFound, "mod not found")
+			return
+		}
+		WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if mod == nil {
+		WriteError(w, http.StatusNotFound, "mod not found")
+		return
+	}
+
+	if mod.GitHubRepo == "" {
+		WriteError(w, http.StatusBadRequest, "mod has no linked GitHub repository")
+		return
+	}
+
+	parts := strings.SplitN(mod.GitHubRepo, "/", 2)
+	if len(parts) != 2 {
+		WriteError(w, http.StatusBadRequest, "invalid github_repo format, expected owner/repo")
+		return
+	}
+
+	release, err := h.githubService.GetRelease(parts[0], parts[1], req.Tag)
+	if err != nil {
+		WriteError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+
+	// Map GitHub assets to ModFiles
+	var files []modmgr.ModFile
+	for _, asset := range release.Assets {
+		fileType := modmgr.FileTypeNormal
+		if strings.HasSuffix(asset.Name, ".zip") {
+			fileType = modmgr.FileTypeZip
+		}
+		files = append(files, modmgr.ModFile{
+			URL:      asset.BrowserDownloadURL,
+			FileType: fileType,
+		})
+	}
+
+	version := modmgr.ModVersion{
+		ID:        release.TagName,
+		ModID:     modID,
+		CreatedAt: time.Now(),
+		Files:     files,
+	}
+
+	if err := h.modService.CreateModVersion(r.Context(), modID, version); err != nil {
+		WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	WriteJSON(w, http.StatusCreated, version)
 }
 
 type errorResponse struct {

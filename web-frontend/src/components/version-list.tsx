@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { getModVersions, deleteVersion } from '@/api'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, Trash2, Edit } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 
 export function VersionList({ modID }: { modID: string }) {
@@ -79,6 +79,9 @@ export function VersionList({ modID }: { modID: string }) {
                   {new Date(v.created_at).toLocaleString()}
                 </TableCell>
                 <TableCell className="py-2 text-right">
+                  <Button variant="ghost" size="icon" className="h-8 w-8 mr-1" onClick={() => navigate(`/mods/${modID}/versions/${v.id}/edit`)}>
+                    <Edit className="h-3.5 w-3.5" />
+                  </Button>
                   <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500" onClick={() => handleDeleteVersion(v.id)}>
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>

@@ -16,7 +16,7 @@ func TestNewRepository(t *testing.T) {
 	assert.NotNil(t, repo)
 }
 
-func TestRepository_GetUserByUsername(t *testing.T) {
+func TestRepository_GetUserByDiscordID(t *testing.T) {
 	mock, err := pgxmock.NewPool()
 	require.NoError(t, err)
 	defer mock.Close()
@@ -24,20 +24,21 @@ func TestRepository_GetUserByUsername(t *testing.T) {
 	repo := NewRepository(mock)
 	ctx := context.Background()
 
-	username := "testuser"
+	discordID := "123456789"
 	now := time.Now()
 
-	rows := pgxmock.NewRows([]string{"id", "username", "password_hash", "display_name", "is_admin", "created_at", "updated_at"}).
-		AddRow(1, username, "hash", "Test User", false, now, now)
+	rows := pgxmock.NewRows([]string{"id", "discord_id", "username", "display_name", "avatar_url", "is_admin", "created_at", "updated_at"}).
+		AddRow(1, discordID, "testuser", "Test User", "https://cdn.discordapp.com/avatars/123456789/abc.png", false, now, now)
 
-	mock.ExpectQuery("SELECT id, username, password_hash, display_name, is_admin, created_at, updated_at FROM users WHERE username = \\$1").
-		WithArgs(username).
+	mock.ExpectQuery("SELECT id, discord_id, username, display_name, avatar_url, is_admin, created_at, updated_at FROM users WHERE discord_id = \\$1").
+		WithArgs(discordID).
 		WillReturnRows(rows)
 
-	user, err := repo.GetUserByUsername(ctx, username)
+	user, err := repo.GetUserByDiscordID(ctx, discordID)
 	require.NoError(t, err)
 	assert.NotNil(t, user)
-	assert.Equal(t, username, user.Username)
+	assert.Equal(t, discordID, user.DiscordID)
+	assert.Equal(t, "testuser", user.Username)
 	assert.Equal(t, "Test User", user.DisplayName)
 
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -55,11 +56,11 @@ func TestRepository_GetModList(t *testing.T) {
 
 	now := time.Now()
 
-	rows := pgxmock.NewRows([]string{"id", "name", "description", "author_name", "type", "thumbnail_url", "website_url", "latest_version_id", "created_at", "updated_at"}).
-		AddRow("mod-1", "Mod 1", "Desc 1", "Author 1", "mod", "thumb 1", "site 1", "v1", now, now).
-		AddRow("mod-2", "Mod 2", "Desc 2", "Author 2", "mod", "thumb 2", "site 2", "v2", now, now)
+	rows := pgxmock.NewRows([]string{"id", "name", "description", "author_name", "type", "thumbnail_url", "website_url", "github_repo", "latest_version_id", "created_at", "updated_at"}).
+		AddRow("mod-1", "Mod 1", "Desc 1", "Author 1", "mod", "thumb 1", "site 1", "", "v1", now, now).
+		AddRow("mod-2", "Mod 2", "Desc 2", "Author 2", "mod", "thumb 2", "site 2", "", "v2", now, now)
 
-	mock.ExpectQuery("SELECT id, name, description, author_name, type, thumbnail_url, website_url, latest_version_id, created_at, updated_at FROM mods ORDER BY id ASC LIMIT \\$1").
+	mock.ExpectQuery("SELECT id, name, description, author_name, type, thumbnail_url, website_url, github_repo, latest_version_id, created_at, updated_at FROM mods ORDER BY id ASC LIMIT \\$1").
 		WithArgs(10).
 		WillReturnRows(rows)
 
@@ -119,10 +120,10 @@ func TestRepository_GetMod(t *testing.T) {
 	modID := "test-mod"
 	now := time.Now()
 
-	rows := pgxmock.NewRows([]string{"id", "name", "description", "author_name", "type", "thumbnail_url", "website_url", "latest_version_id", "created_at", "updated_at"}).
-		AddRow(modID, "Test Mod", "Description", "Author", "mod", "thumb", "site", "v1", now, now)
+	rows := pgxmock.NewRows([]string{"id", "name", "description", "author_name", "type", "thumbnail_url", "website_url", "github_repo", "latest_version_id", "created_at", "updated_at"}).
+		AddRow(modID, "Test Mod", "Description", "Author", "mod", "thumb", "site", "", "v1", now, now)
 
-	mock.ExpectQuery("SELECT id, name, description, author_name, type, thumbnail_url, website_url, latest_version_id, created_at, updated_at FROM mods WHERE id = \\$1").
+	mock.ExpectQuery("SELECT id, name, description, author_name, type, thumbnail_url, website_url, github_repo, latest_version_id, created_at, updated_at FROM mods WHERE id = \\$1").
 		WithArgs(modID).
 		WillReturnRows(rows)
 

@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/ikafly144/au_mod_installer/server/service"
@@ -25,40 +24,25 @@ func (h *AuthHandler) RegisterRoutes(mux *http.ServeMux, basePath string) {
 		return basePath + path
 	}
 
-	mux.HandleFunc("POST "+p("/auth/register"), h.handleRegister)
-	mux.HandleFunc("POST "+p("/auth/login"), h.handleLogin)
+	mux.HandleFunc("GET "+p("/auth/discord"), h.handleDiscordRedirect)
+	mux.HandleFunc("GET "+p("/auth/discord/callback"), h.handleDiscordCallback)
 }
 
-func (h *AuthHandler) handleRegister(w http.ResponseWriter, r *http.Request) {
-	var req service.RegisterRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		WriteError(w, http.StatusBadRequest, "invalid request body")
-		return
-	}
-
-	user, err := h.authService.Register(r.Context(), req)
-	if err != nil {
-		if err == service.ErrUsernameTaken {
-			WriteError(w, http.StatusConflict, err.Error())
-			return
-		}
-		WriteError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	WriteJSON(w, http.StatusCreated, user)
+func (h *AuthHandler) handleDiscordRedirect(w http.ResponseWriter, r *http.Request) {
+	url := h.authService.GetDiscordAuthURL()
+	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
 }
 
-func (h *AuthHandler) handleLogin(w http.ResponseWriter, r *http.Request) {
-	var req service.LoginRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		WriteError(w, http.StatusBadRequest, "invalid request body")
+func (h *AuthHandler) handleDiscordCallback(w http.ResponseWriter, r *http.Request) {
+	code := r.URL.Query().Get("code")
+	if code == "" {
+		WriteError(w, http.StatusBadRequest, "missing code parameter")
 		return
 	}
 
-	resp, err := h.authService.Login(r.Context(), req)
+	resp, err := h.authService.DiscordOAuthLogin(r.Context(), code)
 	if err != nil {
-		if err == service.ErrInvalidCredentials {
+		if err == service.ErrOAuthFailed {
 			WriteError(w, http.StatusUnauthorized, err.Error())
 			return
 		}

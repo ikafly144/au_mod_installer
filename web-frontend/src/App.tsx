@@ -7,7 +7,9 @@ import { Layout } from './components/layout'
 import { CreateModPage } from './pages/mods/CreateModPage'
 import { EditModPage } from './pages/mods/EditModPage'
 import { UploadVersionPage } from './pages/mods/UploadVersionPage'
+import { EditVersionPage } from './pages/mods/EditVersionPage'
 import DashboardOverview from './pages/DashboardOverview'
+import DiscordCallbackPage from './pages/DiscordCallbackPage'
 
 import SettingsPage from './pages/SettingsPage'
 import SystemPage from './pages/SystemPage'
@@ -32,6 +34,10 @@ function App() {
       ) : (
         <LoginPage onLogin={() => setAuthenticated(true)} />
       )
+    },
+    {
+      path: "/auth/callback",
+      element: <DiscordCallbackPage onLogin={() => setAuthenticated(true)} />
     },
         {
       path: "/",
@@ -99,6 +105,16 @@ function App() {
       element: authenticated ? (
         <Layout>
           <UploadVersionPage />
+        </Layout>
+      ) : (
+        <Navigate to="/login" replace />
+      )
+    },
+    {
+      path: "/mods/:id/versions/:versionID/edit",
+      element: authenticated ? (
+        <Layout>
+          <EditVersionPage />
         </Layout>
       ) : (
         <Navigate to="/login" replace />

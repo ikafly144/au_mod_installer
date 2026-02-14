@@ -59,7 +59,13 @@ func (m *MockModRepository) CreateModVersion(ctx context.Context, modID string, 
 	return args.Error(0)
 }
 
+func (m *MockModRepository) UpdateModVersion(ctx context.Context, modID string, version modmgr.ModVersion) error {
+	args := m.Called(ctx, modID, version)
+	return args.Error(0)
+}
+
 func (m *MockModRepository) SetModVersion(ctx context.Context, modID string, version modmgr.ModVersion) error {
+
 	args := m.Called(ctx, modID, version)
 	return args.Error(0)
 }
@@ -132,6 +138,14 @@ func TestModService_CRUD(t *testing.T) {
 		versionID := "v1"
 		mockRepo.On("DeleteModVersion", ctx, modID, versionID).Return(nil).Once()
 		err := svc.DeleteModVersion(ctx, modID, versionID)
+		assert.NoError(t, err)
+	})
+
+	t.Run("UpdateModVersion", func(t *testing.T) {
+		modID := "test"
+		version := modmgr.ModVersion{ID: "v1"}
+		mockRepo.On("UpdateModVersion", ctx, modID, version).Return(nil).Once()
+		err := svc.UpdateModVersion(ctx, modID, version)
 		assert.NoError(t, err)
 	})
 

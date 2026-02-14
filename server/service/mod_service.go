@@ -73,6 +73,10 @@ func (s *ModService) CreateModVersion(ctx context.Context, modID string, version
 	return s.repo.CreateModVersion(ctx, modID, version)
 }
 
+func (s *ModService) UpdateModVersion(ctx context.Context, modID string, version modmgr.ModVersion) error {
+	return s.repo.UpdateModVersion(ctx, modID, version)
+}
+
 func (s *ModService) DeleteModVersion(ctx context.Context, modID string, versionID string) error {
 	return s.repo.DeleteModVersion(ctx, modID, versionID)
 }
@@ -251,6 +255,10 @@ func (s *FileModService) DeleteMod(ctx context.Context, modID string) error {
 }
 
 func (s *FileModService) CreateModVersion(ctx context.Context, modID string, version modmgr.ModVersion) error {
+	return errors.New("not implemented")
+}
+
+func (s *FileModService) UpdateModVersion(ctx context.Context, modID string, version modmgr.ModVersion) error {
 	return errors.New("not implemented")
 }
 
