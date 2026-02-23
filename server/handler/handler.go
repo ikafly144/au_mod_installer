@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ikafly144/au_mod_installer/common/rest"
+	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 	"github.com/ikafly144/au_mod_installer/server/middleware"
 	"github.com/ikafly144/au_mod_installer/server/service"
@@ -36,18 +37,23 @@ type ModServiceInterface interface {
 	DeleteModVersion(ctx context.Context, modID string, versionID string) error
 }
 
+type GitHubServiceInterface interface {
+	ListReleases(owner, repo string) ([]service.GitHubRelease, error)
+	GetRelease(owner, repo, tag string) (*service.GitHubRelease, error)
+}
+
 type Handler struct {
 	modService       ModServiceInterface
-	githubService    *service.GitHubService
+	githubService    GitHubServiceInterface
 	version          string
 	disabledVersions []string
 	authMiddleware   *middleware.AuthMiddleware
 }
 
-func NewHandler(modService ModServiceInterface, version string, disabledVersions []string) *Handler {
+func NewHandler(modService ModServiceInterface, githubService GitHubServiceInterface, version string, disabledVersions []string) *Handler {
 	return &Handler{
 		modService:       modService,
-		githubService:    service.NewGitHubService(),
+		githubService:    githubService,
 		version:          version,
 		disabledVersions: disabledVersions,
 	}
@@ -328,6 +334,12 @@ func (h *Handler) handleCreateModVersion(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	for i := range version.Files {
+		if len(version.Files[i].Compatible) == 0 {
+			version.Files[i].Compatible = []aumgr.BinaryType{aumgr.BinaryType32Bit, aumgr.BinaryType64Bit}
+		}
+	}
+
 	if err := h.modService.CreateModVersion(r.Context(), modID, version); err != nil {
 		WriteError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -488,6 +500,7 @@ func (h *Handler) handleCreateVersionFromGitHub(w http.ResponseWriter, r *http.R
 		files = append(files, modmgr.ModFile{
 			URL:      asset.BrowserDownloadURL,
 			FileType: fileType,
+			Compatible: []aumgr.BinaryType{aumgr.BinaryType32Bit, aumgr.BinaryType64Bit},
 		})
 	}
 

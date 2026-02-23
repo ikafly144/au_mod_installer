@@ -1,11 +1,11 @@
 # Implementation Plan: Manual Mod Version Creation
 
 ## Phase 1: Backend Fixes & Enhancements
-- [ ] Task: Fix `handleCreateVersionFromGitHub` to set default binary compatibility
-    - [ ] Write a test to confirm that GitHub-imported versions are compatible with x86/x64
-    - [ ] Update `handleCreateVersionFromGitHub` in `server/handler/handler.go`
-- [ ] Task: Update `handleCreateModVersion` to set default binary compatibility if missing
-    - [ ] Update `server/handler/handler.go` to ensure `Compatible` is set to `[x86, x64]` if empty for each file.
+- [x] Task: Fix `handleCreateVersionFromGitHub` to set default binary compatibility
+    - [x] Write a test to confirm that GitHub-imported versions are compatible with x86/x64
+    - [x] Update `handleCreateVersionFromGitHub` in `server/handler/handler.go`
+- [x] Task: Update `handleCreateModVersion` to set default binary compatibility if missing
+    - [x] Update `server/handler/handler.go` to ensure `Compatible` is set to `[x86, x64]` if empty for each file.
 - [ ] Task: Conductor - User Manual Verification 'Backend Fixes & Enhancements' (Protocol in workflow.md)
 
 ## Phase 2: Frontend API & Components

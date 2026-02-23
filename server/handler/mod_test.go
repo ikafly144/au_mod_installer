@@ -7,14 +7,19 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 	"github.com/ikafly144/au_mod_installer/server/middleware"
+	"github.com/ikafly144/au_mod_installer/server/service" // Import the service package to access GitHubRelease and GitHubAsset
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
 
+// MockModService definition (unchanged)
 type MockModService struct {
 	mock.Mock
 }
@@ -75,9 +80,28 @@ func (m *MockModService) DeleteModVersion(ctx context.Context, modID string, ver
 	return args.Error(0)
 }
 
+// MockGitHubService definition
+type MockGitHubService struct {
+	mock.Mock
+}
+
+func (m *MockGitHubService) ListReleases(owner, repo string) ([]service.GitHubRelease, error) {
+	args := m.Called(owner, repo)
+	return args.Get(0).([]service.GitHubRelease), args.Error(1)
+}
+
+func (m *MockGitHubService) GetRelease(owner, repo, tag string) (*service.GitHubRelease, error) {
+	args := m.Called(owner, repo, tag)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*service.GitHubRelease), args.Error(1)
+}
+
+
 func TestHandler_CreateMod(t *testing.T) {
 	mockSvc := new(MockModService)
-	h := NewHandler(mockSvc, "v1.0.0", nil)
+	h := NewHandler(mockSvc, new(MockGitHubService), "v1.0.0", nil)
 
 	// Setup middleware
 	mw := middleware.NewAuthMiddleware("secret")
@@ -111,7 +135,7 @@ func TestHandler_CreateMod(t *testing.T) {
 func TestHandler_CreateMod_Unauthorized(t *testing.T) {
 	// This tests the RegisterRoutes wiring
 	mockSvc := new(MockModService)
-	h := NewHandler(mockSvc, "v1.0.0", nil)
+	h := NewHandler(mockSvc, new(MockGitHubService), "v1.0.0", nil)
 	mw := middleware.NewAuthMiddleware("secret")
 	h.SetAuthMiddleware(mw)
 
@@ -128,7 +152,7 @@ func TestHandler_CreateMod_Unauthorized(t *testing.T) {
 
 func TestHandler_UpdateMod(t *testing.T) {
 	mockSvc := new(MockModService)
-	h := NewHandler(mockSvc, "v1.0.0", nil)
+	h := NewHandler(mockSvc, new(MockGitHubService), "v1.0.0", nil)
 
 	modID := "test-mod"
 	mod := modmgr.Mod{ID: modID, Name: "Updated Mod"}
@@ -149,7 +173,7 @@ func TestHandler_UpdateMod(t *testing.T) {
 
 func TestHandler_DeleteMod(t *testing.T) {
 	mockSvc := new(MockModService)
-	h := NewHandler(mockSvc, "v1.0.0", nil)
+	h := NewHandler(mockSvc, new(MockGitHubService), "v1.0.0", nil)
 
 	modID := "test-mod"
 	req := httptest.NewRequest("DELETE", "/mods/"+modID, nil)
@@ -166,7 +190,7 @@ func TestHandler_DeleteMod(t *testing.T) {
 
 func TestHandler_CreateMod_Error(t *testing.T) {
 	mockSvc := new(MockModService)
-	h := NewHandler(mockSvc, "v1.0.0", nil)
+	h := NewHandler(mockSvc, new(MockGitHubService), "v1.0.0", nil)
 
 	t.Run("InvalidJSON", func(t *testing.T) {
 		req := httptest.NewRequest("POST", "/mods", bytes.NewReader([]byte("{invalid}")))
@@ -197,7 +221,7 @@ func TestHandler_CreateMod_Error(t *testing.T) {
 
 func TestHandler_UpdateMod_Error(t *testing.T) {
 	mockSvc := new(MockModService)
-	h := NewHandler(mockSvc, "v1.0.0", nil)
+	h := NewHandler(mockSvc, new(MockGitHubService), "v1.0.0", nil)
 
 	t.Run("IDMismatch", func(t *testing.T) {
 		mod := modmgr.Mod{ID: "other"}
@@ -233,7 +257,7 @@ func TestHandler_UpdateMod_Error(t *testing.T) {
 
 func TestHandler_DeleteMod_Error(t *testing.T) {
 	mockSvc := new(MockModService)
-	h := NewHandler(mockSvc, "v1.0.0", nil)
+	h := NewHandler(mockSvc, new(MockGitHubService), "v1.0.0", nil)
 
 	t.Run("MissingID", func(t *testing.T) {
 		req := httptest.NewRequest("DELETE", "/mods/", nil)
@@ -257,11 +281,47 @@ func TestHandler_DeleteMod_Error(t *testing.T) {
 
 func TestHandler_CreateModVersion(t *testing.T) {
 	mockSvc := new(MockModService)
-	h := NewHandler(mockSvc, "v1.0.0", nil)
+	h := NewHandler(mockSvc, new(MockGitHubService), "v1.0.0", nil)
 
 	modID := "test-mod"
 	version := modmgr.ModVersion{ID: "v1.0.0"}
 	body, _ := json.Marshal(version)
+
+	t.Run("Success_DefaultCompatibility", func(t *testing.T) {
+		versionWithEmptyCompatible := modmgr.ModVersion{
+			ID:    "v1.0.0",
+			Files: []modmgr.ModFile{
+				{
+					URL:      "http://example.com/mod.zip",
+					FileType: modmgr.FileTypeZip,
+					// Compatible is empty, should be defaulted by handler
+				},
+			},
+		}
+		bodyWithEmptyCompatible, _ := json.Marshal(versionWithEmptyCompatible)
+
+		expectedVersion := versionWithEmptyCompatible
+		expectedVersion.ModID = modID
+		expectedVersion.Files[0].Compatible = []aumgr.BinaryType{aumgr.BinaryType32Bit, aumgr.BinaryType64Bit}
+
+		var capturedVersion modmgr.ModVersion
+		mockSvc.On("CreateModVersion", mock.Anything, modID, mock.AnythingOfType("modmgr.ModVersion")).Run(func(args mock.Arguments) {
+			capturedVersion = args.Get(2).(modmgr.ModVersion)
+		}).Return(nil).Once()
+
+		req := httptest.NewRequest("POST", "/mods/"+modID+"/versions", bytes.NewReader(bodyWithEmptyCompatible))
+		req.SetPathValue("modID", modID)
+		w := httptest.NewRecorder()
+		h.handleCreateModVersion(w, req)
+		assert.Equal(t, http.StatusCreated, w.Code)
+
+		// Assert captured version
+		capturedVersion.CreatedAt = time.Time{} // Ignore CreatedAt for comparison
+		expectedVersion.CreatedAt = time.Time{}
+
+		assert.Equal(t, expectedVersion, capturedVersion)
+		mockSvc.AssertExpectations(t)
+	})
 
 	t.Run("Success", func(t *testing.T) {
 		req := httptest.NewRequest("POST", "/mods/"+modID+"/versions", bytes.NewReader(body))
@@ -310,7 +370,7 @@ func TestHandler_CreateModVersion(t *testing.T) {
 
 func TestHandler_DeleteModVersion(t *testing.T) {
 	mockSvc := new(MockModService)
-	h := NewHandler(mockSvc, "v1.0.0", nil)
+	h := NewHandler(mockSvc, new(MockGitHubService), "v1.0.0", nil)
 
 	modID := "test-mod"
 	versionID := "v1.0.0"
@@ -342,5 +402,59 @@ func TestHandler_DeleteModVersion(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.handleDeleteModVersion(w, req)
 		assert.Equal(t, http.StatusInternalServerError, w.Code)
+	})
+}
+
+func TestHandler_CreateVersionFromGitHub(t *testing.T) {
+	mockSvc := new(MockModService)
+	h := NewHandler(mockSvc, new(MockGitHubService), "v1.0.0", nil)
+
+	modID := "test-mod"
+	releaseTag := "v1.0.0"
+	githubRepo := "owner/repo"
+
+	t.Run("Success_DefaultCompatibility", func(t *testing.T) {
+		// Mock modService.GetMod
+		mockSvc.On("GetMod", mock.Anything, modID).Return(&modmgr.Mod{ID: modID, GitHubRepo: githubRepo}, nil).Once()
+
+		// Mock the githubService call
+		mockGitHubService := new(MockGitHubService)
+		h.githubService = mockGitHubService // Inject mock
+		mockGitHubService.On("GetRelease", githubRepo[:strings.Index(githubRepo, "/")], githubRepo[strings.Index(githubRepo, "/")+1:], releaseTag).Return(&service.GitHubRelease{
+			TagName: releaseTag,
+			Assets: []service.GitHubAsset{
+				{BrowserDownloadURL: "http://example.com/mod.zip", Name: "mod.zip"},
+			},
+		}, nil).Once()
+
+		// Expect CreateModVersion to be called with correct compatibility
+		expectedVersion := modmgr.ModVersion{
+			ID:    releaseTag,
+			ModID: modID,
+			Files: []modmgr.ModFile{
+				{
+					URL:        "http://example.com/mod.zip",
+					FileType:   modmgr.FileTypeZip,
+					Compatible: []aumgr.BinaryType{aumgr.BinaryType32Bit, aumgr.BinaryType64Bit}, // Expected default compatibility
+				},
+			},
+		}
+		mockSvc.On("CreateModVersion", mock.Anything, modID, mock.MatchedBy(func(v modmgr.ModVersion) bool {
+			// Deep compare everything except CreatedAt
+			v.CreatedAt = time.Time{}
+			expectedVersion.CreatedAt = time.Time{} // Clear for comparison
+			return assert.Equal(t, expectedVersion, v)
+		})).Return(nil).Once()
+
+		reqBody := map[string]string{"tag": releaseTag}
+		body, _ := json.Marshal(reqBody)
+		req := httptest.NewRequest("POST", "/mods/"+modID+"/versions/from-github", bytes.NewReader(body))
+		req.SetPathValue("modID", modID)
+		w := httptest.NewRecorder()
+		h.handleCreateVersionFromGitHub(w, req)
+
+		assert.Equal(t, http.StatusCreated, w.Code)
+		mockSvc.AssertExpectations(t)
+		mockGitHubService.AssertExpectations(t)
 	})
 }

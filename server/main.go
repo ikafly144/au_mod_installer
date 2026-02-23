@@ -154,7 +154,7 @@ func main() {
 		slog.Info("using file-based storage", "file", "mods.json")
 	}
 
-	h := handler.NewHandler(modService, version, disabledVersions)
+	h := handler.NewHandler(modService, service.NewGitHubService(), version, disabledVersions)
 	if jwtSecret != "" {
 		mw := middleware.NewAuthMiddleware(jwtSecret)
 		h.SetAuthMiddleware(mw)
