@@ -15,7 +15,7 @@ import (
 
 // Repository implements ModRepository and UserRepository using GORM
 type Repository struct {
-	db *gorm.DB
+	Db *gorm.DB
 }
 
 // NewRepository creates a new GORM repository
@@ -39,11 +39,11 @@ func NewRepository(databaseURL string) (*Repository, error) {
 		return nil, fmt.Errorf("failed to auto-migrate: %w", err)
 	}
 
-	return &Repository{db: db}, nil
+	return &Repository{Db: db}, nil
 }
 
 func (r *Repository) Close() {
-	sqlDB, err := r.db.DB()
+	sqlDB, err := r.Db.DB()
 	if err != nil {
 		return
 	}
@@ -54,7 +54,7 @@ func (r *Repository) Close() {
 
 func (r *Repository) GetMod(ctx context.Context, modID string) (*modmgr.Mod, error) {
 	var m model.Mod
-	if err := r.db.WithContext(ctx).First(&m, "id = ?", modID).Error; err != nil {
+	if err := r.Db.WithContext(ctx).First(&m, "id = ?", modID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil // Return nil if not found, consistent with old repo
 		}
@@ -65,7 +65,7 @@ func (r *Repository) GetMod(ctx context.Context, modID string) (*modmgr.Mod, err
 
 func (r *Repository) GetModList(ctx context.Context, limit int, after string, before string) ([]modmgr.Mod, error) {
 	var mods []model.Mod
-	query := r.db.WithContext(ctx).Model(&model.Mod{})
+	query := r.Db.WithContext(ctx).Model(&model.Mod{})
 	if after != "" {
 		query = query.Where("id > ?", after)
 	}
@@ -85,7 +85,7 @@ func (r *Repository) GetModList(ctx context.Context, limit int, after string, be
 
 func (r *Repository) GetModVersion(ctx context.Context, modID string, versionID string) (*modmgr.ModVersion, error) {
 	var v model.ModVersion
-	if err := r.db.WithContext(ctx).
+	if err := r.Db.WithContext(ctx).
 		Preload("Files").
 		Preload("Dependencies").
 		Preload("GameVersions").
@@ -101,17 +101,17 @@ func (r *Repository) GetModVersion(ctx context.Context, modID string, versionID 
 
 func (r *Repository) CreateMod(ctx context.Context, mod modmgr.Mod) error {
 	m := toGormMod(mod)
-	return r.db.WithContext(ctx).Create(&m).Error
+	return r.Db.WithContext(ctx).Create(&m).Error
 }
 
 func (r *Repository) UpdateMod(ctx context.Context, mod modmgr.Mod) error {
 	m := toGormMod(mod)
-	return r.db.WithContext(ctx).Save(&m).Error
+	return r.Db.WithContext(ctx).Save(&m).Error
 }
 
 func (r *Repository) CreateModVersion(ctx context.Context, modID string, version modmgr.ModVersion) error {
 	v := toGormVersion(modID, version)
-	return r.db.WithContext(ctx).Create(&v).Error
+	return r.Db.WithContext(ctx).Create(&v).Error
 }
 
 func (r *Repository) UpdateModVersion(ctx context.Context, modID string, version modmgr.ModVersion) error {
@@ -120,7 +120,7 @@ func (r *Repository) UpdateModVersion(ctx context.Context, modID string, version
 
 	v := toGormVersion(modID, version)
 
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	return r.Db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// Update Version fields
 		if err := tx.Model(&model.ModVersion{}).
 			Where("mod_id = ? AND version_id = ?", modID, version.ID).
@@ -271,7 +271,7 @@ func toGormVersion(modID string, v modmgr.ModVersion) model.ModVersion {
 
 func (r *Repository) GetModVersions(ctx context.Context, modID string, limit int, after string) ([]modmgr.ModVersion, error) {
 	var versions []model.ModVersion
-	query := r.db.WithContext(ctx).
+	query := r.Db.WithContext(ctx).
 		Preload("Files").
 		Preload("Dependencies").
 		Preload("GameVersions").
@@ -312,11 +312,11 @@ func (r *Repository) GetAllModVersions(ctx context.Context, modID string) ([]mod
 }
 
 func (r *Repository) DeleteMod(ctx context.Context, modID string) error {
-	return r.db.WithContext(ctx).Delete(&model.Mod{}, "id = ?", modID).Error
+	return r.Db.WithContext(ctx).Unscoped().Delete(&model.Mod{}, "id = ?", modID).Error
 }
 
 func (r *Repository) DeleteModVersion(ctx context.Context, modID, versionID string) error {
-	return r.db.WithContext(ctx).Delete(&model.ModVersion{}, "mod_id = ? AND version_id = ?", modID, versionID).Error
+	return r.Db.WithContext(ctx).Unscoped().Delete(&model.ModVersion{}, "mod_id = ? AND version_id = ?", modID, versionID).Error
 }
 
 func (r *Repository) DeleteVersion(ctx context.Context, modID, versionID string) error {
@@ -327,7 +327,7 @@ func (r *Repository) DeleteVersion(ctx context.Context, modID, versionID string)
 
 func (r *Repository) GetUser(ctx context.Context, id int) (*model.User, error) {
 	var u model.User
-	if err := r.db.WithContext(ctx).First(&u, id).Error; err != nil {
+	if err := r.Db.WithContext(ctx).First(&u, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
@@ -338,7 +338,7 @@ func (r *Repository) GetUser(ctx context.Context, id int) (*model.User, error) {
 
 func (r *Repository) GetUserByDiscordID(ctx context.Context, discordID string) (*model.User, error) {
 	var u model.User
-	if err := r.db.WithContext(ctx).Where("discord_id = ?", discordID).First(&u).Error; err != nil {
+	if err := r.Db.WithContext(ctx).Where("discord_id = ?", discordID).First(&u).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
@@ -348,13 +348,13 @@ func (r *Repository) GetUserByDiscordID(ctx context.Context, discordID string) (
 }
 
 func (r *Repository) CreateUser(ctx context.Context, user model.User) error {
-	return r.db.WithContext(ctx).Create(&user).Error
+	return r.Db.WithContext(ctx).Create(&user).Error
 }
 
 func (r *Repository) UpdateUser(ctx context.Context, user model.User) error {
-	return r.db.WithContext(ctx).Save(&user).Error
+	return r.Db.WithContext(ctx).Save(&user).Error
 }
 
 func (r *Repository) DeleteUser(ctx context.Context, id int) error {
-	return r.db.WithContext(ctx).Delete(&model.User{}, id).Error
+	return r.Db.WithContext(ctx).Delete(&model.User{}, id).Error
 }
