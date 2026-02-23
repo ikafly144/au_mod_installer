@@ -17,6 +17,8 @@
 - **Routing:** React Router.
 - **Styling:** Tailwind CSS.
 - **UI Framework:** shadcn/ui (Radix UI).
+- **Form Management:** React Hook Form
+- **Form Validation:** Zod
 - **Testing:** Vitest + React Testing Library.
 - **Communication:** REST API (Consuming the Go backend).
 
