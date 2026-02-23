@@ -1,0 +1,8 @@
+{
+  "track_id": "manual_version_creation_20260223",
+  "type": "feature",
+  "status": "new",
+  "created_at": "2026-02-23T00:00:00Z",
+  "updated_at": "2026-02-23T00:00:00Z",
+  "description": "GitHub Release以外にマニュアルでversion作成できるようにしてください。"
+}
