@@ -32,4 +32,4 @@
 - [x] Task: Verify end-to-end flow
     - [x] Create a version manually
     - [x] Check if it appears in the edit mod page's version list
-- [ ] Task: Conductor - User Manual Verification 'UI Integration' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'UI Integration' (Protocol in workflow.md) [checkpoint: 6bb7b46]
