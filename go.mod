@@ -58,6 +58,7 @@ require (
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/jsummers/gobmp v0.0.0-20230614200233-a9de23ed2e25 // indirect
 	github.com/lucor/goinfo v0.9.0 // indirect
+	github.com/mattn/go-sqlite3 v1.14.22 // indirect
 	github.com/mcuadros/go-version v0.0.0-20190830083331-035f6764e8d2 // indirect
 	github.com/natefinch/atomic v1.0.1 // indirect
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646 // indirect
@@ -80,6 +81,7 @@ require (
 	golang.org/x/tools v0.41.0 // indirect
 	golang.org/x/tools/go/vcs v0.1.0-deprecated // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
+	gorm.io/driver/sqlite v1.6.0 // indirect
 )
 
 tool fyne.io/tools/cmd/fyne

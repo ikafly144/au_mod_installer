@@ -15,6 +15,6 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-- [ ] **Track: Hard Delete for Mods and Versions**
+- [x] **Track: Hard Delete for Mods and Versions**
 *Link: [./tracks/hard_delete_mods_versions_20260223/](./tracks/hard_delete_mods_versions_20260223/)*
 
