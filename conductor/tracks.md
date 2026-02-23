@@ -12,3 +12,9 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 - [x] **Track: Manual Mod Version Creation**
 *Link: [./tracks/manual_version_creation_20260223/](./tracks/manual_version_creation_20260223/)*
+
+---
+
+- [ ] **Track: Hard Delete for Mods and Versions**
+*Link: [./tracks/hard_delete_mods_versions_20260223/](./tracks/hard_delete_mods_versions_20260223/)*
+
