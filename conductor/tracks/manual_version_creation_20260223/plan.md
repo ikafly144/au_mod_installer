@@ -6,7 +6,7 @@
     - [x] Update `handleCreateVersionFromGitHub` in `server/handler/handler.go`
 - [x] Task: Update `handleCreateModVersion` to set default binary compatibility if missing
     - [x] Update `server/handler/handler.go` to ensure `Compatible` is set to `[x86, x64]` if empty for each file.
-- [ ] Task: Conductor - User Manual Verification 'Backend Fixes & Enhancements' (Protocol in workflow.md)
+- [ ] Task: Conductor - User Manual Verification 'Backend Fixes & Enhancements' (Protocol in workflow.md) [checkpoint: 23b267c]
 
 ## Phase 2: Frontend API & Components
 - [ ] Task: Update `web-frontend/src/api.ts` with `createModVersion` (calling `POST /mods/{modID}/versions`)
