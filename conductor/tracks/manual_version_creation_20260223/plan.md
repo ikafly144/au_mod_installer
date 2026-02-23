@@ -9,13 +9,20 @@
 - [ ] Task: Conductor - User Manual Verification 'Backend Fixes & Enhancements' (Protocol in workflow.md) [checkpoint: 23b267c]
 
 ## Phase 2: Frontend API & Components
-- [ ] Task: Update `web-frontend/src/api.ts` with `createModVersion` (calling `POST /mods/{modID}/versions`)
-- [ ] Task: Create `ManualVersionForm.tsx` in `web-frontend/src/pages/mods/`
-    - [ ] Version ID field
-    - [ ] Dynamic list for Mod Files (URL, File Type)
-    - [ ] Multi-select for Game Versions (fetch available versions if possible, or just text input)
-    - [ ] Simple dependency adding UI
-- [ ] Task: Conductor - User Manual Verification 'Frontend API & Components' (Protocol in workflow.md)
+- [x] Task: Update `web-frontend/src/api.ts` with `createModVersion` (calling `POST /mods/{modID}/versions`)
+- [x] Task: Create `ManualVersionForm.tsx` in `web-frontend/src/pages/mods/`
+    - [x] Create tests for `ManualVersionForm.tsx`
+        - [x] Test rendering of all fields.
+        - [x] Test adding/removing files.
+        - [x] Test adding/removing dependencies.
+        - [x] Test form submission success.
+        - [x] Test form submission error.
+        - [x] Test form validation.
+    - [x] Version ID field
+    - [x] Dynamic list for Mod Files (URL, File Type)
+    - [x] Multi-select for Game Versions (fetch available versions if possible, or just text input)
+    - [x] Simple dependency adding UI
+- [x] Task: Conductor - User Manual Verification 'Frontend API & Components' (Protocol in workflow.md)
 
 ## Phase 3: UI Integration
 - [ ] Task: Refactor `UploadVersionPage.tsx`
