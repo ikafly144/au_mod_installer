@@ -7,4 +7,4 @@
     - [x] Write failing test for `DeleteModVersion` to confirm soft delete
     - [x] Update `DeleteModVersion` to use `Unscoped().Delete()`
     - [x] Verify test passes (hard delete confirmed)
-- [ ] Task: Conductor - User Manual Verification 'Backend Implementation' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Backend Implementation' (Protocol in workflow.md) [checkpoint: 25a43d6]
