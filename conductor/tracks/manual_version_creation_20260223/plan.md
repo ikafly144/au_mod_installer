@@ -25,11 +25,11 @@
 - [x] Task: Conductor - User Manual Verification 'Frontend API & Components' (Protocol in workflow.md) [checkpoint: d4e386c]
 
 ## Phase 3: UI Integration
-- [ ] Task: Refactor `UploadVersionPage.tsx`
-    - [ ] Add `Tabs`, `TabsList`, `TabsTrigger`, `TabsContent` from shadcn/ui
-    - [ ] Move existing GitHub logic to "GitHub Release" tab
-    - [ ] Add `ManualVersionForm` to "Manual" tab
-- [ ] Task: Verify end-to-end flow
-    - [ ] Create a version manually
-    - [ ] Check if it appears in the edit mod page's version list
+- [x] Task: Refactor `UploadVersionPage.tsx`
+    - [x] Add `Tabs`, `TabsList`, `TabsTrigger`, `TabsContent` from shadcn/ui
+    - [x] Move existing GitHub logic to "GitHub Release" tab
+    - [x] Add `ManualVersionForm` to "Manual" tab
+- [x] Task: Verify end-to-end flow
+    - [x] Create a version manually
+    - [x] Check if it appears in the edit mod page's version list
 - [ ] Task: Conductor - User Manual Verification 'UI Integration' (Protocol in workflow.md)
