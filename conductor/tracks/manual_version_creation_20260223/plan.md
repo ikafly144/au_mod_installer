@@ -22,7 +22,7 @@
     - [x] Dynamic list for Mod Files (URL, File Type)
     - [x] Multi-select for Game Versions (fetch available versions if possible, or just text input)
     - [x] Simple dependency adding UI
-- [x] Task: Conductor - User Manual Verification 'Frontend API & Components' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Frontend API & Components' (Protocol in workflow.md) [checkpoint: d4e386c]
 
 ## Phase 3: UI Integration
 - [ ] Task: Refactor `UploadVersionPage.tsx`
