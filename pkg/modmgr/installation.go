@@ -297,13 +297,7 @@ func ApplyMods(gameDir string, cacheDir string, modVersions []ModVersion, binary
 			// Check if file exists in game dir
 			if _, err := gameRoot.Stat(relPath); err == nil {
 				// Check if it was added by us in this session
-				isAdded := false
-				for _, added := range restoreInfo.Added {
-					if added == relPath {
-						isAdded = true
-						break
-					}
-				}
+				isAdded := slices.Contains(restoreInfo.Added, relPath)
 
 				if !isAdded {
 					// It exists and was NOT added by us.
@@ -326,13 +320,7 @@ func ApplyMods(gameDir string, cacheDir string, modVersions []ModVersion, binary
 			} else {
 				// File doesn't exist
 				// Check if we already marked it as added?
-				isAdded := false
-				for _, added := range restoreInfo.Added {
-					if added == relPath {
-						isAdded = true
-						break
-					}
-				}
+				isAdded := slices.Contains(restoreInfo.Added, relPath)
 				if !isAdded {
 					restoreInfo.Added = append(restoreInfo.Added, relPath)
 				}

@@ -28,19 +28,19 @@ func (c *clientImpl) GetModList(limit int, after string, before string) ([]modmg
 
 func (c *clientImpl) GetMod(modID string) (*modmgr.Mod, error) {
 	var mod modmgr.Mod
-	err := c.do(rest.EndpointGetModDetails.Compile(nil, modID), nil, &mod, 1)
+	err := c.do(rest.EndpointGetModDetail.Compile(nil, modID), nil, &mod, 1)
 	return &mod, err
 }
 
 func (c *clientImpl) GetModVersions(modID string, limit int, after string) ([]modmgr.ModVersion, error) {
 	var versions []modmgr.ModVersion
-	err := c.do(rest.EndpointGetModVersions.Compile(nil, modID), nil, &versions, 1)
+	err := c.do(rest.EndpointGetModVersionList.Compile(nil, modID), nil, &versions, 1)
 	return versions, err
 }
 
 func (c *clientImpl) GetModVersion(modID string, versionID string) (*modmgr.ModVersion, error) {
 	var modVersion modmgr.ModVersion
-	err := c.do(rest.EndpointGetModVersion.Compile(nil, modID, versionID), nil, &modVersion, 1)
+	err := c.do(rest.EndpointGetModVersionDetail.Compile(nil, modID, versionID), nil, &modVersion, 1)
 	return &modVersion, err
 }
 

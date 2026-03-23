@@ -64,7 +64,6 @@ services:
           cpus: '0.1'
           memory: 32M
 
-
     # Optional: Nginx reverse proxy
   nginx:
     image: nginx:alpine

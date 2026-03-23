@@ -6,27 +6,34 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 )
 
 func TestClientImpl_CheckForUpdates(t *testing.T) {
 	// モックサーバーのセットアップ
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.URL.Path == "/mods/mod-1":
+		switch r.URL.Path {
+		case "/mods/mod-1":
 			// Mod 1 の詳細（最新バージョンは v1.1.0）
 			mod := modmgr.Mod{ID: "mod-1", LatestVersion: "v1.1.0"}
-			json.NewEncoder(w).Encode(mod)
-		case r.URL.Path == "/mods/mod-1/versions/v1.1.0":
+			if err := json.NewEncoder(w).Encode(mod); err != nil {
+				t.Errorf("Failed to encode response: %v", err)
+			}
+		case "/mods/mod-1/versions/v1.1.0":
 			// Mod 1 の最新バージョンの詳細
 			version := modmgr.ModVersion{ID: "v1.1.0", ModID: "mod-1"}
-			json.NewEncoder(w).Encode(version)
-		case r.URL.Path == "/mods/mod-2":
+			if err := json.NewEncoder(w).Encode(version); err != nil {
+				t.Errorf("Failed to encode response: %v", err)
+			}
+		case "/mods/mod-2":
 			// Mod 2 の詳細（最新バージョンは v2.0.0）
 			mod := modmgr.Mod{ID: "mod-2", LatestVersion: "v2.0.0"}
-			json.NewEncoder(w).Encode(mod)
+			if err := json.NewEncoder(w).Encode(mod); err != nil {
+				t.Errorf("Failed to encode response: %v", err)
+			}
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}

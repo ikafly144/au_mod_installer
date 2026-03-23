@@ -6,9 +6,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 )
 
 func TestProfileManager_AddAndGet(t *testing.T) {

@@ -7,11 +7,11 @@ import (
 )
 
 var (
-	EndpointHealth         = NewEndpoint("GET", "/health")
-	EndpointGetModList     = NewEndpoint("GET", "/mods")
-	EndpointGetModDetails  = NewEndpoint("GET", "/mods/{modID}")
-	EndpointGetModVersions = NewEndpoint("GET", "/mods/{modID}/versions")
-	EndpointGetModVersion  = NewEndpoint("GET", "/mods/{modID}/versions/{versionID}")
+	EndpointHealth              = NewEndpoint("GET", "/health")
+	EndpointGetModList          = NewEndpoint("GET", "/mods")
+	EndpointGetModDetail        = NewEndpoint("GET", "/mod/:mod_id")
+	EndpointGetModVersionList   = NewEndpoint("GET", "/mod/:mod_id/versions")
+	EndpointGetModVersionDetail = NewEndpoint("GET", "/mod/:mod_id/version/:version_id")
 )
 
 func NewEndpoint(method, path string) *Endpoint {
@@ -35,13 +35,13 @@ type CompiledEndpoint struct {
 func (e *Endpoint) Compile(values url.Values, params ...any) *CompiledEndpoint {
 	path := e.Route
 	for _, param := range params {
-		start := strings.Index(path, "{")
-		end := strings.Index(path, "}")
+		start := strings.Index(path, ":")
+		end := strings.Index(path, "/")
 		if start == -1 || end == -1 || end < start {
 			break
 		}
 		paramValue := fmt.Sprint(param)
-		path = path[:start] + url.PathEscape(paramValue) + path[end+1:]
+		path = path[:start] + url.PathEscape(paramValue) + path[end:]
 	}
 	query := values.Encode()
 	if query != "" {

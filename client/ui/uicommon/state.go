@@ -209,24 +209,25 @@ func (i *State) RefreshModInstallation() {
 	}
 
 	canLaunch := false
-	info := lang.LocalizeKey("installer.info.mod_installed", "Mod is installed.") + "\n"
+	var info strings.Builder
+	info.WriteString(lang.LocalizeKey("installer.info.mod_installed", "Mod is installed.") + "\n")
 
 	if status.Status == core.StatusIncompatible {
-		info += lang.LocalizeKey("installer.info.game_version", "Game Version: ") + status.GameVersion + " (Modインストール時: " + status.InstalledGameVersion + ")\n"
-		info += lang.LocalizeKey("installer.info.mod_incompatible", "Mod is incompatible with the current game version.") + "\n"
+		info.WriteString(lang.LocalizeKey("installer.info.game_version", "Game Version: ") + status.GameVersion + " (Modインストール時: " + status.InstalledGameVersion + ")\n")
+		info.WriteString(lang.LocalizeKey("installer.info.mod_incompatible", "Mod is incompatible with the current game version.") + "\n")
 		canLaunch = false
 	} else {
 		// Compatible
-		info += lang.LocalizeKey("installer.info.game_version", "Game Version: ") + status.GameVersion + "\n"
+		info.WriteString(lang.LocalizeKey("installer.info.game_version", "Game Version: ") + status.GameVersion + "\n")
 		canLaunch = true
 
 		for _, outdated := range status.OutdatedMods {
-			info += lang.LocalizeKey("installer.info.mod_version_outdated", "Mod version is outdated: {{.mod}} (Installed: {{.version}}, Latest: {{.latest}})",
+			info.WriteString(lang.LocalizeKey("installer.info.mod_version_outdated", "Mod version is outdated: {{.mod}} (Installed: {{.version}}, Latest: {{.latest}})",
 				map[string]any{
 					"mod":     outdated.ID,
 					"version": outdated.CurrentVersion,
 					"latest":  outdated.LatestVersion,
-				})
+				}))
 			canLaunch = false // TODO: allow launching with outdated mods
 			// Original code broke loop here
 			break
@@ -237,8 +238,8 @@ func (i *State) RefreshModInstallation() {
 	for _, mod := range status.InstalledMods {
 		modNames = append(modNames, mod.ModID+" ("+mod.ID+")")
 	}
-	info += lang.LocalizeKey("installer.info.mod_name", "Mod: ") + strings.Join(modNames, ", ") + "\n"
-	i.ModInstalledInfo.SetText(strings.TrimSpace(info))
+	info.WriteString(lang.LocalizeKey("installer.info.mod_name", "Mod: ") + strings.Join(modNames, ", ") + "\n")
+	i.ModInstalledInfo.SetText(strings.TrimSpace(info.String()))
 
 	if strings.Contains(i.Version, "(devel)") { // NOTE: allow launching in development mode
 		canLaunch = true

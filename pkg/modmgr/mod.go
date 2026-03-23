@@ -2,6 +2,7 @@ package modmgr
 
 import (
 	"iter"
+	"slices"
 	"time"
 
 	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
@@ -95,25 +96,15 @@ func (m ModVersion) IsCompatible(launcherType aumgr.LauncherType, binaryType aum
 		return false
 	}
 	// Check game version compatibility
-	supported := false
-	// Check deprecated TargetVersion first for backward compatibility
-	for _, v := range m.GameVersions {
-		if v == gameVersion {
-			supported = true
-			break
-		}
-	}
+	supported := slices.Contains(m.GameVersions, gameVersion)
 	return supported || len(m.GameVersions) == 0
 }
 
 func (m ModVersion) CompatibleFilesCount(binaryType aumgr.BinaryType) int {
 	var count int
 	for _, file := range m.Files {
-		for _, t := range file.Compatible {
-			if t == binaryType {
-				count++
-				break
-			}
+		if slices.Contains(file.Compatible, binaryType) {
+			count++
 		}
 	}
 	return count

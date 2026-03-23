@@ -728,7 +728,6 @@ func (l *Launcher) showAddModDialog(onAdd func([]modmgr.ModVersion)) {
 	refreshList := func(mods []modmgr.Mod) {
 		contentBox.Objects = nil
 		for _, mod := range mods {
-			mod := mod // capture loop var
 
 			// Create Item UI
 			imgRect := canvas.NewRectangle(theme.Color(theme.ColorNameDisabled))

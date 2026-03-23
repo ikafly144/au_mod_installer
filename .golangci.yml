@@ -32,4 +32,4 @@ linters:
     rules:
       - linters:
           - errcheck
-        text: "Error return value of `.+\\.Close` is not checked"
+        source: "defer .+$"

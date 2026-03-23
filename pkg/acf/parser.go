@@ -2,6 +2,7 @@ package acf
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/ikafly144/au_mod_installer/pkg/acf/lexer"
 )
@@ -64,18 +65,18 @@ func (p *Parser) parseACF() (map[string]any, error) {
 }
 
 func ToString(ast map[string]any) string {
-	var result string
+	var result strings.Builder
 	for k, v := range ast {
-		result += k + "\t\t"
+		result.WriteString(k + "\t\t")
 		switch v := v.(type) {
 		case string:
-			result += v
+			result.WriteString(v)
 		case map[string]any:
-			result += ToString(v)
+			result.WriteString(ToString(v))
 		default:
-			result += fmt.Sprintf("%v", v)
+			fmt.Fprintf(&result, "%v", v)
 		}
-		result += "\n"
+		result.WriteString("\n")
 	}
-	return result
+	return result.String()
 }

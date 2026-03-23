@@ -256,7 +256,7 @@ func (m *AssetsFileMetadata) read(r *AssetsFileReader, version uint32) (err erro
 		return err
 	}
 	m.TypeTreeTypes = make([]*TypeTreeType, fieldCount)
-	for i := int32(0); i < fieldCount; i++ {
+	for i := range fieldCount {
 		typeTreeType := new(TypeTreeType)
 		if err := typeTreeType.Read(r, version, m.TypeTreeEnabled, false); err != nil {
 			return err
@@ -272,7 +272,7 @@ func (m *AssetsFileMetadata) read(r *AssetsFileReader, version uint32) (err erro
 		return err
 	}
 	m.AssetInfos = make([]AssetFileInfo, assetInfoCount)
-	for i := int32(0); i < assetInfoCount; i++ {
+	for i := range assetInfoCount {
 		fileInfo := new(AssetFileInfo)
 		if err := fileInfo.Read(r, version); err != nil {
 			return err
@@ -293,7 +293,7 @@ func (m *AssetsFileMetadata) read(r *AssetsFileReader, version uint32) (err erro
 		return err
 	}
 	m.ScriptTypes = make([]*AssetPPtr, scriptTypeCount)
-	for i := int32(0); i < scriptTypeCount; i++ {
+	for i := range scriptTypeCount {
 		fileId, err := r.ReadInt32()
 		if err != nil {
 			return err
@@ -310,7 +310,7 @@ func (m *AssetsFileMetadata) read(r *AssetsFileReader, version uint32) (err erro
 		return err
 	}
 	m.Externals = make([]AssetFileExternal, externalCount)
-	for i := int32(0); i < externalCount; i++ {
+	for i := range externalCount {
 		external := new(AssetFileExternal)
 		if err := external.Read(r, version); err != nil {
 			return err
@@ -324,7 +324,7 @@ func (m *AssetsFileMetadata) read(r *AssetsFileReader, version uint32) (err erro
 			return err
 		}
 		m.RefTypes = make([]*TypeTreeType, refTypeCount)
-		for i := int32(0); i < refTypeCount; i++ {
+		for i := range refTypeCount {
 			refType := new(TypeTreeType)
 			if err := refType.Read(r, version, m.TypeTreeEnabled, true); err != nil {
 				return err
@@ -631,7 +631,7 @@ func (t *TypeTreeType) Read(r *AssetsFileReader, version uint32, hasTypeTree boo
 		}
 
 		t.Nodes = make([]*TypeTreeNode, typeTreeNodeCount)
-		for i := int32(0); i < typeTreeNodeCount; i++ {
+		for i := range typeTreeNodeCount {
 			node := new(TypeTreeNode)
 			if err := node.Read(r, version); err != nil {
 				return err
@@ -652,7 +652,7 @@ func (t *TypeTreeType) Read(r *AssetsFileReader, version uint32, hasTypeTree boo
 					return err
 				}
 				t.TypeDependencies = make([]int32, dependenciesCount)
-				for i := int32(0); i < dependenciesCount; i++ {
+				for i := range dependenciesCount {
 					dep, err := r.ReadInt32()
 					if err != nil {
 						return err

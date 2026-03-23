@@ -88,8 +88,8 @@ func Update(ctx context.Context, tag string) error {
 			if _, err = io.Copy(buf, resp.Body); err != nil {
 				return err
 			}
-			lines := strings.Split(buf.String(), "\n")
-			for _, line := range lines {
+			lines := strings.SplitSeq(buf.String(), "\n")
+			for line := range lines {
 				parts := strings.Fields(line)
 				if len(parts) == 2 && parts[1] == assetName {
 					checkSum, err = hex.DecodeString(parts[0])
