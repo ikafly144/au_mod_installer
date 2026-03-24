@@ -30,9 +30,6 @@ jobs:
           - name: server
             dockerfile: ./server/Dockerfile
             image-suffix: -server
-          - name: server-admin
-            dockerfile: ./server-admin/Dockerfile
-            image-suffix: -server-admin
 
     steps:
       - name: Checkout repository
