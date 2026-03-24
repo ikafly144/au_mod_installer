@@ -15,7 +15,10 @@ func NewGormRepository(db *gorm.DB) *GormRepository {
 }
 
 func (r *GormRepository) Migrate() error {
-	return r.db.AutoMigrate(&model.ModDetails{}, &model.ModVersionDetails{}, &model.ModVersionFile{})
+	if err := r.db.AutoMigrate(&model.ModDetails{}, &model.ModVersionFile{}, &model.ModVersionDetails{}); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (r *GormRepository) CreateMod(details *model.ModDetails) (string, error) {
@@ -59,7 +62,7 @@ func (r *GormRepository) GetModDetails(modID string) (*model.ModDetails, error) 
 }
 
 func (r *GormRepository) CreateModVersion(modID string, details *model.ModVersionDetails) (string, error) {
-	details.ModID = modID
+	details.ModID = &modID
 	result := r.db.Create(details)
 	if result.Error != nil {
 		return "", result.Error

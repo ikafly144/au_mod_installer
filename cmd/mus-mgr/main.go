@@ -284,7 +284,7 @@ func main() {
 
 							ver := &model.ModVersionDetails{
 								ID:    verId,
-								ModID: modId,
+								ModID: &modId,
 							}
 							var deps []model.ModVersionDependency
 							for _, d := range c.StringSlice("dependency") {
@@ -364,8 +364,8 @@ func main() {
 
 								verFile := model.ModVersionFile{
 									ID:             uuid.New().String(),
-									ModID:          modId,
-									VersionID:      ver.ID,
+									ModID:          &modId,
+									VersionID:      &ver.ID,
 									Filename:       filename,
 									ContentType:    model.FileType(pf.Type),
 									Size:           size,
