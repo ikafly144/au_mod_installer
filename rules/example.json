@@ -1,0 +1,25 @@
+{
+    "mod_id": "example-mod",
+    "github_repo": "ikafly144/example-mod",
+    "dependencies": [
+        {
+            "mod_id": "dependency-mod",
+            "version_id": "any",
+            "dependency_type": "required"
+        }
+    ],
+    "files": [
+        {
+            "from": "https://example.com/file",
+            "content_type": "binary",
+            "extract_path": "mods/example-mod.bin",
+            "target_platform": "any"
+        },
+        {
+            "artifact": "artifact-v.*\\.bin",
+            "content_type": "binary",
+            "extract_path": "mods/example-mod.bin",
+            "target_platform": "any"
+        }
+    ]
+}

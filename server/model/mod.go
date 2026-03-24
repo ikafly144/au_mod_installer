@@ -55,6 +55,13 @@ func (a *StringArray) Scan(value any) error {
 		}
 		b = []byte(s)
 	}
+
+	// Postgres native array or invalid old JSON might appear as {} instead of []
+	if len(b) > 0 && b[0] == '{' {
+		*a = StringArray{}
+		return nil
+	}
+
 	return json.Unmarshal(b, a)
 }
 
@@ -75,8 +82,8 @@ type ModVersionDetails struct {
 	ID    string `gorm:"primaryKey" json:"id"`
 	ModID string `gorm:"index" json:"mod_id"`
 
-	Files        []ModVersionFile       `gorm:"foreignKey:VersionID" json:"files,omitempty"`
-	Dependencies []ModVersionDependency `gorm:"type:json" json:"dependencies,omitempty"`
+	Files        []ModVersionFile `gorm:"foreignKey:VersionID" json:"files,omitempty"`
+	Dependencies DependencyArray  `gorm:"type:json" json:"dependencies,omitempty"`
 
 	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`
@@ -90,12 +97,9 @@ type ModVersionFile struct {
 	ContentType FileType `gorm:"not null" json:"content_type"`
 	Size        int64    `gorm:"not null" json:"size"`
 
-	// ContentTypeが `binary` か `plugin_dll` の場合、ExtractPathの位置に配置される。nullの場合は、`plugin_dll`は BepInEx/plugins に、`binary`はゲームのルートに配置される。
-	// `archive` の場合は、アーカイブを展開した後のファイルの配置に影響する。ExtractPathがnullの場合、アーカイブ内のファイルはすべてゲームのルートに配置される。
 	ExtractPath    *string        `gorm:"default:null" json:"extract_path,omitempty"`
 	TargetPlatform TargetPlatform `gorm:"not null;default:'any'" json:"target_platform"`
 
-	// Hashes is a map of hash algorithm to hash value, e.g. "sha256" -> "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 	Hashes    StringMap   `gorm:"type:json" json:"hashes"`
 	Downloads StringArray `gorm:"type:json" json:"downloads"`
 
@@ -113,19 +117,46 @@ const (
 type TargetPlatform string
 
 const (
-	// Any platform (default)
-	TargetPlatformAny TargetPlatform = "any"
-	// Epic/MSStore
-	TargetPlatformX64 TargetPlatform = "x64"
-	// Steam/Itch
-	TargetPlatformX86 TargetPlatform = "x86"
-	// Android
+	TargetPlatformAny     TargetPlatform = "any"
+	TargetPlatformX64     TargetPlatform = "x64"
+	TargetPlatformX86     TargetPlatform = "x86"
 	TargetPlatformAArch64 TargetPlatform = "aarch64"
 )
 
+type DependencyArray []ModVersionDependency
+
+func (a DependencyArray) Value() (driver.Value, error) {
+	if a == nil {
+		return "[]", nil
+	}
+	return json.Marshal(a)
+}
+
+func (a *DependencyArray) Scan(value any) error {
+	if value == nil {
+		*a = nil
+		return nil
+	}
+	b, ok := value.([]byte)
+	if !ok {
+		s, ok := value.(string)
+		if !ok {
+			return errors.New("type assertion to []byte or string failed")
+		}
+		b = []byte(s)
+	}
+
+	// Postgres or old data might have stored an empty object "{}" instead of "[]"
+	if len(b) > 0 && b[0] == '{' {
+		*a = DependencyArray{}
+		return nil
+	}
+
+	return json.Unmarshal(b, a)
+}
+
 type ModVersionDependency struct {
-	ModID string `json:"mod_id"`
-	// if `any` is specified, it means any version of the mod is acceptable
+	ModID          string         `json:"mod_id"`
 	VersionID      string         `json:"version_id"`
 	DependencyType DependencyType `json:"dependency_type"` // "required" or "optional"
 }

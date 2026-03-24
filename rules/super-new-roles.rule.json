@@ -1,0 +1,25 @@
+{
+    "mod_id": "super-new-roles",
+    "github_repo": "SuperNewRoles/SuperNewRoles",
+    "dependencies": [
+        {
+            "mod_id": "bepinex",
+            "version_id": "any",
+            "dependency_type": "required"
+        }
+    ],
+    "files": [
+        {
+            "from": "https://gist.githubusercontent.com/ikafly144/b16fc1240a503eea40d1002f3479901f/raw/01a32ac3e5376964ce2749d77e22a0538f2cd0da/snrupdate.json",
+            "content_type": "binary",
+            "extract_path": "BepInEx/patchers/snrupdate.json",
+            "target_platform": "any"
+        },
+        {
+            "artifact": "SuperNewRoles\\.dll",
+            "content_type": "plugin_dll",
+            "extract_path": "BepInEx/plugins/SuperNewRoles.dll",
+            "target_platform": "any"
+        }
+    ]
+}
