@@ -4,9 +4,10 @@ import (
 	"os"
 	"testing"
 
-	"github.com/ikafly144/au_mod_installer/common/rest/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ikafly144/au_mod_installer/common/rest/model"
 )
 
 func TestInstallationInfo_SaveAndLoad(t *testing.T) {

@@ -108,7 +108,6 @@ type State struct {
 	CanLaunch        binding.Bool
 	CanInstall       binding.Bool
 	launchLock       sync.Mutex
-	installLock      sync.Mutex
 
 	Core           *core.App
 	Rest           rest.Client

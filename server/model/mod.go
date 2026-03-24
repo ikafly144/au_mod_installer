@@ -16,7 +16,7 @@ func (m StringMap) Value() (driver.Value, error) {
 	return json.Marshal(m)
 }
 
-func (m *StringMap) Scan(value interface{}) error {
+func (m *StringMap) Scan(value any) error {
 	if value == nil {
 		*m = nil
 		return nil
@@ -42,7 +42,7 @@ func (a StringArray) Value() (driver.Value, error) {
 	return json.Marshal(a)
 }
 
-func (a *StringArray) Scan(value interface{}) error {
+func (a *StringArray) Scan(value any) error {
 	if value == nil {
 		*a = nil
 		return nil
