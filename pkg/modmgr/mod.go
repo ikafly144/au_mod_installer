@@ -100,7 +100,6 @@ func (m ModVersion) Downloads(binaryType aumgr.BinaryType) iter.Seq[model.ModVer
 				if !yield(file) {
 					return
 				}
-				break
 			}
 		}
 	}
