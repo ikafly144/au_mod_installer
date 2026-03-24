@@ -724,9 +724,15 @@ func (l *Launcher) showAddModDialog(onAdd func([]modmgr.ModVersion)) {
 	var d *dialog.CustomDialog
 
 	// Refresh function
-	refreshList := func(mods []modmgr.Mod) {
+	refreshList := func(modIDs []string) {
 		contentBox.Objects = nil
-		for _, mod := range mods {
+		for _, modID := range modIDs {
+			// TODO: Async fetch mod details with loading state for each item
+			mod, err := l.state.Rest.GetMod(modID)
+			if err != nil {
+				slog.Warn("Failed to fetch mod details", "modID", modID, "error", err)
+				continue
+			}
 
 			// Create Item UI
 			imgRect := canvas.NewRectangle(theme.Color(theme.ColorNameDisabled))
@@ -765,7 +771,7 @@ func (l *Launcher) showAddModDialog(onAdd func([]modmgr.ModVersion)) {
 	}
 
 	go func() {
-		m, err := l.state.Rest.GetModList(100, "", "")
+		m, err := l.state.Rest.GetModIDs(100, "", "")
 		if err != nil {
 			dialog.ShowError(err, l.state.Window)
 			return
@@ -785,7 +791,7 @@ func (l *Launcher) showAddModDialog(onAdd func([]modmgr.ModVersion)) {
 	d.Show()
 }
 
-func (l *Launcher) newModDetailsDialog(mod modmgr.Mod, onSelect func(modmgr.ModVersion)) *dialog.CustomDialog {
+func (l *Launcher) newModDetailsDialog(mod *modmgr.Mod, onSelect func(modmgr.ModVersion)) *dialog.CustomDialog {
 	loading := widget.NewProgressBarInfinite()
 	loading.Start()
 

@@ -21,8 +21,8 @@ func (c *OfflineClient) GetHealthStatus() (*rest.HealthStatus, error) {
 	}, nil
 }
 
-func (c *OfflineClient) GetModList(limit int, after string, before string) ([]modmgr.Mod, error) {
-	return nil, errors.New("offline mode: mod list not available")
+func (c *OfflineClient) GetModIDs(limit int, after string, before string) ([]string, error) {
+	return nil, errors.New("offline mode: mod IDs not available")
 }
 
 func (c *OfflineClient) GetMod(modID string) (*modmgr.Mod, error) {

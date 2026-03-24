@@ -62,12 +62,12 @@ func (f *FileClient) GetHealthStatus() (*rest.HealthStatus, error) {
 	}, nil
 }
 
-func (f *FileClient) GetModList(limit int, after string, before string) ([]modmgr.Mod, error) {
-	var mods []modmgr.Mod
+func (f *FileClient) GetModIDs(limit int, after string, before string) ([]string, error) {
+	var modIDs []string
 	for _, m := range f.modStore {
-		mods = append(mods, m)
+		modIDs = append(modIDs, m.ID)
 	}
-	return mods, nil
+	return modIDs, nil
 }
 
 func (f *FileClient) GetMod(modID string) (*modmgr.Mod, error) {

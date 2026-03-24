@@ -9,8 +9,8 @@ import (
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 )
 
-func (c *clientImpl) GetModList(limit int, after string, before string) ([]modmgr.Mod, error) {
-	var mods []modmgr.Mod
+func (c *clientImpl) GetModIDs(limit int, after string, before string) ([]string, error) {
+	var mods model.ModListResult
 
 	values := make(url.Values)
 	if limit > 0 {
@@ -24,7 +24,7 @@ func (c *clientImpl) GetModList(limit int, after string, before string) ([]modmg
 	}
 
 	err := c.do(rest.EndpointGetModList.Compile(values, nil), nil, &mods, 1)
-	return mods, err
+	return mods.IDs, err
 }
 
 func (c *clientImpl) GetMod(modID string) (*modmgr.Mod, error) {

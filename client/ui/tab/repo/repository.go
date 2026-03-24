@@ -33,7 +33,7 @@ type Repository struct {
 
 	lastModID  string
 	noMoreMods bool
-	modsBind   binding.List[modmgr.Mod]
+	modsBind   binding.List[*modmgr.Mod]
 
 	// Containers
 	mainContainer *fyne.Container // Stack container for switching views
@@ -50,7 +50,7 @@ type Repository struct {
 }
 
 func NewRepository(state *uicommon.State) *Repository {
-	bind := binding.NewList(func(a, b modmgr.Mod) bool { return a.ID == b.ID })
+	bind := binding.NewList(func(a, b *modmgr.Mod) bool { return a.ID == b.ID })
 
 	repo := &Repository{
 		state:            state,
@@ -218,7 +218,7 @@ func (r *Repository) updateModList(filter string) {
 	})
 }
 
-func (r *Repository) showModDetails(mod modmgr.Mod) {
+func (r *Repository) showModDetails(mod *modmgr.Mod) {
 	// Navigation Bar (Topmost)
 	backBtn := widget.NewButtonWithIcon(lang.LocalizeKey("common.back", "Back"), theme.NavigateBackIcon(), func() {
 		r.detailView.Hide()
@@ -308,7 +308,7 @@ func (r *Repository) showModDetails(mod modmgr.Mod) {
 	r.detailView.Show()
 }
 
-func (r *Repository) installModVersion(mod modmgr.Mod, versionID string) {
+func (r *Repository) installModVersion(mod *modmgr.Mod, versionID string) {
 	r.stateLabel.Hide()
 
 	profiles := r.state.ProfileManager.List()
@@ -446,17 +446,23 @@ func (r *Repository) fetchMods() (error, bool) {
 
 		slog.Info("Refreshing mods", "firstId", afterId, "lastId", lastId)
 
-		if mods, err := r.state.Rest.GetModList(ModsPerPage, afterId, lastId); err != nil {
+		if modIDs, err := r.state.Rest.GetModIDs(ModsPerPage, afterId, lastId); err != nil {
 			return err, false
-		} else if len(mods) > 0 {
-			for _, m := range mods {
-				if err := r.modsBind.Append(m); err != nil {
+		} else if len(modIDs) > 0 {
+			for _, m := range modIDs {
+				// TODO: Async fetch mod details with loading state for each item instead of blocking on each request
+				modData, err := r.state.Rest.GetMod(m)
+				if err != nil {
+					slog.Warn("Failed to fetch mod details while refreshing mods", "modID", m, "error", err)
+					continue
+				}
+				if err := r.modsBind.Append(modData); err != nil {
 					return err, false
 				}
 			}
 			r.mu.Lock()
-			r.lastModID = mods[len(mods)-1].ID
-			if len(mods) < ModsPerPage {
+			r.lastModID = modIDs[len(modIDs)-1]
+			if len(modIDs) < ModsPerPage {
 				r.noMoreMods = true
 			}
 			r.mu.Unlock()
@@ -481,7 +487,7 @@ func (r *Repository) reloadMods() {
 	r.noMoreMods = false
 	r.mu.Unlock()
 	fyne.DoAndWait(r.modScroll.ScrollToTop)
-	_ = r.modsBind.Set([]modmgr.Mod{})
+	_ = r.modsBind.Set([]*modmgr.Mod{})
 	if err, _ := r.fetchMods(); err != nil {
 		slog.Error("Failed to reload mods in repository tab", "error", err)
 		r.state.SetError(fmt.Errorf("%s", lang.LocalizeKey("repository.failed_to_load", "Failed to load mods: {{.Error}}", map[string]any{"Error": err.Error()})))
