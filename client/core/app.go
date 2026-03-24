@@ -1,6 +1,7 @@
 package core
 
 import (
+	"compress/zlib"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -14,6 +15,10 @@ import (
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 	"github.com/ikafly144/au_mod_installer/pkg/profile"
 	"github.com/ikafly144/au_mod_installer/pkg/progress"
+)
+
+const (
+	ProfileVersion = "v1"
 )
 
 type App struct {
@@ -100,20 +105,24 @@ func (a *App) ClearModCache() error {
 	return nil
 }
 
-func (a *App) HandleSharedProfile(uri string) (*profile.Profile, error) {
-	if !strings.HasPrefix(uri, "mod-of-us://profile/") {
-		return nil, fmt.Errorf("invalid URI scheme")
+func (a *App) HandleSharedProfile(uri string) (*profile.SharedProfile, error) {
+	var ok bool
+	if uri, ok = strings.CutPrefix(uri, "mod-of-us://profile/"); !ok {
+		return nil, fmt.Errorf("invalid profile URI")
+	}
+	if uri, ok = strings.CutPrefix(uri, ProfileVersion+"/"); !ok {
+		return nil, fmt.Errorf("invalid profile version")
 	}
 
-	dataStr := strings.TrimPrefix(uri, "mod-of-us://profile/")
-	data, err := base64.URLEncoding.DecodeString(dataStr)
+	reader, err := zlib.NewReader(base64.NewDecoder(base64.RawURLEncoding, strings.NewReader(uri)))
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode profile data: %w", err)
 	}
+	defer reader.Close()
 
-	var prof profile.Profile
-	if err := json.Unmarshal(data, &prof); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal profile data: %w", err)
+	var prof profile.SharedProfile
+	if err := json.NewDecoder(reader).Decode(&prof); err != nil {
+		return nil, fmt.Errorf("failed to decode profile JSON: %w", err)
 	}
 
 	// Reset ID to avoid collision if it's a known one, but maybe better to let user decide?
@@ -122,11 +131,16 @@ func (a *App) HandleSharedProfile(uri string) (*profile.Profile, error) {
 }
 
 func (a *App) ExportProfile(prof profile.Profile) (string, error) {
-	data, err := json.Marshal(prof)
-	if err != nil {
+	builder := &strings.Builder{}
+	writer := zlib.NewWriter(base64.NewEncoder(base64.RawURLEncoding, builder))
+	defer writer.Close()
+
+	if err := json.NewEncoder(writer).Encode(prof.MakeShared()); err != nil {
+		return "", err
+	}
+	if err := writer.Flush(); err != nil {
 		return "", err
 	}
 
-	dataStr := base64.URLEncoding.EncodeToString(data)
-	return "mod-of-us://profile/" + dataStr, nil
+	return "mod-of-us://profile/" + ProfileVersion + "/" + builder.String(), nil
 }

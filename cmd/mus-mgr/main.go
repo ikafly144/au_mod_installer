@@ -49,7 +49,7 @@ func parseFileFlag(val string) *parsedFile {
 		return pf
 	}
 
-	for _, part := range strings.Split(val, ";") {
+	for part := range strings.SplitSeq(val, ";") {
 		kv := strings.SplitN(part, "=", 2)
 		if len(kv) == 2 {
 			kStr := strings.TrimSpace(kv[0])

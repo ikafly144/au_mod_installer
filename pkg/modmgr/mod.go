@@ -2,6 +2,7 @@ package modmgr
 
 import (
 	"iter"
+	"log/slog"
 	"slices"
 
 	"github.com/ikafly144/au_mod_installer/common/rest/model"
@@ -100,6 +101,8 @@ func (m ModVersion) Downloads(binaryType aumgr.BinaryType) iter.Seq[model.ModVer
 				if !yield(file) {
 					return
 				}
+			} else {
+				slog.Info("Skipping incompatible file", "file", file, "binaryType", binaryType)
 			}
 		}
 	}

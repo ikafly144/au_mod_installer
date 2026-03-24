@@ -249,6 +249,7 @@ func DownloadMods(cacheDir string, modVersions []ModVersion, binaryType aumgr.Bi
 					return fmt.Errorf("file path is empty for normal file type")
 				}
 				_ = modCacheRoot.MkdirAll(filepath.Dir(path), 0755)
+				slog.Info("Saving mod file to cache", "path", path)
 				destFile, err := modCacheRoot.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 				if err != nil {
 					return err

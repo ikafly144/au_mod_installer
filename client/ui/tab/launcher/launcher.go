@@ -133,19 +133,34 @@ func (l *Launcher) checkSharedURI() {
 					if !confirm {
 						return
 					}
-					l.importProfile(*prof)
+					l.importProfile(prof)
 				}, l.state.Window)
 				return
 			}
 		}
 
-		l.importProfile(*prof)
+		l.importProfile(prof)
 	}, l.state.Window)
 }
 
-func (l *Launcher) importProfile(prof profile.Profile) {
-	prof.UpdatedAt = time.Now()
-	// prof.UpdatedAt is preserved from import
+func (l *Launcher) importProfile(shared *profile.SharedProfile) {
+	prof := profile.Profile{
+		ID:          shared.ID,
+		Name:        shared.Name,
+		Author:      shared.Author,
+		Description: shared.Description,
+		UpdatedAt:   time.Now(),
+	}
+
+	// Fetch mod version infos
+	for modID, versionID := range shared.ModVersions {
+		info, err := l.state.Rest.GetModVersion(modID, versionID)
+		if err != nil {
+			dialog.ShowError(fmt.Errorf("failed to fetch mod version info for %s:%s: %w", modID, versionID, err), l.state.Window)
+			return
+		}
+		prof.AddModVersion(*info)
+	}
 
 	if err := l.state.ProfileManager.Add(prof); err != nil {
 		dialog.ShowError(err, l.state.Window)
