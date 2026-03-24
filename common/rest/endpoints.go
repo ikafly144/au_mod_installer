@@ -36,8 +36,11 @@ func (e *Endpoint) Compile(values url.Values, params ...any) *CompiledEndpoint {
 	path := e.Route
 	for _, param := range params {
 		start := strings.Index(path, ":")
-		end := strings.Index(path, "/")
-		if start == -1 || end == -1 || end < start {
+		end := strings.Index(path[start:], "/") + start
+		if end == start-1 {
+			end = len(path)
+		}
+		if start == -1 || end < start {
 			break
 		}
 		paramValue := fmt.Sprint(param)

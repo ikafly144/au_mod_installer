@@ -61,7 +61,7 @@ func (c *clientImpl) CheckForUpdates(installedVersions map[string]string) (map[s
 	for modID, currentVersion := range installedVersions {
 		latest, err := c.GetLatestModVersion(modID)
 		if err != nil {
-			continue
+			return nil, fmt.Errorf("failed to check for updates for mod %s: %w", modID, err)
 		}
 		if latest != nil && latest.ID != currentVersion {
 			updates[modID] = latest

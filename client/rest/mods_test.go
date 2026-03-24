@@ -15,26 +15,34 @@ import (
 func TestClientImpl_CheckForUpdates(t *testing.T) {
 	// モックサーバーのセットアップ
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Logf("Received request: %s %s", r.Method, r.URL.Path)
 		switch r.URL.Path {
-		case "/mods/mod-1":
+		case "/mod/mod-1":
 			// Mod 1 の詳細（最新バージョンは v1.1.0）
 			mod := model.ModDetails{ID: "mod-1", LatestVersionID: "v1.1.0"}
 			if err := json.NewEncoder(w).Encode(mod); err != nil {
 				t.Errorf("Failed to encode response: %v", err)
 			}
-		case "/mods/mod-1/versions/v1.1.0":
+		case "/mod/mod-1/version/v1.1.0":
 			// Mod 1 の最新バージョンの詳細
 			version := model.ModVersionDetails{ID: "v1.1.0", ModID: "mod-1"}
 			if err := json.NewEncoder(w).Encode(version); err != nil {
 				t.Errorf("Failed to encode response: %v", err)
 			}
-		case "/mods/mod-2":
+		case "/mod/mod-2":
 			// Mod 2 の詳細（最新バージョンは v2.0.0）
 			mod := model.ModDetails{ID: "mod-2", LatestVersionID: "v2.0.0"}
 			if err := json.NewEncoder(w).Encode(mod); err != nil {
 				t.Errorf("Failed to encode response: %v", err)
 			}
+		case "/mod/mod-2/version/v2.0.0":
+			// Mod 2 の最新バージョンの詳細
+			version := model.ModVersionDetails{ID: "v2.0.0", ModID: "mod-2"}
+			if err := json.NewEncoder(w).Encode(version); err != nil {
+				t.Errorf("Failed to encode response: %v", err)
+			}
 		default:
+			t.Errorf("Unexpected request path: %s", r.URL.Path)
 			w.WriteHeader(http.StatusNotFound)
 		}
 	}))
