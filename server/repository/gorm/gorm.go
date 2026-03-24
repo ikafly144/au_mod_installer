@@ -54,7 +54,7 @@ func (r *GormRepository) GetModIds(after string, limit int) ([]string, string, e
 
 func (r *GormRepository) GetModDetails(modID string) (*model.ModDetails, error) {
 	var mod model.ModDetails
-	result := r.db.Preload("LatestVersion").First(&mod, "id = ?", modID)
+	result := r.db.First(&mod, "id = ?", modID)
 	if result.Error != nil {
 		return nil, result.Error
 	}
