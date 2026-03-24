@@ -96,11 +96,19 @@ func (r *GormRepository) UpdateModVersion(modID, versionID string, details *mode
 }
 
 func (r *GormRepository) DeleteMod(modID string) error {
-	result := r.db.Delete(&model.ModDetails{}, "id = ?", modID)
+	mod, err := r.GetModDetails(modID)
+	if err != nil {
+		return err
+	}
+	result := r.db.Select("LatestVersion").Delete(&mod)
 	return result.Error
 }
 
 func (r *GormRepository) DeleteModVersion(modID, versionID string) error {
-	result := r.db.Delete(&model.ModVersionDetails{}, "mod_id = ? AND id = ?", modID, versionID)
+	version, err := r.GetModVersionDetails(modID, versionID)
+	if err != nil {
+		return err
+	}
+	result := r.db.Select("Files").Delete(&version)
 	return result.Error
 }

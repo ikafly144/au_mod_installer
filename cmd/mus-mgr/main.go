@@ -119,7 +119,7 @@ func main() {
 							&cli.StringFlag{Name: "id", Usage: "Mod ID (default: uuid)", Value: ""},
 							&cli.StringFlag{Name: "name", Required: true},
 							&cli.StringFlag{Name: "author", Required: true},
-							&cli.StringFlag{Name: "desc", Required: true},
+							&cli.StringFlag{Name: "desc", Required: false},
 						},
 						Action: func(c *cli.Context) error {
 							db, err := gorm.Open(postgres.Open(dbUrl))
@@ -283,7 +283,8 @@ func main() {
 							}
 
 							ver := &model.ModVersionDetails{
-								ID: verId,
+								ID:    verId,
+								ModID: modId,
 							}
 							var deps []model.ModVersionDependency
 							for _, d := range c.StringSlice("dependency") {
@@ -363,6 +364,8 @@ func main() {
 
 								verFile := model.ModVersionFile{
 									ID:             uuid.New().String(),
+									ModID:          modId,
+									VersionID:      ver.ID,
 									Filename:       filename,
 									ContentType:    model.FileType(pf.Type),
 									Size:           size,
@@ -380,7 +383,7 @@ func main() {
 							fmt.Printf("Created version: %s\n", ver.ID)
 
 							if c.Bool("set-latest") {
-								update := &model.ModDetails{LatestVersionID: ver.ID}
+								update := &model.ModDetails{LatestVersionID: &ver.ID}
 								if err := repo.UpdateMod(modId, update); err != nil {
 									return fmt.Errorf("failed to update latest version: %w", err)
 								}

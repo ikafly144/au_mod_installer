@@ -71,8 +71,11 @@ type ModDetails struct {
 	Description string `gorm:"not null" json:"description"`
 	Author      string `gorm:"not null" json:"author"`
 
-	LatestVersionID string             `gorm:"index;default:null" json:"latest_version"`
+	LatestVersionID *string            `gorm:"index;default:null;" json:"latest_version"`
 	LatestVersion   *ModVersionDetails `gorm:"foreignKey:LatestVersionID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;" json:"-"`
+
+	Versions []ModVersionDetails `gorm:"foreignKey:ModID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"-"`
+	Files    []ModVersionFile    `gorm:"foreignKey:ModID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"-"`
 
 	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`
@@ -80,9 +83,9 @@ type ModDetails struct {
 
 type ModVersionDetails struct {
 	ID    string `gorm:"primaryKey" json:"id"`
-	ModID string `gorm:"index" json:"mod_id"`
+	ModID string `gorm:"index;not null" json:"-"`
 
-	Files        []ModVersionFile `gorm:"foreignKey:VersionID" json:"files,omitempty"`
+	Files        []ModVersionFile `gorm:"foreignKey:VersionID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"files,omitempty"`
 	Dependencies DependencyArray  `gorm:"type:json" json:"dependencies,omitempty"`
 
 	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
@@ -91,7 +94,8 @@ type ModVersionDetails struct {
 
 type ModVersionFile struct {
 	ID        string `gorm:"primaryKey" json:"id"`
-	VersionID string `gorm:"index" json:"-"`
+	ModID     string `gorm:"index:idx_mod_version_file;not null" json:"-"`
+	VersionID string `gorm:"index:idx_mod_version_file;not null" json:"-"`
 
 	Filename    string   `gorm:"not null" json:"filename"`
 	ContentType FileType `gorm:"not null" json:"content_type"`
