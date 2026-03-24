@@ -3,8 +3,6 @@ package repo
 import (
 	"fmt"
 	"log/slog"
-	"net/url"
-	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -141,9 +139,6 @@ func (r *Repository) updateModList(filter string) {
 
 	searchText := strings.ToLower(filter)
 	for _, mod := range mods {
-		if !mod.Type.IsVisible() {
-			continue
-		}
 		if searchText != "" && !strings.Contains(strings.ToLower(mod.Name), searchText) {
 			continue
 		}
@@ -165,7 +160,7 @@ func (r *Repository) updateModList(filter string) {
 			if activeID, err := uuid.Parse(activeProfileIDStr); err == nil {
 				if activeProfile, ok := r.state.ProfileManager.Get(activeID); ok {
 					if installedVersion, ok := activeProfile.ModVersions[mod.ID]; ok {
-						if installedVersion.ID != mod.LatestVersion {
+						if installedVersion.ID != mod.LatestVersionID {
 							updateBadge.SetText(lang.LocalizeKey("repository.update_available", "Update Available"))
 							updateBadge.Importance = widget.WarningImportance
 							updateBadge.Show()
@@ -240,16 +235,16 @@ func (r *Repository) showModDetails(mod modmgr.Mod) {
 		widget.NewLabel(lang.LocalizeKey("repository.author", "Author: {{.Author}}", map[string]any{"Author": mod.Author})),
 	)
 
-	if mod.Website != "" {
-		if u, err := url.Parse(mod.Website); err == nil {
-			headerText.Add(widget.NewHyperlink(lang.LocalizeKey("repository.website", "Website"), u))
-		} else {
-			slog.Warn("Failed to parse mod website URL", "url", mod.Website, "error", err)
-		}
-	}
+	// if mod.Website != "" {
+	// 	if u, err := url.Parse(mod.Website); err == nil {
+	// 		headerText.Add(widget.NewHyperlink(lang.LocalizeKey("repository.website", "Website"), u))
+	// 	} else {
+	// 		slog.Warn("Failed to parse mod website URL", "url", mod.Website, "error", err)
+	// 	}
+	// }
 
 	headerText.Add(widget.NewButton(lang.LocalizeKey("repository.install_latest", "Install Latest"), func() {
-		r.installModVersion(mod, mod.LatestVersion)
+		r.installModVersion(mod, mod.LatestVersionID)
 	}))
 
 	header := container.New(layout.NewBorderLayout(nil, nil, img, nil),
@@ -270,7 +265,7 @@ func (r *Repository) showModDetails(mod modmgr.Mod) {
 	// Loading versions
 	versionsList.Add(widget.NewProgressBarInfinite())
 	go func() {
-		versions, err := r.state.Rest.GetModVersions(mod.ID, 100, "")
+		versions, err := r.state.Rest.GetModVersionIDs(mod.ID, 100, "")
 		fyne.Do(func() {
 			versionsList.Objects = nil
 			if err != nil {
@@ -278,9 +273,9 @@ func (r *Repository) showModDetails(mod modmgr.Mod) {
 				return
 			}
 			for _, v := range versions {
-				verLabel := widget.NewLabel(v.ID)
+				verLabel := widget.NewLabel(v)
 				addBtn := widget.NewButton(lang.LocalizeKey("repository.add_to_profile", "Add to Profile"), func() {
-					r.installModVersion(mod, v.ID)
+					r.installModVersion(mod, v)
 				})
 				row := container.New(layout.NewBorderLayout(nil, nil, nil, addBtn),
 					addBtn,
@@ -465,13 +460,6 @@ func (r *Repository) fetchMods() (error, bool) {
 				r.noMoreMods = true
 			}
 			r.mu.Unlock()
-
-			if !slices.ContainsFunc(mods, func(m modmgr.Mod) bool {
-				return m.Type.IsVisible()
-			}) {
-				slog.Info("No visible mods in loaded mods, loading next page")
-				return r.fetchMods()
-			}
 
 			return nil, true
 		} else {

@@ -78,12 +78,16 @@ func (f *FileClient) GetMod(modID string) (*modmgr.Mod, error) {
 	return &m, nil
 }
 
-func (f *FileClient) GetModVersions(modID string, limit int, after string) ([]modmgr.ModVersion, error) {
+func (f *FileClient) GetModVersionIDs(modID string, limit int, after string) ([]string, error) {
 	versionsMap, ok := f.versionStore[modID]
 	if !ok {
 		return nil, nil
 	}
-	return versionsMap["all"], nil
+	var versionIDs []string
+	for _, v := range versionsMap["all"] {
+		versionIDs = append(versionIDs, v.ID)
+	}
+	return versionIDs, nil
 }
 
 func (f *FileClient) GetModVersion(modID string, versionID string) (*modmgr.ModVersion, error) {
@@ -100,10 +104,10 @@ func (f *FileClient) GetModVersion(modID string, versionID string) (*modmgr.ModV
 
 func (f *FileClient) GetLatestModVersion(modID string) (*modmgr.ModVersion, error) {
 	mod, ok := f.modStore[modID]
-	if !ok || mod.LatestVersion == "" {
+	if !ok || mod.LatestVersionID == "" {
 		return nil, nil
 	}
-	return f.GetModVersion(modID, mod.LatestVersion)
+	return f.GetModVersion(modID, mod.LatestVersionID)
 }
 
 func (f *FileClient) CheckForUpdates(installedVersions map[string]string) (map[string]*modmgr.ModVersion, error) {

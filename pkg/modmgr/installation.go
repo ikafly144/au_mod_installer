@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/ikafly144/au_mod_installer/common/rest/model"
 	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
 	"github.com/ikafly144/au_mod_installer/pkg/progress"
 )
@@ -176,29 +177,43 @@ func DownloadMods(cacheDir string, modVersions []ModVersion, binaryType aumgr.Bi
 
 		slog.Info("Downloading mod", "modId", modVersions[i].ModID, "versionId", modVersions[i].ID)
 		for file := range modVersions[i].Downloads(binaryType) {
-			req, err := http.NewRequest(http.MethodGet, file.URL, nil)
-			if err != nil {
-				return err
+			var response *http.Response
+			for _, uri := range file.Downloads {
+				req, err := http.NewRequest(http.MethodGet, uri, nil)
+				if err != nil {
+					slog.Error("Failed to create HTTP request for mod file", "url", uri, "error", err)
+					continue
+				}
+				resp, err := hClient.Do(req)
+				if err != nil {
+					slog.Error("Failed to download mod file", "url", uri, "error", err)
+					continue
+				}
+				defer resp.Body.Close()
+				if resp.StatusCode != http.StatusOK {
+					slog.Error("Failed to download mod file, non-OK status", "url", uri, "status", resp.Status)
+					continue
+				}
+				response = resp
+				break
 			}
-			resp, err := hClient.Do(req)
-			if err != nil {
-				return err
+			if response == nil {
+				return fmt.Errorf("failed to download mod file from all sources: %s@%s (%s)", modVersions[i].ModID, modVersions[i].ID, file.ID)
 			}
-			defer resp.Body.Close()
-			contentLength := resp.ContentLength
-			slog.Info("Downloading mod file", "url", file.URL, "contentLength", contentLength)
+			contentLength := response.ContentLength
+			slog.Info("Downloading mod file", "url", response.Request.URL, "contentLength", contentLength)
 
-			switch file.FileType {
-			case FileTypeZip:
-				_, err := extractZip(resp.Body, contentLength, modCacheRoot, progress, totalDownloadCount)
+			switch file.ContentType {
+			case model.FileTypeArchive:
+				_, err := extractZip(response.Body, contentLength, modCacheRoot, progress, totalDownloadCount)
 				if err != nil {
 					return err
 				}
-			case FileTypeNormal, FileTypePlugin:
-				path := file.Path
+			case model.FileTypeBinary, model.FileTypePluginDll:
+				path := file.ExtractPath
 				var filename string
 				// RFC-6266 parsing for filename from Content-Disposition header
-				if v := resp.Header.Get("Content-Disposition"); v != "" {
+				if v := response.Header.Get("Content-Disposition"); v != "" {
 					_, params, err := mime.ParseMediaType(v)
 					if err == nil {
 						if fn, ok := params["filename*"]; ok {
@@ -223,9 +238,9 @@ func DownloadMods(cacheDir string, modVersions []ModVersion, binaryType aumgr.Bi
 						return fmt.Errorf("file path is empty for normal file type")
 					}
 				}
-				if file.FileType == FileTypePlugin {
+				if file.ContentType == model.FileTypePluginDll {
 					if filename == "" {
-						return fmt.Errorf("failed to determine plugin filename for URL: %s", file.URL)
+						return fmt.Errorf("failed to determine plugin filename for URL: %v", file.Downloads)
 					}
 					// For plugin files, use a fixed naming scheme
 					path = filepath.Join("BepInEx", "plugins", filename)
@@ -250,11 +265,11 @@ func DownloadMods(cacheDir string, modVersions []ModVersion, binaryType aumgr.Bi
 					progress: progress,
 					buf:      destFile,
 				}
-				if _, err := io.Copy(buf, resp.Body); err != nil {
+				if _, err := io.Copy(buf, response.Body); err != nil {
 					return err
 				}
 			default:
-				return fmt.Errorf("unknown file type: %s", file.FileType)
+				return fmt.Errorf("unknown file type: %s", file.ContentType)
 			}
 		}
 	}
@@ -349,196 +364,49 @@ func ApplyMods(gameDir string, cacheDir string, modVersions []ModVersion, binary
 	return restoreInfo, nil
 }
 
-func RestoreGame(gameDir string, restoreInfo *RestoreInfo) error {
-	if restoreInfo == nil {
-		return nil
-	}
+// func RestoreGame(gameDir string, restoreInfo *RestoreInfo) error {
+// 	if restoreInfo == nil {
+// 		return nil
+// 	}
 
-	// Delete added files
-	// Sort by length desc to delete files before directories?
-	// Actually we only recorded files.
-	for _, path := range restoreInfo.Added {
-		fullPath := filepath.Join(gameDir, path)
-		if err := os.Remove(fullPath); err != nil && !os.IsNotExist(err) {
-			slog.Warn("Failed to remove added file", "path", path, "error", err)
-		}
-	}
+// 	// Delete added files
+// 	// Sort by length desc to delete files before directories?
+// 	// Actually we only recorded files.
+// 	for _, path := range restoreInfo.Added {
+// 		fullPath := filepath.Join(gameDir, path)
+// 		if err := os.Remove(fullPath); err != nil && !os.IsNotExist(err) {
+// 			slog.Warn("Failed to remove added file", "path", path, "error", err)
+// 		}
+// 	}
 
-	// Restore moved files
-	for origPath, backupPath := range restoreInfo.Moved {
-		destPath := filepath.Join(gameDir, origPath)
-		if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
-			slog.Warn("Failed to create directory for restore", "path", destPath, "error", err)
-			continue
-		}
-		// Remove the modded file if it exists (it should, unless we deleted it above)
-		_ = os.Remove(destPath)
+// 	// Restore moved files
+// 	for origPath, backupPath := range restoreInfo.Moved {
+// 		destPath := filepath.Join(gameDir, origPath)
+// 		if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+// 			slog.Warn("Failed to create directory for restore", "path", destPath, "error", err)
+// 			continue
+// 		}
+// 		// Remove the modded file if it exists (it should, unless we deleted it above)
+// 		_ = os.Remove(destPath)
 
-		if err := os.Rename(backupPath, destPath); err != nil {
-			slog.Warn("Failed to restore file", "path", origPath, "error", err)
-			// Try copy
-			data, err := os.ReadFile(backupPath)
-			if err == nil {
-				_ = os.WriteFile(destPath, data, 0644)
-			}
-		}
-	}
+// 		if err := os.Rename(backupPath, destPath); err != nil {
+// 			slog.Warn("Failed to restore file", "path", origPath, "error", err)
+// 			// Try copy
+// 			data, err := os.ReadFile(backupPath)
+// 			if err == nil {
+// 				_ = os.WriteFile(destPath, data, 0644)
+// 			}
+// 		}
+// 	}
 
-	// Cleanup backup dir
-	_ = os.RemoveAll(restoreInfo.BackupDir)
+// 	// Cleanup backup dir
+// 	_ = os.RemoveAll(restoreInfo.BackupDir)
 
-	// Cleanup empty directories in game dir?
-	// Maybe too risky.
+// 	// Cleanup empty directories in game dir?
+// 	// Maybe too risky.
 
-	return nil
-}
-
-func InstallMod(modInstallLocation *os.Root, gameVersion string, launcherType aumgr.LauncherType, binaryType aumgr.BinaryType, modVersions []ModVersion, progress progress.Progress) (*ModInstallation, error) {
-	slog.Info("Starting mod installation", "mods", modVersions)
-	if progress != nil {
-		progress.SetValue(0.0)
-		progress.Start()
-		defer progress.Done()
-	}
-
-	if binaryType == aumgr.BinaryTypeUnknown {
-		return nil, fmt.Errorf("unknown binary type")
-	}
-	for _, mod := range modVersions {
-		if !mod.IsCompatible(launcherType, binaryType, gameVersion) {
-			return nil, fmt.Errorf("mod is not compatible with the current game version: %s", gameVersion)
-		}
-	}
-
-	var remainMods []InstalledVersionInfo
-	// Remove old installation if exists
-	if _, err := modInstallLocation.Stat(InstallationInfoFileName); err == nil || !os.IsNotExist(err) {
-		remainModInfos, err := UninstallRemainingMods(modInstallLocation, progress, modVersions)
-		if err != nil {
-			return nil, fmt.Errorf("failed to remove old mod installation: %w", err)
-		}
-		progress.SetValue(0.0)
-		slog.Info("Filtered remaining mods after uninstallation", "remainMods", remainModInfos)
-		for _, remainModInfo := range remainModInfos {
-			for _, modVersion := range modVersions {
-				if remainModInfo.ModID == modVersion.ModID && remainModInfo.ID == modVersion.ID {
-					remainMods = append(remainMods, remainModInfo)
-					break
-				}
-			}
-		}
-	}
-
-	var installedMods []InstalledVersionInfo
-	for _, modVersion := range modVersions {
-		installedMods = append(installedMods, InstalledVersionInfo{
-			ModVersion: modVersion,
-			Paths:      nil,
-		})
-	}
-
-	installation := &ModInstallation{
-		FileVersion:          currentFileVersion,
-		InstalledMods:        installedMods,
-		InstalledGameVersion: gameVersion,
-		Status:               InstallStatusBroken,
-	}
-	if err := SaveInstallationInfo(modInstallLocation, installation); err != nil {
-		return nil, fmt.Errorf("failed to save installation info: %w", err)
-	}
-	defer func(installation *ModInstallation) {
-		if err := SaveInstallationInfo(modInstallLocation, installation); err != nil {
-			slog.Error("Failed to finalize installation info", "error", err)
-		}
-	}(installation)
-
-	totalDownloadCount := func() int {
-		count := 0
-		for i := range modVersions {
-			count += modVersions[i].CompatibleFilesCount(binaryType)
-		}
-		return count
-	}()
-	hClient := http.DefaultClient
-	for i := range modVersions {
-		if remainMods != nil {
-			shouldSkip := false
-			var remainModInfo InstalledVersionInfo
-			for _, remainMod := range remainMods {
-				if modVersions[i].ModID == remainMod.ModID && modVersions[i].ID == remainMod.ID {
-					shouldSkip = true
-					remainModInfo = remainMod
-					break
-				}
-			}
-			if shouldSkip {
-				slog.Info("Skipping already installed mod", "modId", modVersions[i].ModID, "versionId", modVersions[i].ID)
-				installation.InstalledMods[i] = remainModInfo
-				if progress != nil {
-					progress.SetValue(progress.GetValue() + (1.0 / float64(totalDownloadCount)))
-				}
-				continue
-			}
-		}
-		slog.Info("Installing mod", "modId", modVersions[i].ModID, "versionId", modVersions[i].ID)
-		for file := range modVersions[i].Downloads(binaryType) {
-			req, err := http.NewRequest(http.MethodGet, file.URL, nil)
-			if err != nil {
-				return nil, err
-			}
-			resp, err := hClient.Do(req)
-			if err != nil {
-				return nil, err
-			}
-			defer resp.Body.Close()
-			contentLength := resp.ContentLength
-			slog.Info("Downloading mod", "url", file.URL, "contentLength", contentLength)
-			switch file.FileType {
-			case FileTypeZip:
-				extractFiles, err := extractZip(resp.Body, contentLength, modInstallLocation, progress, totalDownloadCount)
-				installation.InstalledMods[i].Paths = append(installation.InstalledMods[i].Paths, extractFiles...)
-				if err != nil {
-					if e := SaveInstallationInfo(modInstallLocation, installation); e != nil {
-						return nil, fmt.Errorf("failed to install mod: %w (%v)", err, e)
-					}
-					return nil, err
-				}
-			case FileTypeNormal:
-				if file.Path == "" {
-					return nil, fmt.Errorf("file path is empty for normal file type")
-				}
-				_ = modInstallLocation.MkdirAll(filepath.Dir(file.Path), 0755)
-				destFile, err := modInstallLocation.OpenFile(file.Path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-				if err != nil {
-					return nil, err
-				}
-				defer destFile.Close()
-				startVal := 0.0
-				if progress != nil {
-					startVal = progress.GetValue()
-				}
-				buf := &ProgressWrapper{
-					start:    startVal,
-					goal:     uint64(contentLength),
-					scale:    (1.0 / float64(totalDownloadCount)),
-					progress: progress,
-					buf:      destFile,
-				}
-				installation.InstalledMods[i].Paths = append(installation.InstalledMods[i].Paths, file.Path)
-				if _, err := io.Copy(buf, resp.Body); err != nil {
-					if e := SaveInstallationInfo(modInstallLocation, installation); e != nil {
-						return nil, fmt.Errorf("failed to install mod: %w (%v)", err, e)
-					}
-					return nil, err
-				}
-			default:
-				return nil, fmt.Errorf("unknown file type: %s", file.FileType)
-			}
-		}
-	}
-	installation.Status = InstallStatusCompatible
-	return installation, nil
-}
+// 	return nil
+// }
 
 func UninstallMod(modInstallLocation *os.Root, progress progress.Progress, remainMods []ModVersion) error {
 	if _, err := uninstallMod(modInstallLocation, progress, remainMods); err != nil {

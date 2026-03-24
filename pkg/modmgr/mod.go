@@ -3,24 +3,13 @@ package modmgr
 import (
 	"iter"
 	"slices"
-	"time"
 
+	"github.com/ikafly144/au_mod_installer/common/rest/model"
 	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
 )
 
 type Mod struct {
-	ID         string    `json:"id"`                    // Mod unique ID
-	Type       ModType   `json:"type,omitempty"`        // Mod type
-	Name       string    `json:"name"`                  // Mod name
-	Author     string    `json:"author"`                // Author name
-	Thumbnail  string    `json:"thumbnail,omitempty"`   // URL to thumbnail image (optional)
-	Website    string    `json:"website,omitempty"`     // Mod website URL (optional)
-	GitHubRepo string    `json:"github_repo,omitempty"` // GitHub repository (owner/repo format)
-	CreatedAt  time.Time `json:"created_at"`            // Creation timestamp
-	UpdatedAt  time.Time `json:"updated_at"`            // Last update timestamp
-
-	LatestVersion string `json:"latest_version,omitempty"` // Latest version ID (optional)
-	Description   string `json:"description,omitempty"`    // Mod description
+	model.ModDetails
 }
 
 type ModType string
@@ -43,30 +32,23 @@ func (mt ModType) IsVisible() bool {
 }
 
 type ModVersion struct {
-	ID           string          `json:"id"`
-	ModID        string          `json:"mod_id"`
-	CreatedAt    time.Time       `json:"created_at"`
-	Dependencies []ModDependency `json:"dependencies,omitempty"`
-	Files        []ModFile       `json:"files,omitempty"`
-	GameVersions []string        `json:"game_versions,omitempty"`
-
-	// Deprecated: use profile.Profile to represent mod packs now
-	Mods []ModPack `json:"mods,omitempty"`
+	model.ModVersionDetails
 }
 
+// Deprecated: use model.ModVersionDependency instead
 type ModDependency struct {
 	ID      string            `json:"id"`
 	Version string            `json:"version,omitempty"`
 	Type    ModDependencyType `json:"type"`
 }
 
-type ModDependencyType string
+type ModDependencyType = model.DependencyType
 
 const (
-	ModDependencyTypeRequired ModDependencyType = "required"
-	ModDependencyTypeOptional ModDependencyType = "optional"
-	ModDependencyTypeConflict ModDependencyType = "conflict"
-	ModDependencyTypeEmbedded ModDependencyType = "embedded"
+	ModDependencyTypeRequired ModDependencyType = model.DependencyTypeRequired
+	ModDependencyTypeOptional ModDependencyType = model.DependencyTypeOptional
+	ModDependencyTypeConflict ModDependencyType = model.DependencyTypeConflict
+	ModDependencyTypeEmbedded ModDependencyType = model.DependencyTypeEmbedded
 )
 
 // Deprecated: use profile.Profile to represent mod packs now
@@ -75,6 +57,7 @@ type ModPack struct {
 	Version string `json:"version,omitempty"`
 }
 
+// Deprecated: use model.ModVersionFile instead
 type ModFile struct {
 	Compatible []aumgr.BinaryType `json:"compatible"`
 	FileType   FileType           `json:"file_type"`
@@ -92,7 +75,7 @@ const (
 )
 
 func (m ModVersion) IsCompatible(launcherType aumgr.LauncherType, binaryType aumgr.BinaryType, gameVersion string) bool {
-	if m.CompatibleFilesCount(binaryType) == 0 && (len(m.Mods) == 0 && len(m.Files) > 0) {
+	if m.CompatibleFilesCount(binaryType) == 0 && len(m.Files) > 0 {
 		return false
 	}
 	// Check game version compatibility
@@ -103,23 +86,21 @@ func (m ModVersion) IsCompatible(launcherType aumgr.LauncherType, binaryType aum
 func (m ModVersion) CompatibleFilesCount(binaryType aumgr.BinaryType) int {
 	var count int
 	for _, file := range m.Files {
-		if slices.Contains(file.Compatible, binaryType) {
+		if binaryType.IsCompatibleWith(file.TargetPlatform) {
 			count++
 		}
 	}
 	return count
 }
 
-func (m ModVersion) Downloads(binaryType aumgr.BinaryType) iter.Seq[ModFile] {
-	return func(yield func(ModFile) bool) {
+func (m ModVersion) Downloads(binaryType aumgr.BinaryType) iter.Seq[model.ModVersionFile] {
+	return func(yield func(model.ModVersionFile) bool) {
 		for _, file := range m.Files {
-			for _, t := range file.Compatible {
-				if t == binaryType {
-					if !yield(file) {
-						return
-					}
-					break
+			if binaryType.IsCompatibleWith(file.TargetPlatform) {
+				if !yield(file) {
+					return
 				}
+				break
 			}
 		}
 	}

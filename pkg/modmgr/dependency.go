@@ -26,12 +26,12 @@ func ResolveDependencies(initialMods []ModVersion, provider VersionProvider) (ma
 		queue = queue[1:]
 
 		for _, dep := range current.Dependencies {
-			if dep.Type != ModDependencyTypeRequired {
+			if dep.DependencyType != ModDependencyTypeRequired {
 				continue
 			}
 
 			// Check if already resolved
-			if _, ok := resolved[dep.ID]; ok {
+			if _, ok := resolved[dep.ModID]; ok {
 				// TODO: Check version compatibility if dep.Version is specified
 				continue
 			}
@@ -44,16 +44,16 @@ func ResolveDependencies(initialMods []ModVersion, provider VersionProvider) (ma
 
 			var depVersion *ModVersion
 			var err error
-			if dep.Version == "" {
-				depVersion, err = provider.GetLatestModVersion(dep.ID)
+			if dep.VersionID == "" {
+				depVersion, err = provider.GetLatestModVersion(dep.ModID)
 			} else {
-				depVersion, err = provider.GetModVersion(dep.ID, dep.Version)
+				depVersion, err = provider.GetModVersion(dep.ModID, dep.VersionID)
 			}
 			if err != nil {
-				return nil, fmt.Errorf("failed to fetch dependency %s (version: %s): %w", dep.ID, dep.Version, err)
+				return nil, fmt.Errorf("failed to fetch dependency %s (version: %s): %w", dep.ModID, dep.VersionID, err)
 			}
 
-			resolved[dep.ID] = *depVersion
+			resolved[dep.ModID] = *depVersion
 			queue = append(queue, *depVersion)
 		}
 	}

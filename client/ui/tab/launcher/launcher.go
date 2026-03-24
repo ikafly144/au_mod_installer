@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
@@ -825,16 +824,20 @@ func (l *Launcher) newModDetailsDialog(mod modmgr.Mod, onSelect func(modmgr.ModV
 
 	go func() {
 		defer fyne.Do(loading.Hide)
-		v, err := l.state.Rest.GetModVersions(mod.ID, 100, "")
+		v, err := l.state.Rest.GetModVersionIDs(mod.ID, 100, "")
 		if err != nil {
 			d.Hide()
 			dialog.ShowError(err, l.state.Window)
 			return
 		}
-		sort.SliceStable(v, func(i, j int) bool {
-			return v[i].CreatedAt.After(v[j].CreatedAt)
-		})
-		versions = v
+		versions = make([]modmgr.ModVersion, len(v))
+		// TODO: Async fetch version details
+		for i, id := range v {
+			version, err := l.state.Rest.GetModVersion(mod.ID, id)
+			if err == nil {
+				versions[i] = *version
+			}
+		}
 		fyne.Do(func() {
 			versionList.Refresh()
 		})

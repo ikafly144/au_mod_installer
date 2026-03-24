@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/ikafly144/au_mod_installer/common/rest"
+	restmodel "github.com/ikafly144/au_mod_installer/common/rest/model"
 	"github.com/ikafly144/au_mod_installer/server/service"
 )
 
@@ -35,9 +36,9 @@ func router(srv *service.ModService, pathPrefix string, basePath string) http.Ha
 			return
 		}
 
-		ctx.JSON(http.StatusOK, gin.H{
-			"ids":     modIDs,
-			"next_id": nextID,
+		ctx.JSON(http.StatusOK, restmodel.ModListResult{
+			IDs:    modIDs,
+			NextID: nextID,
 		})
 	})
 	api.GET(rest.EndpointGetModDetail.Route, func(ctx *gin.Context) {
@@ -62,8 +63,8 @@ func router(srv *service.ModService, pathPrefix string, basePath string) http.Ha
 			return
 		}
 
-		ctx.JSON(http.StatusOK, gin.H{
-			"ids": versionIDs,
+		ctx.JSON(http.StatusOK, restmodel.ModVersionListResult{
+			IDs: versionIDs,
 		})
 	})
 	api.GET(rest.EndpointGetModVersionDetail.Route, func(ctx *gin.Context) {

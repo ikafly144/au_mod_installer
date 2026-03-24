@@ -4,6 +4,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/ikafly144/au_mod_installer/common/rest/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -18,8 +19,10 @@ func TestInstallationInfo_SaveAndLoad(t *testing.T) {
 	defer gameRoot.Close()
 
 	modVersion := ModVersion{
-		ID:    "v1.2.3",
-		ModID: "test-mod",
+		ModVersionDetails: model.ModVersionDetails{
+			ID:    "v1.2.3",
+			ModID: "test-mod",
+		},
 	}
 
 	installation := &ModInstallation{

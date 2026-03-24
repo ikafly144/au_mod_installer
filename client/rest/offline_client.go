@@ -29,7 +29,7 @@ func (c *OfflineClient) GetMod(modID string) (*modmgr.Mod, error) {
 	return nil, errors.New("offline mode: mod details not available")
 }
 
-func (c *OfflineClient) GetModVersions(modID string, limit int, after string) ([]modmgr.ModVersion, error) {
+func (c *OfflineClient) GetModVersionIDs(modID string, limit int, after string) ([]string, error) {
 	return nil, errors.New("offline mode: mod versions not available")
 }
 
