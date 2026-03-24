@@ -3,6 +3,8 @@ services:
   postgres:
     image: postgres:17-alpine
     restart: unless-stopped
+    ports:
+      - "5432:5432"
     networks:
       - default
     volumes:
@@ -38,7 +40,7 @@ services:
       - .env
     environment:
       - TZ=Asia/Tokyo
-      - PORT=8180
+      - ADDR=:8180
       - DATABASE_URL=postgres://postgres:password@postgres:5432/au_mod_installer?sslmode=disable
     depends_on:
       postgres:

@@ -33,7 +33,20 @@ func main() {
 
 func realMain(ctx context.Context) error {
 	var addr = flag.String("addr", ":8080", "Address to listen on")
+	var pathPrefix = flag.String("path-prefix", "/api", "Path prefix for API endpoints")
+	var basePath = flag.String("base-path", "/v1", "Base path for API endpoints")
 	flag.Parse()
+
+	// read from environment variables
+	if envAddr := os.Getenv("ADDR"); envAddr != "" {
+		*addr = envAddr
+	}
+	if envPathPrefix := os.Getenv("PATH_PREFIX"); envPathPrefix != "" {
+		*pathPrefix = envPathPrefix
+	}
+	if envBasePath := os.Getenv("BASE_PATH"); envBasePath != "" {
+		*basePath = envBasePath
+	}
 
 	db, err := gorm.Open(postgres.Open(os.Getenv("DATABASE_URL")))
 	if err != nil {
@@ -43,7 +56,7 @@ func realMain(ctx context.Context) error {
 
 	srv := &http.Server{
 		Addr:    *addr,
-		Handler: router(modSrv),
+		Handler: router(modSrv, *pathPrefix, *basePath),
 	}
 
 	go func() {

@@ -11,10 +11,11 @@ import (
 	"github.com/ikafly144/au_mod_installer/server/service"
 )
 
-func router(srv *service.ModService) http.Handler {
+func router(srv *service.ModService, pathPrefix string, basePath string) http.Handler {
 	r := gin.Default()
 
-	r.GET(rest.EndpointGetModList.Route, func(ctx *gin.Context) {
+	api := r.Group(basePath)
+	api.GET(rest.EndpointGetModList.Route, func(ctx *gin.Context) {
 		after := ctx.Query("after")
 		limitStr := ctx.Query("limit")
 		limit := 0
@@ -39,7 +40,7 @@ func router(srv *service.ModService) http.Handler {
 			"next_id": nextID,
 		})
 	})
-	r.GET(rest.EndpointGetModDetail.Route, func(ctx *gin.Context) {
+	api.GET(rest.EndpointGetModDetail.Route, func(ctx *gin.Context) {
 		modID := ctx.Param("mod_id")
 
 		details, err := srv.GetModDetails(modID)
@@ -51,7 +52,7 @@ func router(srv *service.ModService) http.Handler {
 
 		ctx.JSON(http.StatusOK, details)
 	})
-	r.GET(rest.EndpointGetModVersionList.Route, func(ctx *gin.Context) {
+	api.GET(rest.EndpointGetModVersionList.Route, func(ctx *gin.Context) {
 		modID := ctx.Param("mod_id")
 
 		versionIDs, err := srv.GetModVersionIds(modID)
@@ -65,7 +66,7 @@ func router(srv *service.ModService) http.Handler {
 			"ids": versionIDs,
 		})
 	})
-	r.GET(rest.EndpointGetModVersionDetail.Route, func(ctx *gin.Context) {
+	api.GET(rest.EndpointGetModVersionDetail.Route, func(ctx *gin.Context) {
 		modID := ctx.Param("mod_id")
 		versionID := ctx.Param("version_id")
 
@@ -78,9 +79,13 @@ func router(srv *service.ModService) http.Handler {
 
 		ctx.JSON(http.StatusOK, details)
 	})
-	r.GET(rest.EndpointHealth.Route, func(ctx *gin.Context) {
+	api.GET(rest.EndpointHealth.Route, func(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
+
+	if pathPrefix != "" && pathPrefix != "/" {
+		return http.StripPrefix(pathPrefix, r.Handler())
+	}
 
 	return r.Handler()
 }
