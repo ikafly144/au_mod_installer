@@ -10,6 +10,7 @@ var (
 	EndpointHealth              = NewEndpoint("GET", "/health")
 	EndpointGetModList          = NewEndpoint("GET", "/mods")
 	EndpointGetModDetail        = NewEndpoint("GET", "/mod/:mod_id")
+	EndpointGetModThumbnail     = NewEndpoint("GET", "/mod/:mod_id/thumbnail") // Future plan
 	EndpointGetModVersionList   = NewEndpoint("GET", "/mod/:mod_id/versions")
 	EndpointGetModVersionDetail = NewEndpoint("GET", "/mod/:mod_id/version/:version_id")
 )
