@@ -124,52 +124,126 @@ func (s *Settings) checkUninstallState() {
 
 func (s *Settings) Tab() (*container.TabItem, error) {
 	entry := widget.NewLabelWithData(s.state.SelectedGamePath)
-	installPathSection := container.NewVBox(
-		widget.NewRichTextFromMarkdown("## "+lang.LocalizeKey("installation.select_install_path", "Among Us Installation Path")),
-		s.state.InstallSelect,
-		widget.NewAccordion(
-			widget.NewAccordionItem(lang.LocalizeKey("installation.selected_install", "Selected Installation Path"), container.NewHScroll(container.New(layout.NewCustomPaddedLayout(0, 10, 0, 0), entry))),
+	selectedPath := container.NewHScroll(container.New(layout.NewCustomPaddedLayout(0, 10, 0, 0), entry))
+	selectedPath.SetMinSize(fyne.NewSize(0, 50))
+
+	basicPage := container.NewVScroll(container.NewVBox(
+		widget.NewCard(
+			lang.LocalizeKey("installation.select_install_path", "Among Us Installation Path"),
+			"",
+			container.NewVBox(
+				s.state.InstallSelect,
+				widget.NewAccordion(
+					widget.NewAccordionItem(
+						lang.LocalizeKey("installation.selected_install", "Selected Installation Path"),
+						selectedPath,
+					),
+				),
+			),
 		),
-	)
-
-	uninstallSection := container.NewVBox(
-		widget.NewRichTextFromMarkdown("### "+lang.LocalizeKey("installation.installation_status", "Installation Status (Direct Install)")),
-		s.state.ModInstalledInfo,
-		s.uninstallButton,
-		s.progressBar.Canvas(), // Added progress bar
-	)
-
-	epicAccountSection := container.NewVBox(
-		widget.NewRichTextFromMarkdown("## "+lang.LocalizeKey("settings.epic_games_account", "Epic Games Account")),
-		s.epicAccountLabel,
-		container.NewHBox(s.epicLoginButton, s.epicLogoutButton),
-	)
-
-	advancedSettings := widget.NewAccordion(
-		widget.NewAccordionItem(lang.LocalizeKey("settings.advanced_settings", "Advanced Settings"), container.NewVBox(
-			widget.NewRichTextFromMarkdown("### "+lang.LocalizeKey("settings.api_server", "API Server")),
-			settingsEntry(lang.LocalizeKey("settings.server_url", "Server URL"), s.ApiServerEntry),
-			s.SaveConfigButton,
-			widget.NewSeparator(),
-			settingsEntry(lang.LocalizeKey("settings.legacy_migration", "Legacy Migration"), s.ImportProfileButton),
-			widget.NewSeparator(),
-			uninstallSection,
-		)),
-	)
-
-	list := container.NewVScroll(container.NewVBox(
-		installPathSection,
-		widget.NewSeparator(),
-		settingsEntry(lang.LocalizeKey("settings.update_channel", "Update Channel"), s.BranchSelect),
-		widget.NewSeparator(),
-		epicAccountSection,
-		widget.NewSeparator(),
-		settingsEntry(lang.LocalizeKey("settings.cache_management", "Cache Management"), s.ClearCacheButton),
-		widget.NewSeparator(),
-		advancedSettings,
-		s.state.ErrorText,
+		widget.NewCard(
+			lang.LocalizeKey("settings.update_channel", "Update Channel"),
+			"",
+			settingsEntry(lang.LocalizeKey("settings.select_update_channel", "Select Update Channel"), s.BranchSelect),
+		),
 	))
-	return container.NewTabItem(lang.LocalizeKey("settings.title", "Settings"), list), nil
+
+	accountPage := container.NewVScroll(container.NewVBox(
+		widget.NewCard(
+			lang.LocalizeKey("settings.epic_games_account", "Epic Games Account"),
+			"",
+			container.NewVBox(
+				s.epicAccountLabel,
+				container.NewHBox(s.epicLoginButton, s.epicLogoutButton),
+			),
+		),
+	))
+
+	maintenancePage := container.NewVScroll(container.NewVBox(
+		widget.NewCard(
+			lang.LocalizeKey("settings.cache_management", "Cache Management"),
+			"",
+			container.NewVBox(s.ClearCacheButton),
+		),
+		widget.NewCard(
+			lang.LocalizeKey("settings.legacy_migration", "Legacy Migration"),
+			"",
+			container.NewVBox(s.ImportProfileButton),
+		),
+		widget.NewCard(
+			lang.LocalizeKey("installation.installation_status", "Installation Status (Direct Install)"),
+			"",
+			container.NewVBox(
+				s.state.ModInstalledInfo,
+				s.uninstallButton,
+				s.progressBar.Canvas(),
+			),
+		),
+		widget.NewCard(
+			lang.LocalizeKey("settings.advanced_settings", "Advanced Settings"),
+			"",
+			container.NewVBox(
+				settingsEntry(lang.LocalizeKey("settings.server_url", "Server URL"), s.ApiServerEntry),
+				s.SaveConfigButton,
+			),
+		),
+	))
+
+	pageTitles := []string{
+		lang.LocalizeKey("settings.page.general", "General"),
+		lang.LocalizeKey("settings.page.account", "Account"),
+		lang.LocalizeKey("settings.page.maintenance", "Maintenance"),
+	}
+	pageContents := []fyne.CanvasObject{
+		basicPage,
+		accountPage,
+		maintenancePage,
+	}
+
+	pageTitle := widget.NewLabelWithStyle(pageTitles[0], fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	pageTitle.SizeName = theme.SizeNameSubHeadingText
+	pageContainer := container.NewMax(pageContents[0])
+
+	navList := widget.NewList(
+		func() int { return len(pageTitles) },
+		func() fyne.CanvasObject {
+			label := widget.NewLabel("page")
+			label.Wrapping = fyne.TextWrapWord
+			return container.NewPadded(label)
+		},
+		func(id widget.ListItemID, item fyne.CanvasObject) {
+			item.(*fyne.Container).Objects[0].(*widget.Label).SetText(pageTitles[id])
+		},
+	)
+	navList.OnSelected = func(id widget.ListItemID) {
+		if id < 0 || id >= len(pageContents) {
+			return
+		}
+		pageTitle.SetText(pageTitles[id])
+		pageContainer.Objects = []fyne.CanvasObject{pageContents[id]}
+		pageContainer.Refresh()
+	}
+	navList.Select(0)
+	navPanel := widget.NewCard(
+		lang.LocalizeKey("settings.page.navigation", "Settings"),
+		"",
+		navList,
+	)
+	contentPanel := container.NewPadded(container.NewBorder(
+		container.NewVBox(pageTitle, widget.NewSeparator()),
+		nil,
+		nil,
+		nil,
+		pageContainer,
+	))
+	pages := container.NewBorder(nil, nil, container.NewPadded(navPanel), nil, contentPanel)
+
+	footer := container.NewVBox(
+		widget.NewSeparator(),
+		s.state.ErrorText,
+	)
+	content := container.NewBorder(nil, footer, nil, nil, pages)
+	return container.NewTabItem(lang.LocalizeKey("settings.title", "Settings"), content), nil
 }
 
 func (s *Settings) refreshEpicAccountInfo() {

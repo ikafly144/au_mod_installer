@@ -22,7 +22,6 @@ import (
 	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 	"github.com/ikafly144/au_mod_installer/pkg/profile"
-	"github.com/ikafly144/au_mod_installer/pkg/progress"
 )
 
 const ModsPerPage = 10
@@ -43,7 +42,6 @@ type Repository struct {
 	// List View Elements
 	modListContainer *fyne.Container
 	modScroll        *container.Scroll
-	progressBar      *progress.FyneProgress
 	searchBar        *widget.Entry
 	reloadBtn        *widget.Button
 	stateLabel       *widget.Label
@@ -57,7 +55,6 @@ func NewRepository(state *uicommon.State) *Repository {
 		lastModID:        "",
 		modsBind:         bind,
 		modListContainer: container.NewVBox(),
-		progressBar:      progress.NewFyneProgress(widget.NewProgressBar()),
 		stateLabel:       widget.NewLabel(""),
 	}
 
@@ -93,7 +90,6 @@ func NewRepository(state *uicommon.State) *Repository {
 	bottom := container.NewVBox(
 		repo.state.ErrorText,
 		repo.stateLabel,
-		repo.progressBar.Canvas(),
 	)
 	repo.listView = container.New(layout.NewBorderLayout(top, bottom, nil, nil),
 		top,
