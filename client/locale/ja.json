@@ -127,7 +127,7 @@
     "settings.page.general": "一般",
     "settings.page.account": "アカウント",
     "settings.page.maintenance": "メンテナンス",
-    "settings.page.navigation": "設定メニュー",
+    "settings.page.navigation": "設定",
     "profile.overwrite_title": "プロファイルの上書き",
     "profile.overwrite_message": "既存のプロファイルの方が新しいです。上書きしますか？",
     "launch.applying_mods": "Modを適用中...",

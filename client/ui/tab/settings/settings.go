@@ -2,11 +2,13 @@ package settings
 
 import (
 	"errors"
+	"image/color"
 	"log/slog"
 	"os"
 	"time"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/dialog"
@@ -229,6 +231,9 @@ func (s *Settings) Tab() (*container.TabItem, error) {
 		"",
 		navList,
 	)
+	navPanelMinWidth := canvas.NewRectangle(color.Transparent)
+	navPanelMinWidth.SetMinSize(fyne.NewSize(220, 0))
+	navPanelContainer := container.NewStack(navPanelMinWidth, navPanel)
 	contentPanel := container.NewPadded(container.NewBorder(
 		container.NewVBox(pageTitle, widget.NewSeparator()),
 		nil,
@@ -236,7 +241,7 @@ func (s *Settings) Tab() (*container.TabItem, error) {
 		nil,
 		pageContainer,
 	))
-	pages := container.NewBorder(nil, nil, container.NewPadded(navPanel), nil, contentPanel)
+	pages := container.NewBorder(nil, nil, container.NewPadded(navPanelContainer), nil, contentPanel)
 
 	footer := container.NewVBox(
 		widget.NewSeparator(),
