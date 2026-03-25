@@ -93,7 +93,11 @@ func PrepareProfileDirectory(profileDir string, cacheDir string, modVersions []M
 
 		// Install mods
 		for _, mod := range modVersions {
-			modCacheDir := filepath.Join(cacheDir, string(binaryType), mod.ModID, hashId(mod.ID))
+			hashStr, err := hashModVersion(mod)
+			if err != nil {
+				return fmt.Errorf("failed to hash mod version: %w", err)
+			}
+			modCacheDir := filepath.Join(cacheDir, string(binaryType), mod.ModID, hashStr)
 			if err := filepath.WalkDir(modCacheDir, func(path string, d fs.DirEntry, err error) error {
 				if err != nil {
 					return err

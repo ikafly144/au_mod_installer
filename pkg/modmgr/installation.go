@@ -150,7 +150,11 @@ func DownloadMods(cacheDir string, modVersions []ModVersion, binaryType aumgr.Bi
 
 	hClient := http.DefaultClient
 	for i := range modVersions {
-		modCacheDir := filepath.Join(cacheDir, string(binaryType), modVersions[i].ModID, hashId(modVersions[i].ID))
+		hashStr, err := hashModVersion(modVersions[i])
+		if err != nil {
+			return fmt.Errorf("failed to hash mod version: %w", err)
+		}
+		modCacheDir := filepath.Join(cacheDir, string(binaryType), modVersions[i].ModID, hashStr)
 		if _, err := os.Stat(modCacheDir); err == nil {
 			if !force {
 				slog.Info("Mod already cached", "modId", modVersions[i].ModID, "versionId", modVersions[i].ID)

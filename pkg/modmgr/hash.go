@@ -1,13 +1,16 @@
 package modmgr
 
 import (
-	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 )
 
-func hashId(id string) string {
-	// Simple hash function for demonstration purposes
-	sha1Hasher := sha1.New()
-	sha1Hasher.Write([]byte(id))
-	return hex.EncodeToString(sha1Hasher.Sum(make([]byte, 0, 32)))
+func hashModVersion(version ModVersion) (string, error) {
+	hasher := sha256.New()
+	err := json.NewEncoder(hasher).Encode(version)
+	if err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(hasher.Sum(nil)), nil
 }
