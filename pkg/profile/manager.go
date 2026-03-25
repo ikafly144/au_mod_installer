@@ -11,9 +11,10 @@ import (
 )
 
 type Manager struct {
-	path     string
-	profiles []Profile
-	mu       sync.RWMutex
+	path       string
+	storageDir string
+	profiles   []Profile
+	mu         sync.RWMutex
 }
 
 func NewManager(storagePath string) (*Manager, error) {
@@ -21,7 +22,8 @@ func NewManager(storagePath string) (*Manager, error) {
 		return nil, fmt.Errorf("failed to create storage directory: %w", err)
 	}
 	m := &Manager{
-		path: filepath.Join(storagePath, "profiles.json"),
+		path:       filepath.Join(storagePath, "profiles.json"),
+		storageDir: storagePath,
 	}
 	if err := m.load(); err != nil {
 		return nil, err
@@ -104,7 +106,13 @@ func (m *Manager) Remove(id uuid.UUID) error {
 	for i, p := range m.profiles {
 		if p.ID == id {
 			m.profiles = append(m.profiles[:i], m.profiles[i+1:]...)
-			return m.save()
+			if err := m.save(); err != nil {
+				return err
+			}
+			if err := os.RemoveAll(m.profileDir(id)); err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("failed to remove profile directory: %w", err)
+			}
+			return nil
 		}
 	}
 	return nil
@@ -119,4 +127,56 @@ func (m *Manager) Get(id uuid.UUID) (Profile, bool) {
 		}
 	}
 	return Profile{}, false
+}
+
+func (m *Manager) profileDir(id uuid.UUID) string {
+	return filepath.Join(m.storageDir, "profiles", id.String())
+}
+
+func (m *Manager) profileIconPath(id uuid.UUID) string {
+	return filepath.Join(m.profileDir(id), "icon.png")
+}
+
+func (m *Manager) SaveIconPNG(id uuid.UUID, png []byte) error {
+	if id == uuid.Nil {
+		return fmt.Errorf("profile ID cannot be nil")
+	}
+	if len(png) == 0 {
+		return fmt.Errorf("icon data is empty")
+	}
+
+	iconPath := m.profileIconPath(id)
+	if err := os.MkdirAll(filepath.Dir(iconPath), 0755); err != nil {
+		return fmt.Errorf("failed to create profile icon directory: %w", err)
+	}
+	if err := os.WriteFile(iconPath, png, 0644); err != nil {
+		return fmt.Errorf("failed to write profile icon: %w", err)
+	}
+	return nil
+}
+
+func (m *Manager) LoadIconPNG(id uuid.UUID) ([]byte, error) {
+	if id == uuid.Nil {
+		return nil, fmt.Errorf("profile ID cannot be nil")
+	}
+	iconPath := m.profileIconPath(id)
+	data, err := os.ReadFile(iconPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to read profile icon: %w", err)
+	}
+	return data, nil
+}
+
+func (m *Manager) RemoveIcon(id uuid.UUID) error {
+	if id == uuid.Nil {
+		return fmt.Errorf("profile ID cannot be nil")
+	}
+	iconPath := m.profileIconPath(id)
+	if err := os.Remove(iconPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to remove profile icon: %w", err)
+	}
+	return nil
 }

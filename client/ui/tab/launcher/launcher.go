@@ -1,10 +1,13 @@
 package launcher
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"image"
 	"image/color"
+	imagedraw "image/draw"
+	"image/png"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -30,6 +33,9 @@ import (
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 	"github.com/ikafly144/au_mod_installer/pkg/profile"
 	"github.com/ikafly144/au_mod_installer/pkg/progress"
+
+	_ "image/gif"
+	_ "image/jpeg"
 )
 
 type Launcher struct {
@@ -206,10 +212,7 @@ func (l *Launcher) setupProfileList() {
 			return len(l.profiles)
 		},
 		func() fyne.CanvasObject {
-			img := canvas.NewImageFromImage(image.NewPaletted(image.Rect(0, 0, 128, 128),
-				color.Palette{theme.Color(theme.ColorNameDisabled)},
-			))
-			img.CornerRadius = 8
+			img := l.newProfileIconCanvas(profile.Profile{}, 96, 8)
 
 			title := widget.NewLabel("Profile Name")
 			title.TextStyle = fyne.TextStyle{Bold: true}
@@ -230,7 +233,7 @@ func (l *Launcher) setupProfileList() {
 			prof := l.profiles[id]
 			c := item.(*fyne.Container).Objects[0].(*fyne.Container)
 			img := c.Objects[0].(*canvas.Image)
-			img.SetMinSize(fyne.NewSquareSize(img.Size().Height))
+			l.refreshProfileIconCanvas(img, prof, 96)
 			label := c.Objects[1].(*fyne.Container).Objects[0].(*widget.Label)
 			desc := c.Objects[1].(*fyne.Container).Objects[1].(*widget.Label)
 			desc.SetText(fmt.Sprintf("Last Updated: %s Mods: %d", prof.UpdatedAt.Format("2006-01-02 15:04:05"), len(prof.ModVersions)))
@@ -357,10 +360,7 @@ func (l *Launcher) refreshProfileGrid() {
 		index := i
 		p := prof
 
-		img := canvas.NewImageFromImage(image.NewPaletted(image.Rect(0, 0, 120, 120), color.Palette{theme.Color(theme.ColorNameDisabled)}))
-		img.CornerRadius = 3
-		img.SetMinSize(fyne.NewSquareSize(116))
-		img.FillMode = canvas.ImageFillContain
+		img := l.newProfileIconCanvas(p, 116, 3)
 
 		text := canvas.NewText(prof.Name, theme.Color(theme.ColorNameForeground))
 		text.TextStyle = fyne.TextStyle{Bold: true}
@@ -910,6 +910,17 @@ func (l *Launcher) showDuplicateDialog(prof profile.Profile) {
 			dialog.ShowError(err, l.state.Window)
 			return
 		}
+		iconPNG, err := l.state.ProfileManager.LoadIconPNG(prof.ID)
+		if err != nil {
+			dialog.ShowError(err, l.state.Window)
+			return
+		}
+		if len(iconPNG) > 0 {
+			if err := l.state.ProfileManager.SaveIconPNG(newProf.ID, iconPNG); err != nil {
+				dialog.ShowError(err, l.state.Window)
+				return
+			}
+		}
 		l.refreshProfiles()
 	}, l.state.Window)
 	d.Resize(fyne.NewSize(400, 200))
@@ -920,6 +931,7 @@ func (l *Launcher) openProfileEditor(prof profile.Profile) {
 	currentProfile := prof
 
 	var saveBtn *widget.Button
+	var removeIconBtn *widget.Button
 	var d *dialog.CustomDialog
 	nameEntry := widget.NewEntry()
 	nameEntry.SetText(currentProfile.Name)
@@ -953,11 +965,60 @@ func (l *Launcher) openProfileEditor(prof profile.Profile) {
 	)
 	statsCard := widget.NewCard(lang.LocalizeKey("profile.stats.title", "Play Stats"), "", statsContent)
 
-	iconPlaceholder := canvas.NewImageFromImage(image.NewPaletted(image.Rect(0, 0, 128, 128),
-		color.Palette{theme.Color(theme.ColorNameDisabled)},
-	))
-	iconPlaceholder.CornerRadius = 8
-	iconPlaceholder.SetMinSize(fyne.NewSize(128, 128))
+	currentIconPNG, err := l.state.ProfileManager.LoadIconPNG(currentProfile.ID)
+	if err != nil {
+		dialog.ShowError(err, l.state.Window)
+		currentIconPNG = nil
+	}
+	selectedIconPNG := []byte(nil)
+	removeIcon := false
+
+	iconPlaceholder := l.newProfileIconCanvasFromPNG(currentIconPNG, 128, 8)
+	selectIconBtn := widget.NewButtonWithIcon(lang.LocalizeKey("profile.icon.select", "Select Icon"), theme.FolderOpenIcon(), func() {
+		path, err := l.state.ExplorerOpenFile("Profile Icon", "*.png;*.jpg;*.jpeg;*.gif")
+		if err != nil {
+			slog.Info("File selection cancelled or failed", "error", err)
+			return
+		}
+		f, err := os.Open(path)
+		if err != nil {
+			dialog.ShowError(err, l.state.Window)
+			return
+		}
+		defer f.Close()
+
+		decoded, _, err := image.Decode(f)
+		if err != nil {
+			dialog.ShowError(errors.New(lang.LocalizeKey("profile.icon.invalid", "Selected file is not a valid image.")), l.state.Window)
+			return
+		}
+
+		iconPNG, err := encodeSquarePNG(decoded)
+		if err != nil {
+			dialog.ShowError(err, l.state.Window)
+			return
+		}
+
+		selectedIconPNG = iconPNG
+		currentIconPNG = iconPNG
+		removeIcon = false
+		l.refreshProfileIconCanvasFromPNG(iconPlaceholder, currentIconPNG, 128)
+		removeIconBtn.Enable()
+	})
+	removeIconBtn = widget.NewButtonWithIcon(lang.LocalizeKey("profile.icon.remove", "Remove Icon"), theme.DeleteIcon(), func() {
+		selectedIconPNG = nil
+		currentIconPNG = nil
+		removeIcon = true
+		l.refreshProfileIconCanvasFromPNG(iconPlaceholder, currentIconPNG, 128)
+		removeIconBtn.Disable()
+	})
+	if len(currentIconPNG) == 0 {
+		removeIconBtn.Disable()
+	}
+	iconArea := container.NewVBox(
+		container.NewCenter(iconPlaceholder),
+		container.NewGridWithRows(2, selectIconBtn, removeIconBtn),
+	)
 
 	modList := widget.NewList(
 		func() int { return len(currentProfile.Versions()) },
@@ -1001,7 +1062,7 @@ func (l *Launcher) openProfileEditor(prof profile.Profile) {
 		badge := hbox.Objects[1].(*widget.Label)
 		delBtn := c.Objects[1].(*widget.Button)
 
-		fyne.DoAndWait(func() {
+		fyne.Do(func() {
 			label.SetText(v.ModID + " (" + v.ID + ")")
 		})
 
@@ -1048,6 +1109,18 @@ func (l *Launcher) openProfileEditor(prof profile.Profile) {
 				dialog.ShowError(err, l.state.Window)
 				return
 			}
+			if removeIcon && selectedIconPNG == nil {
+				if err := l.state.ProfileManager.RemoveIcon(currentProfile.ID); err != nil {
+					dialog.ShowError(err, l.state.Window)
+					return
+				}
+			}
+			if selectedIconPNG != nil {
+				if err := l.state.ProfileManager.SaveIconPNG(currentProfile.ID, selectedIconPNG); err != nil {
+					dialog.ShowError(err, l.state.Window)
+					return
+				}
+			}
 
 			if oldID != currentProfile.ID {
 				if err := l.state.ProfileManager.Remove(oldID); err != nil {
@@ -1070,7 +1143,7 @@ func (l *Launcher) openProfileEditor(prof profile.Profile) {
 			container.NewBorder(
 				nil,
 				nil,
-				iconPlaceholder,
+				iconArea,
 				nil,
 				container.NewBorder(
 					nil,
@@ -1185,6 +1258,89 @@ func (l *Launcher) showAddModDialog(onAdd func([]modmgr.ModVersion)) {
 	)
 	d.Resize(fyne.NewSize(600, 600))
 	d.Show()
+}
+
+func placeholderProfileIcon(size int) image.Image {
+	return image.NewPaletted(image.Rect(0, 0, size, size), color.Palette{theme.Color(theme.ColorNameDisabled)})
+}
+
+func centerCropSquare(src image.Image) image.Image {
+	bounds := src.Bounds()
+	width := bounds.Dx()
+	height := bounds.Dy()
+	if width <= 0 || height <= 0 {
+		return placeholderProfileIcon(1)
+	}
+
+	side := min(width, height)
+	startX := bounds.Min.X + (width-side)/2
+	startY := bounds.Min.Y + (height-side)/2
+	dstRect := image.Rect(0, 0, side, side)
+	dst := image.NewRGBA(dstRect)
+	imagedraw.Draw(dst, dstRect, src, image.Point{X: startX, Y: startY}, imagedraw.Src)
+	return dst
+}
+
+func encodeSquarePNG(src image.Image) ([]byte, error) {
+	cropped := centerCropSquare(src)
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, cropped); err != nil {
+		return nil, fmt.Errorf("failed to encode profile icon: %w", err)
+	}
+	return buf.Bytes(), nil
+}
+
+func (l *Launcher) profileSquareIconImage(prof profile.Profile, fallbackSize int) image.Image {
+	if prof.ID == uuid.Nil {
+		return placeholderProfileIcon(fallbackSize)
+	}
+
+	iconPNG, err := l.state.ProfileManager.LoadIconPNG(prof.ID)
+	if err != nil {
+		slog.Warn("Failed to load profile icon image", "profileID", prof.ID.String(), "error", err)
+		return placeholderProfileIcon(fallbackSize)
+	}
+	return l.squareIconImageFromPNG(iconPNG, fallbackSize, prof.ID)
+}
+
+func (l *Launcher) squareIconImageFromPNG(iconPNG []byte, fallbackSize int, profileID uuid.UUID) image.Image {
+	if len(iconPNG) == 0 {
+		return placeholderProfileIcon(fallbackSize)
+	}
+	decoded, _, err := image.Decode(bytes.NewReader(iconPNG))
+	if err != nil {
+		slog.Warn("Failed to decode profile icon image", "profileID", profileID.String(), "error", err)
+		return placeholderProfileIcon(fallbackSize)
+	}
+	return centerCropSquare(decoded)
+}
+
+func (l *Launcher) newProfileIconCanvas(prof profile.Profile, size float32, cornerRadius float32) *canvas.Image {
+	img := canvas.NewImageFromImage(l.profileSquareIconImage(prof, int(size)))
+	img.CornerRadius = cornerRadius
+	img.SetMinSize(fyne.NewSquareSize(size))
+	img.FillMode = canvas.ImageFillContain
+	return img
+}
+
+func (l *Launcher) newProfileIconCanvasFromPNG(iconPNG []byte, size float32, cornerRadius float32) *canvas.Image {
+	img := canvas.NewImageFromImage(l.squareIconImageFromPNG(iconPNG, int(size), uuid.Nil))
+	img.CornerRadius = cornerRadius
+	img.SetMinSize(fyne.NewSquareSize(size))
+	img.FillMode = canvas.ImageFillContain
+	return img
+}
+
+func (l *Launcher) refreshProfileIconCanvas(target *canvas.Image, prof profile.Profile, fallbackSize int) {
+	target.Image = l.profileSquareIconImage(prof, fallbackSize)
+	target.SetMinSize(fyne.NewSquareSize(float32(fallbackSize)))
+	target.Refresh()
+}
+
+func (l *Launcher) refreshProfileIconCanvasFromPNG(target *canvas.Image, iconPNG []byte, fallbackSize int) {
+	target.Image = l.squareIconImageFromPNG(iconPNG, fallbackSize, uuid.Nil)
+	target.SetMinSize(fyne.NewSquareSize(float32(fallbackSize)))
+	target.Refresh()
 }
 
 func (l *Launcher) newModDetailsDialog(mod *modmgr.Mod, onSelect func(modmgr.ModVersion)) *dialog.CustomDialog {

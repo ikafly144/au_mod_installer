@@ -81,3 +81,29 @@ func TestProfile_VersionTracking(t *testing.T) {
 	p.AddModVersion(v2)
 	assert.Equal(t, "v2", p.ModVersions[modID].ID)
 }
+
+func TestProfileManager_IconFileCRUD(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "profile_icon_test_*")
+	require.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	manager, err := NewManager(tempDir)
+	require.NoError(t, err)
+
+	id := uuid.New()
+	icon := []byte("png-bytes")
+
+	err = manager.SaveIconPNG(id, icon)
+	require.NoError(t, err)
+
+	loaded, err := manager.LoadIconPNG(id)
+	require.NoError(t, err)
+	assert.Equal(t, icon, loaded)
+
+	err = manager.RemoveIcon(id)
+	require.NoError(t, err)
+
+	loaded, err = manager.LoadIconPNG(id)
+	require.NoError(t, err)
+	assert.Nil(t, loaded)
+}

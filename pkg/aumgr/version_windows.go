@@ -45,6 +45,12 @@ func readVersionFile(path string) (string, error) {
 	if ret != 0 {
 		return "", fmt.Errorf("failed to read version file: error code %d", ret)
 	}
+	// truncate at the first null byte
+	for i, b := range buffer {
+		if b == 0 {
+			return string(buffer[:i]), nil
+		}
+	}
 	return string(buffer[:]), nil
 }
 
