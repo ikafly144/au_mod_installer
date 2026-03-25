@@ -11,4 +11,3 @@ func TestIsSteamRunning(t *testing.T) {
 
 	t.Logf("Steam running: %v", running)
 }
-

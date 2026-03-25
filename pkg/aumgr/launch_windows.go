@@ -79,7 +79,7 @@ func launchSteam(amongUsDir string, dllDir string) error {
 		return fmt.Errorf("failed to check Steam process: %w", err)
 	}
 	if !steamRunning {
-		return fmt.Errorf("Steam is not running. Please launch Steam first")
+		return fmt.Errorf("cannot launch Among Us: Steam is not running. launch Steam first")
 	}
 
 	// Directly launch the executable to support SetDllDirectory

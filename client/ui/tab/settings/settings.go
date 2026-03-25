@@ -202,7 +202,7 @@ func (s *Settings) Tab() (*container.TabItem, error) {
 
 	pageTitle := widget.NewLabelWithStyle(pageTitles[0], fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	pageTitle.SizeName = theme.SizeNameSubHeadingText
-	pageContainer := container.NewMax(pageContents[0])
+	pageContainer := container.NewStack(pageContents[0])
 
 	navList := widget.NewList(
 		func() int { return len(pageTitles) },

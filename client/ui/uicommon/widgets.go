@@ -9,9 +9,9 @@ import (
 // TappableContainer is a container that handles tap events
 type TappableContainer struct {
 	widget.BaseWidget
-	Content            fyne.CanvasObject
-	OnTapped           func()
-	OnSecondaryTapped  func(*fyne.PointEvent)
+	Content           fyne.CanvasObject
+	OnTapped          func()
+	OnSecondaryTapped func(*fyne.PointEvent)
 }
 
 func NewTappableContainer(content fyne.CanvasObject, tapped func()) *TappableContainer {
