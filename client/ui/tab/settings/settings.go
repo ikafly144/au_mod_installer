@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"errors"
 	"log/slog"
 	"os"
 	"time"
@@ -201,37 +202,26 @@ func (s *Settings) epicLogout() {
 
 func (s *Settings) runUninstall() {
 	defer s.state.RefreshModInstallation()
-	s.state.ErrorText.Hide()
+	s.state.ClearError()
 	path, err := s.state.SelectedGamePath.Get()
 	if err != nil || path == "" {
-		s.state.ErrorText.Segments = []widget.RichTextSegment{
-			&widget.TextSegment{Text: lang.LocalizeKey("installation.error.no_path", "Installation path is not specified."), Style: widget.RichTextStyle{ColorName: theme.ColorNameError}},
-		}
-		s.state.ErrorText.Refresh()
-		s.state.ErrorText.Show()
+		s.state.ShowErrorDialog(errors.New(lang.LocalizeKey("installation.error.no_path", "Installation path is not specified.")))
 		return
 	}
 	slog.Info("Uninstalling mod", "path", path)
 
 	go func() {
 		if err := s.state.Core.UninstallMod(path, s.progressBar); err != nil {
-			fyne.Do(func() {
-				s.state.ErrorText.Segments = []widget.RichTextSegment{
-					&widget.TextSegment{Text: lang.LocalizeKey("installation.error.failed_to_uninstall", "Failed to uninstall mod: ") + err.Error(), Style: widget.RichTextStyle{ColorName: theme.ColorNameError}},
-				}
-				s.state.ErrorText.Refresh()
-				s.state.ErrorText.Show()
-				slog.Warn("Failed to uninstall mod", "error", err)
-			})
+			s.state.ShowErrorDialog(errors.New(lang.LocalizeKey("installation.error.failed_to_uninstall", "Failed to uninstall mod: ") + err.Error()))
+			slog.Warn("Failed to uninstall mod", "error", err)
 			return
 		}
-		fyne.Do(func() {
-			s.state.ErrorText.ParseMarkdown(lang.LocalizeKey("installation.success.uninstalled", "Mod uninstalled successfully."))
-			s.state.ErrorText.Refresh()
-			s.state.ErrorText.Show()
-			slog.Info("Mod uninstalled successfully", "path", path)
-			s.state.RefreshModInstallation()
-		})
+		slog.Info("Mod uninstalled successfully", "path", path)
+		s.state.ShowInfoDialog(
+			lang.LocalizeKey("common.success", "Success"),
+			lang.LocalizeKey("installation.success.uninstalled", "Mod uninstalled successfully."),
+		)
+		fyne.Do(s.state.RefreshModInstallation)
 	}()
 }
 

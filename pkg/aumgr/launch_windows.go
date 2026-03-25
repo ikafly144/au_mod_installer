@@ -74,8 +74,24 @@ func launchDefault(amongUsDir string, dllDir string, args ...string) error {
 }
 
 func launchSteam(amongUsDir string, dllDir string) error {
+	steamRunning, err := isSteamRunning()
+	if err != nil {
+		return fmt.Errorf("failed to check Steam process: %w", err)
+	}
+	if !steamRunning {
+		return fmt.Errorf("Steam is not running. Please launch Steam first")
+	}
+
 	// Directly launch the executable to support SetDllDirectory
 	return launchDefault(amongUsDir, dllDir)
+}
+
+func isSteamRunning() (bool, error) {
+	processes, err := getProcesses()
+	if err != nil {
+		return false, err
+	}
+	return findProcessByName(processes, "steam.exe") != nil, nil
 }
 
 func launchEpicGames(amongUsDir string, dllDir string, exchangeCode string) error {

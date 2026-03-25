@@ -269,23 +269,15 @@ func (l *Launcher) Tab() (*container.TabItem, error) {
 }
 
 func (l *Launcher) runLaunch() {
-	l.state.ErrorText.Hide()
+	l.state.ClearError()
 	path, err := l.state.SelectedGamePath.Get()
 	if err != nil || path == "" {
-		l.state.ErrorText.Segments = []widget.RichTextSegment{
-			&widget.TextSegment{Text: lang.LocalizeKey("launcher.error.no_path", "Game path is not specified."), Style: widget.RichTextStyle{ColorName: theme.ColorNameError}},
-		}
-		l.state.ErrorText.Refresh()
-		l.state.ErrorText.Show()
+		l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("launcher.error.no_path", "Game path is not specified.")))
 		return
 	}
 
 	if l.selectedProfileID == uuid.Nil {
-		l.state.ErrorText.Segments = []widget.RichTextSegment{
-			&widget.TextSegment{Text: lang.LocalizeKey("launcher.error.no_profile", "Please select a profile to launch."), Style: widget.RichTextStyle{ColorName: theme.ColorNameError}},
-		}
-		l.state.ErrorText.Refresh()
-		l.state.ErrorText.Show()
+		l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("launcher.error.no_profile", "Please select a profile to launch.")))
 		return
 	}
 

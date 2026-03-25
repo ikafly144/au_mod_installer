@@ -1,6 +1,7 @@
 package uicommon
 
 import (
+	"errors"
 	"log/slog"
 	"strings"
 	"sync"
@@ -9,8 +10,8 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
+	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/lang"
-	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/ikafly144/au_mod_installer/client/core"
@@ -108,6 +109,8 @@ type State struct {
 	CanLaunch        binding.Bool
 	CanInstall       binding.Bool
 	launchLock       sync.Mutex
+	dialogLock       sync.Mutex
+	activeDialog     dialog.Dialog
 
 	Core           *core.App
 	Rest           rest.Client
@@ -137,23 +140,69 @@ type Tab interface {
 
 func (s *State) SetError(err error) {
 	if err == nil {
-		s.ErrorText.Hide()
+		s.ClearError()
 		return
 	}
-	s.ErrorText.Segments = []widget.RichTextSegment{
-		&widget.TextSegment{
-			Text:  lang.LocalizeKey("common.error_occurred", "An error occurred: ") + err.Error(),
-			Style: widget.RichTextStyle{ColorName: theme.ColorNameError},
-		},
+	s.ShowErrorDialog(errors.New(lang.LocalizeKey("common.error_occurred", "An error occurred: ") + err.Error()))
+}
+
+func (s *State) ShowErrorDialog(err error) {
+	if err == nil || s.Window == nil {
+		return
 	}
+	s.showDialog(func() dialog.Dialog {
+		return dialog.NewError(err, s.Window)
+	})
+}
+
+func (s *State) ShowInfoDialog(title, message string) {
+	if title == "" || message == "" || s.Window == nil {
+		return
+	}
+	s.showDialog(func() dialog.Dialog {
+		return dialog.NewInformation(title, message, s.Window)
+	})
+}
+
+func (s *State) showDialog(factory func() dialog.Dialog) {
 	fyne.Do(func() {
-		s.ErrorText.Refresh()
-		s.ErrorText.Show()
+		s.dialogLock.Lock()
+		prev := s.activeDialog
+		s.activeDialog = nil
+		s.dialogLock.Unlock()
+
+		if prev != nil {
+			prev.Hide()
+		}
+
+		d := factory()
+		d.SetOnClosed(func() {
+			s.dialogLock.Lock()
+			if s.activeDialog == d {
+				s.activeDialog = nil
+			}
+			s.dialogLock.Unlock()
+		})
+
+		s.dialogLock.Lock()
+		s.activeDialog = d
+		s.dialogLock.Unlock()
+		d.Show()
 	})
 }
 
 func (s *State) ClearError() {
-	fyne.DoAndWait(s.ErrorText.Hide)
+	fyne.DoAndWait(func() {
+		s.ErrorText.Hide()
+
+		s.dialogLock.Lock()
+		d := s.activeDialog
+		s.activeDialog = nil
+		s.dialogLock.Unlock()
+		if d != nil {
+			d.Hide()
+		}
+	})
 }
 
 func (i *State) RefreshModInstallation() {

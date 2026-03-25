@@ -6,7 +6,6 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/lang"
-	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/google/uuid"
@@ -86,12 +85,7 @@ func (s *State) Launch(path string) {
 	}
 
 	if err := s.Core.ExecuteLaunch(path, profileDir); err != nil {
-		fyne.Do(func() {
-			s.ErrorText.Segments = []widget.RichTextSegment{
-				&widget.TextSegment{Text: lang.LocalizeKey("launch.error.launch_failed", "Failed to launch Among Us: ") + err.Error(), Style: widget.RichTextStyle{ColorName: theme.ColorNameError}},
-			}
-			s.ErrorText.Refresh()
-		})
+		s.ShowErrorDialog(errors.New(lang.LocalizeKey("launch.error.launch_failed", "Failed to launch Among Us: ") + err.Error()))
 		slog.Warn("Failed to launch Among Us", "error", err)
 		return
 	} else {
