@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -45,11 +44,13 @@ type Launcher struct {
 	profileGridScroll *container.Scroll
 	profileViews      *fyne.Container
 	toggleViewButton  *widget.Button
+	sortOrderButton   *widget.Button
 	sortSelect        *widget.Select
 	profiles          []profile.Profile
 	selectedProfileID uuid.UUID
 	isGridView        bool
 	sortMode          string
+	sortDescending    bool
 
 	canLaunchListener binding.DataListener
 }
@@ -57,8 +58,9 @@ type Launcher struct {
 var _ uicommon.Tab = (*Launcher)(nil)
 
 const (
-	prefLauncherViewMode = "launcher.view_mode"
-	prefLauncherSortMode = "launcher.sort_mode"
+	prefLauncherViewMode       = "launcher.view_mode"
+	prefLauncherSortMode       = "launcher.sort_mode"
+	prefLauncherSortDescending = "launcher.sort_descending"
 
 	viewModeList = "list"
 	viewModeGrid = "grid"
@@ -74,6 +76,7 @@ func NewLauncherTab(s *uicommon.State) uicommon.Tab {
 	revision = revision[:min(7, len(revision))]
 	viewMode := fyne.CurrentApp().Preferences().StringWithFallback(prefLauncherViewMode, viewModeList)
 	sortMode := normalizeSortMode(fyne.CurrentApp().Preferences().StringWithFallback(prefLauncherSortMode, sortModeName))
+	sortDescending := fyne.CurrentApp().Preferences().BoolWithFallback(prefLauncherSortDescending, defaultSortDescendingForMode(sortMode))
 	l = Launcher{
 		state:               s,
 		launchButton:        widget.NewButtonWithIcon(lang.LocalizeKey("launcher.launch", "Launch"), theme.MediaPlayIcon(), l.runLaunch),
@@ -81,8 +84,10 @@ func NewLauncherTab(s *uicommon.State) uicommon.Tab {
 		importProfileButton: widget.NewButtonWithIcon(lang.LocalizeKey("profile.import_clipboard", "Import from Clipboard"), theme.ContentPasteIcon(), l.showImportDialog),
 		greetingContent:     widget.NewLabelWithStyle(fmt.Sprintf("バージョン：%s (%s)", s.Version, revision), fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 		sortMode:            sortMode,
+		sortDescending:      sortDescending,
 		isGridView:          viewMode == viewModeGrid,
 	}
+	l.createProfileButton.Importance = widget.HighImportance
 
 	l.init()
 
@@ -270,6 +275,7 @@ func (l *Launcher) setupToolbar() {
 		l.updateViewToggleButton()
 		l.switchProfileView()
 	})
+	l.toggleViewButton.Importance = widget.LowImportance
 	l.sortSelect = widget.NewSelect([]string{
 		lang.LocalizeKey("launcher.sort.name", "Name"),
 		lang.LocalizeKey("launcher.sort.playtime", "Play Time"),
@@ -286,7 +292,15 @@ func (l *Launcher) setupToolbar() {
 		fyne.CurrentApp().Preferences().SetString(prefLauncherSortMode, l.sortMode)
 		l.refreshProfiles()
 	})
+	l.sortOrderButton = widget.NewButtonWithIcon("", theme.MoveDownIcon(), func() {
+		l.sortDescending = !l.sortDescending
+		fyne.CurrentApp().Preferences().SetBool(prefLauncherSortDescending, l.sortDescending)
+		l.updateSortOrderButton()
+		l.refreshProfiles()
+	})
+	l.sortOrderButton.Importance = widget.LowImportance
 	l.sortSelect.SetSelected(l.sortModeLabel(l.sortMode))
+	l.updateSortOrderButton()
 	l.updateViewToggleButton()
 }
 
@@ -407,23 +421,13 @@ func (l *Launcher) refreshProfileGrid() {
 }
 
 func (l *Launcher) Tab() (*container.TabItem, error) {
-	// sortLabel := widget.NewLabelWithStyle(lang.LocalizeKey("launcher.sort.title", "Sort"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-	sortIcon := canvas.NewImageFromResource(theme.MoveUpIcon())
-	sortIcon.SetMinSize(fyne.NewSquareSize(32))
 	header := container.NewVBox(
 		widget.NewCard(lang.LocalizeKey("launcher.card_title", "Mod of Us"), lang.LocalizeKey("launcher.card_subtitle", "Among Us Mod Manager"), l.greetingContent),
 		container.NewPadded(container.NewBorder(
 			nil,
 			nil,
-			container.NewHBox(sortIcon, l.sortSelect),
-			l.importProfileButton,
-			container.NewBorder(
-				nil,
-				nil,
-				l.toggleViewButton,
-				nil,
-				l.createProfileButton,
-			),
+			container.NewHBox(l.toggleViewButton, l.sortOrderButton, l.sortSelect),
+			container.NewHBox(l.createProfileButton, l.importProfileButton),
 		)),
 		// widget.NewRichTextFromMarkdown("### "+lang.LocalizeKey("installation.installation_status", "Installation Status")), l.state.ModInstalledInfo,
 		// widget.NewSeparator(),
@@ -700,28 +704,16 @@ func (l *Launcher) refreshProfiles() {
 }
 
 func (l *Launcher) sortProfiles() {
-	switch l.sortMode {
-	case sortModePlaytime:
-		sort.SliceStable(l.profiles, func(i, j int) bool {
-			if l.profiles[i].PlayDurationNS == l.profiles[j].PlayDurationNS {
-				return strings.Compare(strings.ToLower(l.profiles[i].Name), strings.ToLower(l.profiles[j].Name)) < 0
-			}
-			return l.profiles[i].PlayDurationNS > l.profiles[j].PlayDurationNS
-		})
-	case sortModeRecent:
-		sort.SliceStable(l.profiles, func(i, j int) bool {
-			li := l.profiles[i].LastLaunchedAt
-			lj := l.profiles[j].LastLaunchedAt
-			if li.Equal(lj) {
-				return strings.Compare(strings.ToLower(l.profiles[i].Name), strings.ToLower(l.profiles[j].Name)) < 0
-			}
-			return li.After(lj)
-		})
-	default:
-		slices.SortFunc(l.profiles, func(a, b profile.Profile) int {
-			return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
-		})
-	}
+	sort.SliceStable(l.profiles, func(i, j int) bool {
+		cmp := l.compareProfiles(l.profiles[i], l.profiles[j])
+		if cmp == 0 {
+			return false
+		}
+		if l.sortDescending {
+			return cmp > 0
+		}
+		return cmp < 0
+	})
 }
 
 func (l *Launcher) profileMetaText(p profile.Profile) string {
@@ -740,6 +732,47 @@ func normalizeSortMode(mode string) string {
 	default:
 		return sortModeName
 	}
+}
+
+func defaultSortDescendingForMode(mode string) bool {
+	switch mode {
+	case sortModePlaytime, sortModeRecent:
+		return true
+	default:
+		return false
+	}
+}
+
+func (l *Launcher) compareProfiles(a, b profile.Profile) int {
+	nameCmp := strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
+	switch l.sortMode {
+	case sortModePlaytime:
+		if a.PlayDurationNS < b.PlayDurationNS {
+			return -1
+		}
+		if a.PlayDurationNS > b.PlayDurationNS {
+			return 1
+		}
+		return nameCmp
+	case sortModeRecent:
+		if a.LastLaunchedAt.Before(b.LastLaunchedAt) {
+			return -1
+		}
+		if a.LastLaunchedAt.After(b.LastLaunchedAt) {
+			return 1
+		}
+		return nameCmp
+	default:
+		return nameCmp
+	}
+}
+
+func (l *Launcher) updateSortOrderButton() {
+	if l.sortDescending {
+		l.sortOrderButton.SetIcon(theme.MoveDownIcon())
+		return
+	}
+	l.sortOrderButton.SetIcon(theme.MoveUpIcon())
 }
 
 func (l *Launcher) sortModeLabel(mode string) string {
