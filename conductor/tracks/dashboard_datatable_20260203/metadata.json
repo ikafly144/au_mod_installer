@@ -1,8 +1,0 @@
-{
-  "track_id": "dashboard_datatable_20260203",
-  "type": "feature",
-  "status": "new",
-  "created_at": "2026-02-03T16:00:00Z",
-  "updated_at": "2026-02-03T16:00:00Z",
-  "description": "@web-frontend/src/components/dashboard.tsx を @web-frontend/src/pages/ 以下に移動してください。Tableを使っているMOD一覧をshadcnのDataTableに変更して、RowActionsとして編集ページへの遷移やMODの操作を行えるようにしてください。"
-}
