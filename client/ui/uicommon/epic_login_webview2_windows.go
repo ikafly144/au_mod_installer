@@ -186,6 +186,7 @@ func startEpicWebView2Login(authURL string) (<-chan string, <-chan error, func()
 				Title:  "Epic Games Login",
 				Width:  960,
 				Height: 720,
+				IconId: 1,
 				Center: true,
 			},
 		})
