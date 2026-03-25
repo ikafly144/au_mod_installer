@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -64,6 +65,30 @@ func (a *EpicApi) LoginWithAuthCode(code string) (*EpicSession, error) {
 	return a.oauthRequest(data)
 }
 
+func (a *EpicApi) LoginWithExchangeCode(exchangeCode string) (*EpicSession, error) {
+	data := url.Values{}
+	data.Set("grant_type", "exchange_code")
+	data.Set("exchange_code", exchangeCode)
+	data.Set("token_type", "eg1")
+	data.Set("includePerms", "true")
+
+	return a.oauthRequest(data)
+}
+
+func (a *EpicApi) LoginWithCode(code string) (*EpicSession, error) {
+	session, authCodeErr := a.LoginWithAuthCode(code)
+	if authCodeErr == nil {
+		return session, nil
+	}
+
+	session, exchangeCodeErr := a.LoginWithExchangeCode(code)
+	if exchangeCodeErr == nil {
+		return session, nil
+	}
+
+	return nil, fmt.Errorf("epic login failed with both authorization_code and exchange_code grants: authorization_code=%v, exchange_code=%v", authCodeErr, exchangeCodeErr)
+}
+
 func (a *EpicApi) RefreshSession(refreshToken string) (*EpicSession, error) {
 	data := url.Values{}
 	data.Set("grant_type", "refresh_token")
@@ -89,7 +114,15 @@ func (a *EpicApi) oauthRequest(data url.Values) (*EpicSession, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("epic oauth request failed: %s", resp.Status)
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		if readErr != nil {
+			return nil, fmt.Errorf("epic oauth request failed: %s", resp.Status)
+		}
+		bodyText := strings.TrimSpace(string(body))
+		if bodyText == "" {
+			return nil, fmt.Errorf("epic oauth request failed: %s", resp.Status)
+		}
+		return nil, fmt.Errorf("epic oauth request failed: %s: %s", resp.Status, bodyText)
 	}
 
 	var tokenResp oauthTokenResponse

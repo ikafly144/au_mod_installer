@@ -2,7 +2,6 @@ package settings
 
 import (
 	"log/slog"
-	"net/url"
 	"os"
 	"time"
 
@@ -179,59 +178,17 @@ func (s *Settings) refreshEpicAccountInfo() {
 		s.epicLoginButton.Show()
 		s.epicLogoutButton.Hide()
 	} else {
-		s.epicAccountLabel.SetText(lang.LocalizeKey("settings.epic_logged_in_as", "Logged in as: {{.DisplayName}}", map[string]any{"DisplayName": session.DisplayName}))
+		s.epicAccountLabel.SetText(lang.LocalizeKey("settings.epic_logged_in", "Logged in Epic Games Account"))
 		s.epicLoginButton.Hide()
 		s.epicLogoutButton.Show()
 	}
 }
 
 func (s *Settings) showEpicLoginDialog() {
-	authUrl := s.state.Core.EpicApi.GetAuthUrl()
-
-	instruction := widget.NewLabel(lang.LocalizeKey("settings.epic_login_instruction", "Please login with Epic Games and enter the code below."))
-	instruction.Wrapping = fyne.TextWrapWord
-
-	openButton := widget.NewButton(lang.LocalizeKey("settings.epic_login_url_button", "Open Login Page"), func() {
-		u, _ := url.Parse(authUrl)
-		_ = fyne.CurrentApp().OpenURL(u)
-	})
-
-	entry := widget.NewEntry()
-	entry.SetPlaceHolder(lang.LocalizeKey("settings.epic_login_code_label", "Authorization Code"))
-
-	content := container.NewVBox(
-		instruction,
-		openButton,
-		entry,
-	)
-
-	dialog.ShowCustomConfirm(
-		lang.LocalizeKey("settings.epic_login", "Login"),
-		lang.LocalizeKey("common.save", "Login"),
-		lang.LocalizeKey("common.cancel", "Cancel"),
-		content,
-		func(confirm bool) {
-			if !confirm || entry.Text == "" {
-				return
-			}
-
-			code := entry.Text
-			session, err := s.state.Core.EpicApi.LoginWithAuthCode(code)
-			if err != nil {
-				dialog.ShowError(err, s.state.Window)
-				return
-			}
-
-			if err := s.state.Core.EpicSessionManager.Save(session); err != nil {
-				dialog.ShowError(err, s.state.Window)
-				return
-			}
-
-			s.refreshEpicAccountInfo()
-			dialog.ShowInformation(lang.LocalizeKey("common.success", "Success"), lang.LocalizeKey("common.success", "Logged in successfully."), s.state.Window)
-		},
-		s.state.Window,
-	)
+	s.state.ShowEpicLoginWindow(func() {
+		s.refreshEpicAccountInfo()
+		dialog.ShowInformation(lang.LocalizeKey("settings.login_success", "Login Successful"), lang.LocalizeKey("settings.login_success_message", "You have been logged in successfully."), s.state.Window)
+	}, nil)
 }
 
 func (s *Settings) epicLogout() {
