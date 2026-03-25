@@ -426,11 +426,7 @@ func (r *Repository) LoadNext() {
 
 func (r *Repository) fetchMods() (error, bool) {
 	defer func() {
-		var text string
-		fyne.DoAndWait(func() {
-			text = r.searchBar.Text
-		})
-		r.updateModList(text)
+		r.updateModList(r.currentSearchText())
 	}()
 	if r.state.Rest != nil {
 		mods, err := r.modsBind.Get()
@@ -449,16 +445,19 @@ func (r *Repository) fetchMods() (error, bool) {
 		if modIDs, err := r.state.Rest.GetModIDs(ModsPerPage, afterId, lastId); err != nil {
 			return err, false
 		} else if len(modIDs) > 0 {
-			for _, m := range modIDs {
-				// TODO: Async fetch mod details with loading state for each item instead of blocking on each request
-				modData, err := r.state.Rest.GetMod(m)
-				if err != nil {
-					slog.Warn("Failed to fetch mod details while refreshing mods", "modID", m, "error", err)
-					continue
-				}
-				if err := r.modsBind.Append(modData); err != nil {
+			startIndex := len(mods)
+			for _, modID := range modIDs {
+				loadingMod := &modmgr.Mod{}
+				loadingMod.ID = modID
+				loadingMod.Name = lang.LocalizeKey("repository.loading_mod", "Loading mod '{{.ID}}'...", map[string]any{"ID": modID})
+				loadingMod.Description = lang.LocalizeKey("repository.loading_mod_details", "Fetching mod details...")
+				if err := r.modsBind.Append(loadingMod); err != nil {
 					return err, false
 				}
+			}
+
+			for i, modID := range modIDs {
+				go r.loadModDetailsAsync(modID, startIndex+i)
 			}
 			r.mu.Lock()
 			r.lastModID = modIDs[len(modIDs)-1]
@@ -478,6 +477,44 @@ func (r *Repository) fetchMods() (error, bool) {
 	}
 	slog.Error("rest client is nil, cannot refresh mods")
 	return nil, false
+}
+
+func (r *Repository) currentSearchText() string {
+	var text string
+	fyne.DoAndWait(func() {
+		text = r.searchBar.Text
+	})
+	return text
+}
+
+func (r *Repository) loadModDetailsAsync(modID string, listIndex int) {
+	modData, err := r.state.Rest.GetMod(modID)
+	if err != nil {
+		slog.Warn("Failed to fetch mod details while refreshing mods", "modID", modID, "error", err)
+		modData = &modmgr.Mod{}
+		modData.ID = modID
+		modData.Name = lang.LocalizeKey("repository.failed_to_load_mod", "Failed to load mod '{{.ID}}'", map[string]any{"ID": modID})
+		modData.Description = lang.LocalizeKey("repository.failed_to_load_mod_description", "Could not fetch mod details: {{.Error}}", map[string]any{"Error": err.Error()})
+	} else if modData == nil {
+		modData = &modmgr.Mod{}
+		modData.ID = modID
+		modData.Name = lang.LocalizeKey("repository.mod_not_found", "Mod '{{.ID}}' not found", map[string]any{"ID": modID})
+		modData.Description = lang.LocalizeKey("repository.mod_not_found_description", "The mod details are unavailable.")
+	}
+
+	currentValue, err := r.modsBind.GetValue(listIndex)
+	if err != nil || currentValue == nil {
+		return
+	}
+	if currentValue.ID != modID {
+		return
+	}
+	if err := r.modsBind.SetValue(listIndex, modData); err != nil {
+		slog.Warn("Failed to update mod details in list", "modID", modID, "index", listIndex, "error", err)
+		return
+	}
+
+	r.updateModList(r.currentSearchText())
 }
 
 func (r *Repository) reloadMods() {

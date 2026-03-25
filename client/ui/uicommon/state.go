@@ -227,7 +227,6 @@ func (i *State) RefreshModInstallation() {
 					"version": outdated.CurrentVersion,
 					"latest":  outdated.LatestVersion,
 				}))
-			canLaunch = false // TODO: allow launching with outdated mods
 			// Original code broke loop here
 			break
 		}

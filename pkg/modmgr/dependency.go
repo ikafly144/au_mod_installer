@@ -32,7 +32,9 @@ func ResolveDependencies(initialMods []ModVersion, provider VersionProvider) (ma
 
 			// Check if already resolved
 			if _, ok := resolved[dep.ModID]; ok {
-				// TODO: Check version compatibility if dep.Version is specified
+				if dep.VersionID != "" && dep.VersionID != "any" && resolved[dep.ModID].ID != dep.VersionID {
+					return nil, fmt.Errorf("version conflict for mod %s: required %s but resolved %s", dep.ModID, dep.VersionID, resolved[dep.ModID].ID)
+				}
 				continue
 			}
 

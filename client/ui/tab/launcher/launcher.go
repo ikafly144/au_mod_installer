@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -738,62 +739,72 @@ func (l *Launcher) showAddModDialog(onAdd func([]modmgr.ModVersion)) {
 	// Create dialog first
 	var d *dialog.CustomDialog
 
-	// Refresh function
-	refreshList := func(modIDs []string) {
-		contentBox.Objects = nil
-		for _, modID := range modIDs {
-			// TODO: Async fetch mod details with loading state for each item
-			mod, err := l.state.Rest.GetMod(modID)
-			if err != nil {
-				slog.Warn("Failed to fetch mod details", "modID", modID, "error", err)
-				continue
-			}
+	buildItem := func(title, subtitle string, onTap func()) fyne.CanvasObject {
+		imgRect := canvas.NewRectangle(theme.Color(theme.ColorNameDisabled))
+		imgRect.SetMinSize(fyne.NewSquareSize(80))
+		img := container.NewCenter(imgRect)
 
-			// Create Item UI
-			imgRect := canvas.NewRectangle(theme.Color(theme.ColorNameDisabled))
-			imgRect.SetMinSize(fyne.NewSquareSize(80))
-			img := container.NewCenter(imgRect)
+		textContainer := container.NewVBox(
+			widget.NewLabelWithStyle(title, fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+			widget.NewLabel(subtitle),
+		)
 
-			textContainer := container.NewVBox(
-				widget.NewLabelWithStyle(mod.Name, fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-				widget.NewLabel(mod.Author),
-			)
+		itemContent := container.New(layout.NewBorderLayout(nil, nil, img, nil),
+			img,
+			container.NewPadded(textContainer),
+		)
 
-			itemContent := container.New(layout.NewBorderLayout(nil, nil, img, nil),
-				img,
-				container.NewPadded(textContainer),
-			)
-
-			// Make clickable
-			card := uicommon.NewTappableContainer(itemContent, func() {
-				detailsDialog := l.newModDetailsDialog(mod, func(v modmgr.ModVersion) {
-					onAdd([]modmgr.ModVersion{v})
-					d.Dismiss()
-				})
-				detailsDialog.Show()
-			})
-
-			// Styling
-			bg := canvas.NewRectangle(theme.Color(theme.ColorNameBackground))
-			bg.StrokeColor = theme.Color(theme.ColorNameButton)
-			bg.StrokeWidth = 1
-			bg.CornerRadius = theme.InputRadiusSize()
-
-			item := container.NewStack(bg, container.NewPadded(card))
-			contentBox.Add(item)
-		}
-		contentBox.Refresh()
+		card := uicommon.NewTappableContainer(itemContent, onTap)
+		bg := canvas.NewRectangle(theme.Color(theme.ColorNameBackground))
+		bg.StrokeColor = theme.Color(theme.ColorNameButton)
+		bg.StrokeWidth = 1
+		bg.CornerRadius = theme.InputRadiusSize()
+		return container.NewStack(bg, container.NewPadded(card))
 	}
 
 	go func() {
-		m, err := l.state.Rest.GetModIDs(100, "", "")
+		modIDs, err := l.state.Rest.GetModIDs(100, "", "")
 		if err != nil {
 			dialog.ShowError(err, l.state.Window)
 			return
 		}
 		fyne.Do(func() {
-			refreshList(m)
+			contentBox.Objects = nil
+			for range modIDs {
+				contentBox.Add(buildItem(lang.LocalizeKey("profile.loading_mod", "Loading mod details..."), "", nil))
+			}
+			contentBox.Refresh()
 		})
+
+		for i, modID := range modIDs {
+			go func(index int, id string) {
+				mod, fetchErr := l.state.Rest.GetMod(id)
+				fyne.Do(func() {
+					if index >= len(contentBox.Objects) {
+						return
+					}
+					if fetchErr != nil || mod == nil {
+						if fetchErr != nil {
+							slog.Warn("Failed to fetch mod details", "modID", id, "error", fetchErr)
+						}
+						title := lang.LocalizeKey("profile.failed_mod", "Failed to load mod '{{.ID}}'", map[string]any{"ID": id})
+						subtitle := lang.LocalizeKey("profile.failed_mod_description", "Reopen this dialog to retry")
+						contentBox.Objects[index] = buildItem(title, subtitle, nil)
+						contentBox.Refresh()
+						return
+					}
+
+					contentBox.Objects[index] = buildItem(mod.Name, mod.Author, func() {
+						detailsDialog := l.newModDetailsDialog(mod, func(v modmgr.ModVersion) {
+							onAdd([]modmgr.ModVersion{v})
+							d.Dismiss()
+						})
+						detailsDialog.Show()
+					})
+					contentBox.Refresh()
+				})
+			}(i, modID)
+		}
 	}()
 
 	d = dialog.NewCustom(
@@ -810,24 +821,46 @@ func (l *Launcher) newModDetailsDialog(mod *modmgr.Mod, onSelect func(modmgr.Mod
 	loading := widget.NewProgressBarInfinite()
 	loading.Start()
 
-	var versions []modmgr.ModVersion
+	type versionRow struct {
+		versionID string
+		version   *modmgr.ModVersion
+		err       error
+		loading   bool
+	}
+
+	var rows []versionRow
 	var d *dialog.CustomDialog
 
 	versionList := widget.NewList(
-		func() int { return len(versions) },
+		func() int { return len(rows) },
 		func() fyne.CanvasObject {
 			return widget.NewButton("ver", nil)
 		},
 		func(id widget.ListItemID, item fyne.CanvasObject) {
-			if id >= len(versions) {
+			if id >= len(rows) {
 				return
 			}
-			v := versions[id]
+			row := rows[id]
 			btn := item.(*widget.Button)
-			btn.SetText(v.ID)
-			btn.OnTapped = func() {
-				d.Dismiss()
-				onSelect(v)
+
+			btn.OnTapped = nil
+			btn.Disable()
+
+			switch {
+			case row.loading:
+				btn.SetText(lang.LocalizeKey("profile.loading_version", "Loading version '{{.ID}}'...", map[string]any{"ID": row.versionID}))
+			case row.err != nil:
+				btn.SetText(lang.LocalizeKey("profile.failed_version", "Failed to load version '{{.ID}}'", map[string]any{"ID": row.versionID}))
+			case row.version != nil:
+				btn.SetText(row.version.ID)
+				btn.Enable()
+				version := *row.version
+				btn.OnTapped = func() {
+					d.Dismiss()
+					onSelect(version)
+				}
+			default:
+				btn.SetText(lang.LocalizeKey("profile.unavailable_version", "Version '{{.ID}}' unavailable", map[string]any{"ID": row.versionID}))
 			}
 		},
 	)
@@ -844,24 +877,44 @@ func (l *Launcher) newModDetailsDialog(mod *modmgr.Mod, onSelect func(modmgr.Mod
 	d.Resize(fyne.NewSize(400, 300))
 
 	go func() {
-		defer fyne.Do(loading.Hide)
 		v, err := l.state.Rest.GetModVersionIDs(mod.ID, 100, "")
 		if err != nil {
 			d.Hide()
 			dialog.ShowError(err, l.state.Window)
 			return
 		}
-		versions = make([]modmgr.ModVersion, len(v))
-		// TODO: Async fetch version details
-		for i, id := range v {
-			version, err := l.state.Rest.GetModVersion(mod.ID, id)
-			if err == nil {
-				versions[i] = *version
-			}
-		}
 		fyne.Do(func() {
+			rows = make([]versionRow, len(v))
+			for i, versionID := range v {
+				rows[i] = versionRow{
+					versionID: versionID,
+					loading:   true,
+				}
+			}
 			versionList.Refresh()
 		})
+
+		var wg sync.WaitGroup
+		for i, id := range v {
+			wg.Add(1)
+			go func(index int, versionID string) {
+				defer wg.Done()
+				version, fetchErr := l.state.Rest.GetModVersion(mod.ID, versionID)
+				fyne.Do(func() {
+					if index >= len(rows) {
+						return
+					}
+					rows[index].loading = false
+					rows[index].err = fetchErr
+					if fetchErr == nil && version != nil {
+						rows[index].version = version
+					}
+					versionList.RefreshItem(index)
+				})
+			}(i, id)
+		}
+		wg.Wait()
+		fyne.Do(loading.Hide)
 	}()
 	return d
 }
