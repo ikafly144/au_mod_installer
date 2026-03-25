@@ -124,5 +124,8 @@
     "repository.no_mods_found": "Modが見つかりませんでした。",
     "repository.failed_to_load": "Modの読み込みに失敗しました: {{.Error}}",
     "repository.update_available": "アップデート利用可能",
-    "launcher.error.no_profile": "起動するプロファイルを選択してください。"
+    "launcher.error.no_profile": "起動するプロファイルを選択してください。",
+    "launcher.sync.title": "プロファイル同期中",
+    "launcher.sync.in_progress": "プロファイルを同期しています。しばらくお待ちください...",
+    "launcher.sync.success": "プロファイルの再同期とMod再ダウンロードが完了しました。"
 }

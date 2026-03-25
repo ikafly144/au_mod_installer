@@ -400,7 +400,7 @@ func (l *Launcher) syncProfile(prof profile.Profile) {
 		return
 	}
 
-	l.progressBar.Canvas().Show()
+	syncDialog, syncProgress := l.newSyncProgressDialog()
 	l.launchButton.Disable()
 	if err := l.state.CanInstall.Set(false); err != nil {
 		slog.Warn("Failed to set canInstall", "error", err)
@@ -408,44 +408,69 @@ func (l *Launcher) syncProfile(prof profile.Profile) {
 	if err := l.state.CanLaunch.Set(false); err != nil {
 		slog.Warn("Failed to set canLaunch", "error", err)
 	}
+	fyne.Do(syncDialog.Show)
 
 	go func() {
-		defer fyne.Do(func() {
-			l.progressBar.Canvas().Hide()
-			l.checkLaunchState()
-		})
+		var syncErr error
+		defer func() {
+			fyne.DoAndWait(func() {
+				syncDialog.Hide()
+				l.checkLaunchState()
+			})
+			if syncErr != nil {
+				l.state.SetError(syncErr)
+				return
+			}
+			l.state.ClearError()
+			l.state.ShowInfoDialog(
+				lang.LocalizeKey("common.success", "Success"),
+				lang.LocalizeKey("launcher.sync.success", "Profile has been re-synced and mods re-downloaded."),
+			)
+		}()
 
 		// Resolve dependencies
 		resolvedVersions, err := l.state.Core.ResolveDependencies(prof.Versions())
 		if err != nil {
-			l.state.SetError(fmt.Errorf("failed to resolve dependencies: %w", err))
+			syncErr = fmt.Errorf("failed to resolve dependencies: %w", err)
 			return
 		}
 
 		// Download mods to cache with force=false (don't clear global cache)
 		configDir, err := os.UserConfigDir()
 		if err != nil {
-			l.state.SetError(err)
+			syncErr = err
 			return
 		}
 		cacheDir := filepath.Join(configDir, "au_mod_installer", "mods")
 
-		if err := modmgr.DownloadMods(cacheDir, resolvedVersions, binaryType, l.progressBar, false); err != nil {
-			l.state.SetError(err)
+		if err := modmgr.DownloadMods(cacheDir, resolvedVersions, binaryType, syncProgress, false); err != nil {
+			syncErr = err
 			return
 		}
 
 		// Sync profile directory
 		if err := l.state.Core.SyncProfile(prof.ID, binaryType, gameVersion); err != nil {
-			l.state.SetError(err)
+			syncErr = err
 			return
 		}
-
-		l.state.ClearError()
-		fyne.Do(func() {
-			dialog.ShowInformation("Sync Complete", "Profile has been re-synced and mods re-downloaded.", l.state.Window)
-		})
 	}()
+}
+
+func (l *Launcher) newSyncProgressDialog() (*dialog.CustomDialog, *progress.FyneProgress) {
+	bar := widget.NewProgressBar()
+	bar.SetValue(0)
+	progressBar := progress.NewFyneProgress(bar)
+	content := container.NewVBox(
+		widget.NewLabel(lang.LocalizeKey("launcher.sync.in_progress", "Syncing profile. Please wait...")),
+		bar,
+	)
+	d := dialog.NewCustomWithoutButtons(
+		lang.LocalizeKey("launcher.sync.title", "Syncing Profile"),
+		content,
+		l.state.Window,
+	)
+	d.Resize(fyne.NewSize(420, 140))
+	return d, progressBar
 }
 
 func (l *Launcher) refreshProfiles() {
