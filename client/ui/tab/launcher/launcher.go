@@ -39,7 +39,6 @@ type Launcher struct {
 	importProfileButton *widget.Button
 
 	profileList       *widget.List
-	progressBar       *progress.FyneProgress
 	profiles          []profile.Profile
 	selectedProfileID uuid.UUID
 
@@ -54,7 +53,6 @@ func NewLauncherTab(s *uicommon.State) uicommon.Tab {
 	revision = revision[:min(7, len(revision))]
 	l = Launcher{
 		state:               s,
-		progressBar:         progress.NewFyneProgress(widget.NewProgressBar()),
 		launchButton:        widget.NewButtonWithIcon(lang.LocalizeKey("launcher.launch", "Launch"), theme.MediaPlayIcon(), l.runLaunch),
 		createProfileButton: widget.NewButtonWithIcon(lang.LocalizeKey("profile.create", "Create Profile"), theme.ContentAddIcon(), l.createProfile),
 		importProfileButton: widget.NewButtonWithIcon(lang.LocalizeKey("profile.import_clipboard", "Import from Clipboard"), theme.ContentPasteIcon(), l.showImportDialog),
@@ -255,7 +253,6 @@ func (l *Launcher) Tab() (*container.TabItem, error) {
 		widget.NewSeparator(),
 		container.NewGridWithColumns(2, l.createProfileButton, l.importProfileButton),
 		l.launchButton,
-		l.progressBar.Canvas(),
 		l.state.ErrorText,
 	)
 
@@ -296,7 +293,7 @@ func (l *Launcher) runLaunch() {
 		}
 	}
 
-	l.progressBar.Canvas().Show()
+	launchDialog, launchProgress := l.newLaunchProgressDialog()
 	l.launchButton.Disable()
 	if err := l.state.CanInstall.Set(false); err != nil {
 		slog.Warn("Failed to set canInstall", "error", err)
@@ -304,37 +301,43 @@ func (l *Launcher) runLaunch() {
 	if err := l.state.CanLaunch.Set(false); err != nil {
 		slog.Warn("Failed to set canLaunch", "error", err)
 	} // Disable launch while downloading
+	fyne.Do(launchDialog.Show)
 
 	go func() {
-		defer fyne.Do(func() {
-			l.progressBar.Canvas().Hide()
-			l.checkLaunchState() // Re-enable button logic
-			// l.state.CanInstall.Set(true)
-		})
+		var launchErr error
+		defer func() {
+			fyne.DoAndWait(func() {
+				launchDialog.Hide()
+				l.checkLaunchState() // Re-enable button logic
+			})
+			if launchErr != nil {
+				l.state.SetError(launchErr)
+			}
+		}()
 
 		// Resolve dependencies
 		resolvedVersions, err := l.state.Core.ResolveDependencies(targetProfile.Versions())
 		if err != nil {
-			l.state.SetError(fmt.Errorf("failed to resolve dependencies: %w", err))
+			launchErr = fmt.Errorf("failed to resolve dependencies: %w", err)
 			return
 		}
 
 		// Download mods to cache
 		configDir, err := os.UserConfigDir()
 		if err != nil {
-			l.state.SetError(err)
+			launchErr = err
 			return
 		}
 		cacheDir := filepath.Join(configDir, "au_mod_installer", "mods")
 
-		if err := modmgr.DownloadMods(cacheDir, resolvedVersions, binaryType, l.progressBar, false); err != nil {
-			l.state.SetError(err)
+		if err := modmgr.DownloadMods(cacheDir, resolvedVersions, binaryType, launchProgress, false); err != nil {
+			launchErr = err
 			return
 		}
 
 		// Set active profile
 		if err := l.state.ActiveProfile.Set(targetProfile.ID.String()); err != nil {
-			l.state.SetError(err)
+			launchErr = err
 			return
 		}
 
@@ -343,6 +346,15 @@ func (l *Launcher) runLaunch() {
 		// Proceed to Launch
 		l.state.Launch(path)
 	}()
+}
+
+func (l *Launcher) newLaunchProgressDialog() (*dialog.CustomDialog, *progress.FyneProgress) {
+	return l.newProgressDialog(
+		"launcher.launch.title",
+		"Launching",
+		"launcher.launch.in_progress",
+		"Preparing launch. Please wait...",
+	)
 }
 
 func (l *Launcher) checkLaunchState() {
@@ -457,15 +469,24 @@ func (l *Launcher) syncProfile(prof profile.Profile) {
 }
 
 func (l *Launcher) newSyncProgressDialog() (*dialog.CustomDialog, *progress.FyneProgress) {
+	return l.newProgressDialog(
+		"launcher.sync.title",
+		"Syncing Profile",
+		"launcher.sync.in_progress",
+		"Syncing profile. Please wait...",
+	)
+}
+
+func (l *Launcher) newProgressDialog(titleKey, titleDefault, messageKey, messageDefault string) (*dialog.CustomDialog, *progress.FyneProgress) {
 	bar := widget.NewProgressBar()
 	bar.SetValue(0)
 	progressBar := progress.NewFyneProgress(bar)
 	content := container.NewVBox(
-		widget.NewLabel(lang.LocalizeKey("launcher.sync.in_progress", "Syncing profile. Please wait...")),
+		widget.NewLabel(lang.LocalizeKey(messageKey, messageDefault)),
 		bar,
 	)
 	d := dialog.NewCustomWithoutButtons(
-		lang.LocalizeKey("launcher.sync.title", "Syncing Profile"),
+		lang.LocalizeKey(titleKey, titleDefault),
 		content,
 		l.state.Window,
 	)
@@ -747,9 +768,6 @@ func (l *Launcher) openProfileEditor(prof profile.Profile) {
 }
 
 func (l *Launcher) showAddModDialog(onAdd func([]modmgr.ModVersion)) {
-	l.progressBar.Canvas().Show()
-	defer l.progressBar.Canvas().Hide()
-
 	contentBox := container.NewVBox()
 	scroll := container.NewVScroll(contentBox)
 

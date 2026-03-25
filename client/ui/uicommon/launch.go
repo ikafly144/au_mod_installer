@@ -4,9 +4,7 @@ import (
 	"errors"
 	"log/slog"
 
-	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/lang"
-	"fyne.io/fyne/v2/widget"
 
 	"github.com/google/uuid"
 
@@ -29,29 +27,11 @@ func (s *State) Launch(path string) {
 		}
 	}
 
-	fyne.Do(func() {
-		s.ErrorText.Segments = []widget.RichTextSegment{
-			&widget.TextSegment{Text: lang.LocalizeKey("launch.running", "Among Us is currently running...")},
-		}
-		s.ErrorText.Refresh()
-		s.ErrorText.Show()
-	})
-
 	activeProfileIDStr, _ := s.ActiveProfile.Get()
 	activeProfileID, err := uuid.Parse(activeProfileIDStr)
 	if err != nil {
 		slog.Warn("Failed to parse active profile ID", "error", err)
 		activeProfileID = uuid.Nil
-	}
-
-	if activeProfileID != uuid.Nil {
-		fyne.Do(func() {
-			s.ErrorText.Segments = []widget.RichTextSegment{
-				&widget.TextSegment{Text: lang.LocalizeKey("launch.applying_mods", "Applying mods...")},
-			}
-			s.ErrorText.Refresh()
-			s.ErrorText.Show()
-		})
 	}
 
 	profileDir, cleanup, err := s.Core.PrepareLaunch(path, activeProfileID)
@@ -66,33 +46,15 @@ func (s *State) Launch(path string) {
 		if err := cleanup(); err != nil {
 			slog.Error("Failed to cleanup", "error", err)
 			s.SetError(err)
-		} else {
-			fyne.Do(func() {
-				s.ErrorText.Hide()
-			})
 		}
 	}()
-
-	// Re-set "running" message if we changed it to "applying mods"
-	if activeProfileID != uuid.Nil {
-		fyne.Do(func() {
-			s.ErrorText.Segments = []widget.RichTextSegment{
-				&widget.TextSegment{Text: lang.LocalizeKey("launch.running", "Among Us is currently running...")},
-			}
-			s.ErrorText.Refresh()
-			s.ErrorText.Show()
-		})
-	}
 
 	if err := s.Core.ExecuteLaunch(path, profileDir); err != nil {
 		s.ShowErrorDialog(errors.New(lang.LocalizeKey("launch.error.launch_failed", "Failed to launch Among Us: ") + err.Error()))
 		slog.Warn("Failed to launch Among Us", "error", err)
 		return
-	} else {
-		fyne.Do(func() {
-			s.ErrorText.Hide()
-		})
 	}
+	s.ShowGameRunningDialog()
 	_ = s.CanLaunch.Set(true)
 	_ = s.CanInstall.Set(true)
 }

@@ -111,6 +111,7 @@ type State struct {
 	launchLock       sync.Mutex
 	dialogLock       sync.Mutex
 	activeDialog     dialog.Dialog
+	runningDialog    dialog.Dialog
 
 	Core           *core.App
 	Rest           rest.Client
@@ -161,6 +162,49 @@ func (s *State) ShowInfoDialog(title, message string) {
 	}
 	s.showDialog(func() dialog.Dialog {
 		return dialog.NewInformation(title, message, s.Window)
+	})
+}
+
+func (s *State) ShowGameRunningDialog() {
+	if s.Window == nil {
+		return
+	}
+	fyne.Do(func() {
+		s.dialogLock.Lock()
+		if s.runningDialog != nil {
+			s.dialogLock.Unlock()
+			return
+		}
+		label := widget.NewLabel(lang.LocalizeKey("launch.running.dialog", "Among Us is running. This dialog closes automatically when the game exits."))
+		label.Wrapping = fyne.TextWrapWord
+		d := dialog.NewCustomWithoutButtons(
+			lang.LocalizeKey("launch.running.title", "Game Running"),
+			container.NewVBox(label),
+			s.Window,
+		)
+		d.SetOnClosed(func() {
+			s.dialogLock.Lock()
+			if s.runningDialog == d {
+				s.runningDialog = nil
+			}
+			s.dialogLock.Unlock()
+		})
+		d.Resize(fyne.NewSize(420, 120))
+		s.runningDialog = d
+		s.dialogLock.Unlock()
+		d.Show()
+	})
+}
+
+func (s *State) HideGameRunningDialog() {
+	fyne.Do(func() {
+		s.dialogLock.Lock()
+		d := s.runningDialog
+		s.runningDialog = nil
+		s.dialogLock.Unlock()
+		if d != nil {
+			d.Hide()
+		}
 	})
 }
 
@@ -299,9 +343,9 @@ func (i *State) RefreshModInstallation() {
 func (s *State) checkPlayingProcess() bool {
 	s.launchLock.Lock()
 	defer s.launchLock.Unlock()
-	canInstall := false
+	installDisabled := false
 	if ok, err := s.CanInstall.Get(); err == nil && !ok {
-		canInstall = true
+		installDisabled = true
 	}
 
 	running, err := s.Core.IsGameRunning()
@@ -310,15 +354,16 @@ func (s *State) checkPlayingProcess() bool {
 		return false
 	}
 
-	if running && !canInstall {
-		// Log PID? Core doesn't return PID. That's fine.
-		slog.Info("Among Us is currently running")
-
+	if running {
 		_ = s.CanInstall.Set(false)
 		_ = s.CanLaunch.Set(false)
-
+		s.ShowGameRunningDialog()
 		return true
-	} else if canInstall && !running {
+	}
+
+	s.HideGameRunningDialog()
+
+	if installDisabled {
 		slog.Info("Among Us is not running, re-enabling installation")
 		_ = s.CanInstall.Set(true)
 		fyne.Do(s.RefreshModInstallation)
