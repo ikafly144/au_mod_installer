@@ -18,7 +18,7 @@ type Profile struct {
 	ModVersions    map[string]modmgr.ModVersion `json:"mod_versions,omitempty"`
 	UpdatedAt      time.Time                    `json:"updated_at"`
 	PlayDurationNS int64                        `json:"play_duration_ns,omitempty"`
-	LastLaunchedAt time.Time                    `json:"last_launched_at,omitempty"`
+	LastLaunchedAt time.Time                    `json:"last_launched_at"`
 }
 
 const SharedProfileVersion = "1"
