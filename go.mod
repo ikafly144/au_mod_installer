@@ -3,7 +3,7 @@ module github.com/ikafly144/au_mod_installer
 go 1.26
 
 require (
-	fyne.io/fyne/v2 v2.7.1
+	fyne.io/fyne/v2 v2.7.2
 	github.com/Microsoft/go-winio v0.6.2
 	github.com/TheTitanrain/w32 v0.0.0-20200114052255-2654d97dbd3d
 	github.com/gin-gonic/gin v1.12.0
@@ -26,7 +26,7 @@ require (
 
 require (
 	aead.dev/minisign v0.3.0 // indirect
-	fyne.io/systray v1.11.1-0.20250603113521-ca66a66d8b58 // indirect
+	fyne.io/systray v1.12.0 // indirect
 	fyne.io/tools v1.7.0 // indirect
 	github.com/BurntSushi/toml v1.5.0 // indirect
 	github.com/akavel/rsrc v0.10.2 // indirect

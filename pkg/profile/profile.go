@@ -11,12 +11,14 @@ import (
 )
 
 type Profile struct {
-	ID          uuid.UUID                    `json:"id"`
-	Name        string                       `json:"name"`
-	Author      string                       `json:"author"`
-	Description string                       `json:"description,omitempty"`
-	ModVersions map[string]modmgr.ModVersion `json:"mod_versions,omitempty"`
-	UpdatedAt   time.Time                    `json:"updated_at"`
+	ID             uuid.UUID                    `json:"id"`
+	Name           string                       `json:"name"`
+	Author         string                       `json:"author"`
+	Description    string                       `json:"description,omitempty"`
+	ModVersions    map[string]modmgr.ModVersion `json:"mod_versions,omitempty"`
+	UpdatedAt      time.Time                    `json:"updated_at"`
+	PlayDurationNS int64                        `json:"play_duration_ns,omitempty"`
+	LastLaunchedAt time.Time                    `json:"last_launched_at,omitempty"`
 }
 
 const SharedProfileVersion = "1"
@@ -67,4 +69,15 @@ func (p *Profile) MakeShared() SharedProfile {
 	}
 
 	return shared
+}
+
+func (p *Profile) PlayDuration() time.Duration {
+	return time.Duration(p.PlayDurationNS)
+}
+
+func (p *Profile) AddPlayDuration(d time.Duration) {
+	if d <= 0 {
+		return
+	}
+	p.PlayDurationNS += int64(d)
 }

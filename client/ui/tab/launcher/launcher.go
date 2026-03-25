@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -39,24 +41,47 @@ type Launcher struct {
 	importProfileButton *widget.Button
 
 	profileList       *widget.List
+	profileGrid       *fyne.Container
+	profileGridScroll *container.Scroll
+	profileViews      *fyne.Container
+	toggleViewButton  *widget.Button
+	sortSelect        *widget.Select
 	profiles          []profile.Profile
 	selectedProfileID uuid.UUID
+	isGridView        bool
+	sortMode          string
 
 	canLaunchListener binding.DataListener
 }
 
 var _ uicommon.Tab = (*Launcher)(nil)
 
+const (
+	prefLauncherViewMode = "launcher.view_mode"
+	prefLauncherSortMode = "launcher.sort_mode"
+
+	viewModeList = "list"
+	viewModeGrid = "grid"
+
+	sortModeName     = "name"
+	sortModePlaytime = "playtime"
+	sortModeRecent   = "recent"
+)
+
 func NewLauncherTab(s *uicommon.State) uicommon.Tab {
 	var l Launcher
 	revision := fyne.CurrentApp().Metadata().Custom["revision"]
 	revision = revision[:min(7, len(revision))]
+	viewMode := fyne.CurrentApp().Preferences().StringWithFallback(prefLauncherViewMode, viewModeList)
+	sortMode := normalizeSortMode(fyne.CurrentApp().Preferences().StringWithFallback(prefLauncherSortMode, sortModeName))
 	l = Launcher{
 		state:               s,
 		launchButton:        widget.NewButtonWithIcon(lang.LocalizeKey("launcher.launch", "Launch"), theme.MediaPlayIcon(), l.runLaunch),
 		createProfileButton: widget.NewButtonWithIcon(lang.LocalizeKey("profile.create", "Create Profile"), theme.ContentAddIcon(), l.createProfile),
 		importProfileButton: widget.NewButtonWithIcon(lang.LocalizeKey("profile.import_clipboard", "Import from Clipboard"), theme.ContentPasteIcon(), l.showImportDialog),
 		greetingContent:     widget.NewLabelWithStyle(fmt.Sprintf("バージョン：%s (%s)", s.Version, revision), fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+		sortMode:            sortMode,
+		isGridView:          viewMode == viewModeGrid,
 	}
 
 	l.init()
@@ -73,6 +98,8 @@ func (l *Launcher) init() {
 	l.launchButton.Importance = widget.HighImportance
 
 	l.setupProfileList()
+	l.setupProfileGrid()
+	l.setupToolbar()
 	l.refreshProfiles()
 	l.checkLaunchState()
 	l.checkSharedURI()
@@ -206,24 +233,7 @@ func (l *Launcher) setupProfileList() {
 			label.SetText(prof.Name)
 
 			menuBtn.OnTapped = func() {
-				menu := fyne.NewMenu("",
-					fyne.NewMenuItem(lang.LocalizeKey("profile.edit", "Edit"), func() {
-						l.openProfileEditor(prof)
-					}),
-					fyne.NewMenuItem(lang.LocalizeKey("profile.sync", "Sync (Clear & Re-download)"), func() {
-						l.syncProfile(prof)
-					}),
-					fyne.NewMenuItem(lang.LocalizeKey("profile.share", "Share"), func() {
-						l.shareProfile(prof)
-					}),
-					fyne.NewMenuItem(lang.LocalizeKey("profile.duplicate", "Duplicate"), func() {
-						l.showDuplicateDialog(prof)
-					}),
-					fyne.NewMenuItem(lang.LocalizeKey("profile.delete", "Delete"), func() {
-						l.deleteProfile(prof.ID)
-					}),
-				)
-				widget.ShowPopUpMenuAtPosition(menu, l.state.Window.Canvas(), fyne.CurrentApp().Driver().AbsolutePositionForObject(menuBtn).Add(fyne.NewPos(0, menuBtn.Size().Height)))
+				l.showProfileMenu(menuBtn, prof)
 			}
 		},
 	)
@@ -235,32 +245,202 @@ func (l *Launcher) setupProfileList() {
 		l.selectedProfileID = l.profiles[id].ID
 		_ = l.state.ActiveProfile.Set(l.selectedProfileID.String())
 		l.checkLaunchState()
+		l.refreshProfileGrid()
 	}
 	l.profileList.OnUnselected = func(id widget.ListItemID) {
 		l.selectedProfileID = uuid.Nil
 		l.checkLaunchState()
+		l.refreshProfileGrid()
 	}
 }
 
+func (l *Launcher) setupProfileGrid() {
+	l.profileGrid = container.NewGridWrap(fyne.NewSize(132, 172))
+	l.profileGridScroll = container.NewVScroll(l.profileGrid)
+}
+
+func (l *Launcher) setupToolbar() {
+	l.toggleViewButton = widget.NewButtonWithIcon("", theme.GridIcon(), func() {
+		l.isGridView = !l.isGridView
+		if l.isGridView {
+			fyne.CurrentApp().Preferences().SetString(prefLauncherViewMode, viewModeGrid)
+		} else {
+			fyne.CurrentApp().Preferences().SetString(prefLauncherViewMode, viewModeList)
+		}
+		l.updateViewToggleButton()
+		l.switchProfileView()
+	})
+	l.sortSelect = widget.NewSelect([]string{
+		lang.LocalizeKey("launcher.sort.name", "Name"),
+		lang.LocalizeKey("launcher.sort.playtime", "Play Time"),
+		lang.LocalizeKey("launcher.sort.recent", "Recently Launched"),
+	}, func(selected string) {
+		switch selected {
+		case lang.LocalizeKey("launcher.sort.playtime", "Play Time"):
+			l.sortMode = sortModePlaytime
+		case lang.LocalizeKey("launcher.sort.recent", "Recently Launched"):
+			l.sortMode = sortModeRecent
+		default:
+			l.sortMode = sortModeName
+		}
+		fyne.CurrentApp().Preferences().SetString(prefLauncherSortMode, l.sortMode)
+		l.refreshProfiles()
+	})
+	l.sortSelect.SetSelected(l.sortModeLabel(l.sortMode))
+	l.updateViewToggleButton()
+}
+
+func (l *Launcher) updateViewToggleButton() {
+	if l.isGridView {
+		l.toggleViewButton.SetIcon(theme.ListIcon())
+		// l.toggleViewButton.SetText(lang.LocalizeKey("launcher.view.list", "List"))
+		return
+	}
+	l.toggleViewButton.SetIcon(theme.GridIcon())
+	// l.toggleViewButton.SetText(lang.LocalizeKey("launcher.view.grid", "Grid"))
+}
+
+func (l *Launcher) switchProfileView() {
+	if l.profileViews == nil {
+		return
+	}
+	if l.isGridView {
+		l.profileGridScroll.Show()
+		l.profileList.Hide()
+		return
+	}
+	l.profileList.Show()
+	l.profileGridScroll.Hide()
+}
+
+func (l *Launcher) showProfileMenu(anchor fyne.CanvasObject, prof profile.Profile) {
+	menu := fyne.NewMenu("",
+		fyne.NewMenuItem(lang.LocalizeKey("profile.edit", "Edit"), func() {
+			l.openProfileEditor(prof)
+		}),
+		fyne.NewMenuItem(lang.LocalizeKey("profile.sync", "Sync (Clear & Re-download)"), func() {
+			l.syncProfile(prof)
+		}),
+		fyne.NewMenuItem(lang.LocalizeKey("profile.share", "Share"), func() {
+			l.shareProfile(prof)
+		}),
+		fyne.NewMenuItem(lang.LocalizeKey("profile.duplicate", "Duplicate"), func() {
+			l.showDuplicateDialog(prof)
+		}),
+		fyne.NewMenuItem(lang.LocalizeKey("profile.delete", "Delete"), func() {
+			l.deleteProfile(prof.ID)
+		}),
+	)
+	widget.ShowPopUpMenuAtPosition(menu, l.state.Window.Canvas(), fyne.CurrentApp().Driver().AbsolutePositionForObject(anchor).Add(fyne.NewPos(0, anchor.Size().Height)))
+}
+
+func (l *Launcher) refreshProfileGrid() {
+	if l.profileGrid == nil {
+		return
+	}
+	var items []fyne.CanvasObject
+	for i, prof := range l.profiles {
+		index := i
+		p := prof
+
+		img := canvas.NewImageFromImage(image.NewPaletted(image.Rect(0, 0, 120, 120), color.Palette{theme.Color(theme.ColorNameDisabled)}))
+		img.CornerRadius = 3
+		img.SetMinSize(fyne.NewSquareSize(116))
+		img.FillMode = canvas.ImageFillContain
+
+		text := canvas.NewText(prof.Name, theme.Color(theme.ColorNameForeground))
+		text.TextStyle = fyne.TextStyle{Bold: true}
+		desc := canvas.NewText(l.profileMetaText(p), theme.Color(theme.ColorNameDisabled))
+		desc.TextSize = theme.TextSize() * 0.76
+
+		menuBtn := widget.NewButtonWithIcon("", theme.MoreHorizontalIcon(), nil)
+		menuBtn.Importance = widget.LowImportance
+		menuBtn.Resize(fyne.NewSize(22, 22))
+		menuBtn.Move(fyne.NewPos(94, 4))
+		menuBtn.OnTapped = func() {
+			l.showProfileMenu(menuBtn, p)
+		}
+
+		iconAreaBg := canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground))
+		iconAreaBg.CornerRadius = 8
+		iconArea := container.NewStack(
+			iconAreaBg,
+			container.NewCenter(img),
+			container.NewWithoutLayout(menuBtn),
+		)
+		iconAreaSized := container.NewPadded(iconArea)
+
+		cardContent := container.NewBorder(
+			nil,
+			desc,
+			nil,
+			nil,
+			container.NewVBox(
+				container.NewCenter(iconAreaSized),
+				container.NewCenter(text),
+			),
+		)
+		tappable := uicommon.NewTappableContainerWithSecondary(cardContent, func() {
+			l.profileList.Select(index)
+		}, func(ev *fyne.PointEvent) {
+			l.showProfileMenuAt(ev.AbsolutePosition, p)
+		})
+
+		bg := canvas.NewRectangle(theme.Color(theme.ColorNameBackground))
+		bg.StrokeColor = theme.Color(theme.ColorNameButton)
+		bg.StrokeWidth = 1
+		bg.CornerRadius = theme.InputRadiusSize()
+		if p.ID == l.selectedProfileID {
+			bg.StrokeColor = theme.Color(theme.ColorNamePrimary)
+			bg.StrokeWidth = 2
+		}
+
+		items = append(items, container.NewStack(bg, container.NewPadded(tappable)))
+	}
+	if len(items) == 0 {
+		items = append(items, container.NewCenter(widget.NewLabel(lang.LocalizeKey("launcher.no_profiles", "No profiles found."))))
+	}
+	fyne.Do(func() {
+		l.profileGrid.Objects = items
+		l.profileGrid.Refresh()
+	})
+}
+
 func (l *Launcher) Tab() (*container.TabItem, error) {
+	// sortLabel := widget.NewLabelWithStyle(lang.LocalizeKey("launcher.sort.title", "Sort"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	sortIcon := canvas.NewImageFromResource(theme.MoveUpIcon())
+	sortIcon.SetMinSize(fyne.NewSquareSize(32))
 	header := container.NewVBox(
 		widget.NewCard(lang.LocalizeKey("launcher.card_title", "Mod of Us"), lang.LocalizeKey("launcher.card_subtitle", "Among Us Mod Manager"), l.greetingContent),
+		container.NewPadded(container.NewBorder(
+			nil,
+			nil,
+			container.NewHBox(sortIcon, l.sortSelect),
+			l.importProfileButton,
+			container.NewBorder(
+				nil,
+				nil,
+				l.toggleViewButton,
+				nil,
+				l.createProfileButton,
+			),
+		)),
 		// widget.NewRichTextFromMarkdown("### "+lang.LocalizeKey("installation.installation_status", "Installation Status")), l.state.ModInstalledInfo,
 		// widget.NewSeparator(),
 	)
 
 	footer := container.NewVBox(
-		widget.NewSeparator(),
-		container.NewGridWithColumns(2, l.createProfileButton, l.importProfileButton),
 		l.launchButton,
 		l.state.ErrorText,
 	)
+	l.profileViews = container.NewStack(l.profileList, l.profileGridScroll)
+	l.switchProfileView()
 
 	content := container.NewBorder(
 		header,
 		footer,
 		nil, nil,
-		l.profileList,
+		l.profileViews,
 	)
 	return container.NewTabItem(lang.LocalizeKey("launcher.tab_name", "Launcher"), content), nil
 }
@@ -345,6 +525,7 @@ func (l *Launcher) runLaunch() {
 
 		// Proceed to Launch
 		l.state.Launch(path)
+		fyne.Do(l.refreshProfiles)
 	}()
 }
 
@@ -496,7 +677,9 @@ func (l *Launcher) newProgressDialog(titleKey, titleDefault, messageKey, message
 
 func (l *Launcher) refreshProfiles() {
 	l.profiles = l.state.ProfileManager.List()
+	l.sortProfiles()
 	l.profileList.Refresh()
+	l.refreshProfileGrid()
 
 	// Select active profile
 	activeIDStr, _ := l.state.ActiveProfile.Get()
@@ -508,7 +691,98 @@ func (l *Launcher) refreshProfiles() {
 				break
 			}
 		}
+	} else {
+		l.profileList.UnselectAll()
+		l.selectedProfileID = uuid.Nil
+		l.checkLaunchState()
+		l.refreshProfileGrid()
 	}
+}
+
+func (l *Launcher) sortProfiles() {
+	switch l.sortMode {
+	case sortModePlaytime:
+		sort.SliceStable(l.profiles, func(i, j int) bool {
+			if l.profiles[i].PlayDurationNS == l.profiles[j].PlayDurationNS {
+				return strings.Compare(strings.ToLower(l.profiles[i].Name), strings.ToLower(l.profiles[j].Name)) < 0
+			}
+			return l.profiles[i].PlayDurationNS > l.profiles[j].PlayDurationNS
+		})
+	case sortModeRecent:
+		sort.SliceStable(l.profiles, func(i, j int) bool {
+			li := l.profiles[i].LastLaunchedAt
+			lj := l.profiles[j].LastLaunchedAt
+			if li.Equal(lj) {
+				return strings.Compare(strings.ToLower(l.profiles[i].Name), strings.ToLower(l.profiles[j].Name)) < 0
+			}
+			return li.After(lj)
+		})
+	default:
+		slices.SortFunc(l.profiles, func(a, b profile.Profile) int {
+			return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
+		})
+	}
+}
+
+func (l *Launcher) profileMetaText(p profile.Profile) string {
+	if p.LastLaunchedAt.IsZero() {
+		return lang.LocalizeKey("launcher.meta.never_launched", "Never launched")
+	}
+	return lang.LocalizeKey("launcher.meta.last_launched", "Last: {{.Date}}", map[string]any{
+		"Date": p.LastLaunchedAt.Format("2006-01-02"),
+	})
+}
+
+func normalizeSortMode(mode string) string {
+	switch mode {
+	case sortModePlaytime, sortModeRecent, sortModeName:
+		return mode
+	default:
+		return sortModeName
+	}
+}
+
+func (l *Launcher) sortModeLabel(mode string) string {
+	switch mode {
+	case sortModePlaytime:
+		return lang.LocalizeKey("launcher.sort.playtime", "Play Time")
+	case sortModeRecent:
+		return lang.LocalizeKey("launcher.sort.recent", "Recently Launched")
+	default:
+		return lang.LocalizeKey("launcher.sort.name", "Name")
+	}
+}
+
+func formatPlayDuration(d time.Duration) string {
+	if d < 0 {
+		d = 0
+	}
+	totalSeconds := int64(d.Round(time.Second).Seconds())
+	hours := totalSeconds / 3600
+	minutes := (totalSeconds % 3600) / 60
+	seconds := totalSeconds % 60
+	return fmt.Sprintf("%02d:%02d:%02d", hours, minutes, seconds)
+}
+
+func (l *Launcher) showProfileMenuAt(pos fyne.Position, prof profile.Profile) {
+	menu := fyne.NewMenu("",
+		fyne.NewMenuItem(lang.LocalizeKey("profile.edit", "Edit"), func() {
+			l.openProfileEditor(prof)
+		}),
+		fyne.NewMenuItem(lang.LocalizeKey("profile.sync", "Sync (Clear & Re-download)"), func() {
+			l.syncProfile(prof)
+		}),
+		fyne.NewMenuItem(lang.LocalizeKey("profile.share", "Share"), func() {
+			l.shareProfile(prof)
+		}),
+		fyne.NewMenuItem(lang.LocalizeKey("profile.duplicate", "Duplicate"), func() {
+			l.showDuplicateDialog(prof)
+		}),
+		fyne.NewMenuItem(lang.LocalizeKey("profile.delete", "Delete"), func() {
+			l.deleteProfile(prof.ID)
+		}),
+	)
+	widget.ShowPopUpMenuAtPosition(menu, l.state.Window.Canvas(), pos)
 }
 
 // -- Profile Management Methods --
@@ -631,6 +905,21 @@ func (l *Launcher) openProfileEditor(prof profile.Profile) {
 	}
 	nameForm := widget.NewForm(widget.NewFormItem(lang.LocalizeKey("profile.name", "Profile Name"), nameEntry))
 
+	lastLaunchedText := lang.LocalizeKey("profile.stats.never_launched", "Last Launch: Never")
+	if !currentProfile.LastLaunchedAt.IsZero() {
+		lastLaunchedText = lang.LocalizeKey("profile.stats.last_launched", "Last Launch: {{.Date}}", map[string]any{
+			"Date": currentProfile.LastLaunchedAt.Format("2006-01-02 15:04:05"),
+		})
+	}
+	playDurationText := lang.LocalizeKey("profile.stats.play_time", "Play Time: {{.Duration}}", map[string]any{
+		"Duration": formatPlayDuration(currentProfile.PlayDuration()),
+	})
+	statsContent := container.NewVBox(
+		widget.NewLabel(lastLaunchedText),
+		widget.NewLabel(playDurationText),
+	)
+	statsCard := widget.NewCard(lang.LocalizeKey("profile.stats.title", "Play Stats"), "", statsContent)
+
 	iconPlaceholder := canvas.NewImageFromImage(image.NewPaletted(image.Rect(0, 0, 128, 128),
 		color.Palette{theme.Color(theme.ColorNameDisabled)},
 	))
@@ -661,7 +950,9 @@ func (l *Launcher) openProfileEditor(prof profile.Profile) {
 			for modID, latest := range updates {
 				updatesAvailable[modID] = latest.ID
 			}
-			modList.Refresh()
+			fyne.Do(func() {
+				modList.Refresh()
+			})
 		}
 	}()
 
@@ -677,7 +968,9 @@ func (l *Launcher) openProfileEditor(prof profile.Profile) {
 		badge := hbox.Objects[1].(*widget.Label)
 		delBtn := c.Objects[1].(*widget.Button)
 
-		label.SetText(v.ModID + " (" + v.ID + ")")
+		fyne.DoAndWait(func() {
+			label.SetText(v.ModID + " (" + v.ID + ")")
+		})
 
 		if latestID, ok := updatesAvailable[v.ModID]; ok {
 			badge.SetText(lang.LocalizeKey("repository.update_available", "Update Available") + " (" + latestID + ")")
@@ -741,9 +1034,18 @@ func (l *Launcher) openProfileEditor(prof profile.Profile) {
 
 	content := container.NewBorder(
 		container.NewVBox(
-			container.NewBorder(nil, nil, iconPlaceholder, nil,
+			container.NewBorder(
+				nil,
+				nil,
 				iconPlaceholder,
-				nameForm,
+				nil,
+				container.NewBorder(
+					nil,
+					statsCard,
+					nil,
+					nil,
+					nameForm,
+				),
 			),
 			widget.NewSeparator(),
 			widget.NewLabel(lang.LocalizeKey("profile.mods", "Mods")),
@@ -754,7 +1056,7 @@ func (l *Launcher) openProfileEditor(prof profile.Profile) {
 
 	d = dialog.NewCustomWithoutButtons(
 		lang.LocalizeKey("profile.edit_title", "Edit Profile"),
-		content,
+		container.NewVScroll(content),
 		l.state.Window,
 	)
 	d.SetButtons([]fyne.CanvasObject{
