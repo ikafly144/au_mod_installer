@@ -71,6 +71,11 @@ func Main(w fyne.Window, version string, sharedURI string, cfg ...func(*Config))
 		repoTab,
 		settingsTab,
 	)
+	w.SetOnDropped(func(_ fyne.Position, uris []fyne.URI) {
+		if state.OnDroppedURIs != nil {
+			state.OnDroppedURIs(uris)
+		}
+	})
 	w.SetContent(canvas)
 	w.CenterOnScreen()
 	w.Resize(fyne.NewSize(440, 720))

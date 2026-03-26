@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -130,6 +131,29 @@ func (a *App) HandleSharedProfile(uri string) (*profile.SharedProfile, error) {
 	return &prof, nil
 }
 
+func (a *App) HandleSharedProfileArchive(reader io.ReaderAt, size int64) (*profile.SharedProfile, []byte, error) {
+	prof, iconPNG, err := profile.DecodeSharedArchive(reader, size)
+	if err != nil {
+		return nil, nil, err
+	}
+	return prof, iconPNG, nil
+}
+
+func (a *App) HandleSharedProfileArchiveFile(path string) (*profile.SharedProfile, []byte, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to read profile archive: %w", err)
+	}
+	defer file.Close()
+
+	stat, err := file.Stat()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to stat profile archive: %w", err)
+	}
+
+	return a.HandleSharedProfileArchive(file, stat.Size())
+}
+
 func (a *App) ExportProfile(prof profile.Profile) (string, error) {
 	builder := &strings.Builder{}
 	writer := zlib.NewWriter(base64.NewEncoder(base64.RawURLEncoding, builder))
@@ -143,4 +167,8 @@ func (a *App) ExportProfile(prof profile.Profile) (string, error) {
 	}
 
 	return "mod-of-us://profile/" + ProfileVersion + "/" + builder.String(), nil
+}
+
+func (a *App) ExportProfileArchive(prof profile.Profile, iconPNG []byte) ([]byte, error) {
+	return profile.EncodeSharedArchive(prof.MakeShared(), iconPNG)
 }

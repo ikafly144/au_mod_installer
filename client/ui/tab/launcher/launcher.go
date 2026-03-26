@@ -8,6 +8,7 @@ import (
 	"image/color"
 	imagedraw "image/draw"
 	"image/png"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -23,6 +24,7 @@ import (
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/lang"
 	"fyne.io/fyne/v2/layout"
+	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
@@ -100,7 +102,7 @@ func NewLauncherTab(s *uicommon.State) uicommon.Tab {
 		state:                  s,
 		launchButton:           widget.NewButtonWithIcon(lang.LocalizeKey("launcher.launch", "Launch"), theme.MediaPlayIcon(), l.runLaunch),
 		createProfileButton:    widget.NewButtonWithIcon(lang.LocalizeKey("profile.create", "Create Profile"), theme.ContentAddIcon(), l.createProfile),
-		importProfileButton:    widget.NewButtonWithIcon(lang.LocalizeKey("profile.import_clipboard", "Import from Clipboard"), theme.ContentPasteIcon(), l.showImportDialog),
+		importProfileButton:    widget.NewButtonWithIcon(lang.LocalizeKey("profile.import", "Import"), theme.ContentPasteIcon(), l.showImportDialog),
 		greetingContent:        widget.NewLabelWithStyle(fmt.Sprintf("バージョン：%s (%s)", s.Version, revision), fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 		sortMode:               sortMode,
 		sortDescending:         sortDescending,
@@ -135,19 +137,184 @@ func (l *Launcher) init() {
 		l.state.SharedURI = uri
 		fyne.Do(l.checkSharedURI)
 	}
+	l.state.OnDroppedURIs = func(uris []fyne.URI) {
+		l.handleDroppedURIs(uris)
+	}
 }
 
 func (l *Launcher) shareProfile(prof profile.Profile) {
+	var d *dialog.CustomDialog
+	shareCodeBtn := widget.NewButtonWithIcon(
+		lang.LocalizeKey("profile.share.action.copy_code", "Copy Share Code"),
+		theme.ContentCopyIcon(),
+		func() {
+			if d != nil {
+				d.Hide()
+			}
+			l.shareProfileAsCode(prof, true)
+		},
+	)
+	shareArchiveCopyBtn := widget.NewButtonWithIcon(
+		lang.LocalizeKey("profile.share.action.copy_archive", "Copy Archive"),
+		theme.ContentCopyIcon(),
+		func() {
+			if d != nil {
+				d.Hide()
+			}
+			l.shareProfileAsArchive(prof, true)
+		},
+	)
+	shareArchiveSaveBtn := widget.NewButtonWithIcon(
+		lang.LocalizeKey("profile.share.action.save_archive", "Save Archive"),
+		theme.DocumentSaveIcon(),
+		func() {
+			if d != nil {
+				d.Hide()
+			}
+			l.shareProfileAsArchive(prof, false)
+		},
+	)
+	content := container.NewVBox(
+		widget.NewLabel(lang.LocalizeKey("profile.share.options_hint", "Choose share action.")),
+		shareCodeBtn,
+		shareArchiveCopyBtn,
+		shareArchiveSaveBtn,
+	)
+
+	d = dialog.NewCustom(
+		lang.LocalizeKey("profile.share.options_title", "Share Profile"),
+		lang.LocalizeKey("common.cancel", "Cancel"),
+		content,
+		l.state.Window,
+	)
+	d.Resize(fyne.NewSize(420, 240))
+	d.Show()
+}
+
+func (l *Launcher) shareProfileAsCode(prof profile.Profile, copyToClipboard bool) {
 	uri, err := l.state.Core.ExportProfile(prof)
 	if err != nil {
 		dialog.ShowError(err, l.state.Window)
 		return
 	}
-	fyne.CurrentApp().Clipboard().SetContent(uri)
-	dialog.ShowInformation(lang.LocalizeKey("common.success", "Success"), lang.LocalizeKey("profile.shared_clipboard", "Share URI copied to clipboard."), l.state.Window)
+	if copyToClipboard {
+		fyne.CurrentApp().Clipboard().SetContent(uri)
+		dialog.ShowInformation(lang.LocalizeKey("common.success", "Success"), lang.LocalizeKey("profile.shared_clipboard", "共有コードをコピーしました。"), l.state.Window)
+		return
+	}
+	l.saveProfileShareCodeToFile(prof, uri)
+}
+
+func (l *Launcher) saveProfileShareCodeToFile(prof profile.Profile, uri string) {
+	path, err := l.state.ExplorerSaveFile(
+		lang.LocalizeKey("profile.share.code_file_type", "共有コード"),
+		"*.txt",
+		profileShareFileBaseName(prof)+".txt",
+	)
+	if err != nil {
+		slog.Info("Save share code cancelled or failed", "error", err)
+		return
+	}
+	if err := os.WriteFile(path, []byte(uri), 0600); err != nil {
+		dialog.ShowError(fmt.Errorf("failed to save share code: %w", err), l.state.Window)
+		return
+	}
+	dialog.ShowInformation(lang.LocalizeKey("common.success", "Success"), lang.LocalizeKey("profile.share.saved", "保存しました。"), l.state.Window)
+}
+
+func (l *Launcher) shareProfileAsArchive(prof profile.Profile, copyToClipboard bool) {
+	iconPNG, err := l.state.ProfileManager.LoadIconPNG(prof.ID)
+	if err != nil {
+		dialog.ShowError(err, l.state.Window)
+		return
+	}
+	archive, err := l.state.Core.ExportProfileArchive(prof, iconPNG)
+	if err != nil {
+		dialog.ShowError(err, l.state.Window)
+		return
+	}
+	if copyToClipboard {
+		tempFilePath := filepath.Join(os.TempDir(), profileShareFileBaseName(prof)+".aupack")
+		if err := os.WriteFile(tempFilePath, archive, 0600); err != nil {
+			dialog.ShowError(fmt.Errorf("failed to create temporary archive file: %w", err), l.state.Window)
+			return
+		}
+		if err := l.state.ClipboardSetFile(tempFilePath); err != nil {
+			dialog.ShowError(err, l.state.Window)
+			return
+		}
+		dialog.ShowInformation(lang.LocalizeKey("common.success", "Success"), lang.LocalizeKey("profile.share.archive_clipboard", "アーカイブをコピーしました。"), l.state.Window)
+		return
+	}
+
+	path, err := l.state.ExplorerSaveFile(
+		lang.LocalizeKey("profile.share.archive_file_type", "アーカイブ"),
+		"*.aupack",
+		profileShareFileBaseName(prof)+".aupack",
+	)
+	if err != nil {
+		slog.Info("Save archive cancelled or failed", "error", err)
+		return
+	}
+	if err := os.WriteFile(path, archive, 0600); err != nil {
+		dialog.ShowError(fmt.Errorf("failed to save profile archive: %w", err), l.state.Window)
+		return
+	}
+	dialog.ShowInformation(lang.LocalizeKey("common.success", "Success"), lang.LocalizeKey("profile.share.saved", "保存しました。"), l.state.Window)
+}
+
+func profileShareFileBaseName(prof profile.Profile) string {
+	name := strings.TrimSpace(prof.Name)
+	if name == "" {
+		return "mod-of-us-profile"
+	}
+	invalidChars := []string{"\\", "/", ":", "*", "?", "\"", "<", ">", "|"}
+	for _, ch := range invalidChars {
+		name = strings.ReplaceAll(name, ch, "_")
+	}
+	return name
 }
 
 func (l *Launcher) showImportDialog() {
+	var d *dialog.CustomDialog
+	importCodeBtn := widget.NewButtonWithIcon(
+		lang.LocalizeKey("profile.import_clipboard", "Import from Clipboard"),
+		theme.ContentPasteIcon(),
+		func() {
+			if d != nil {
+				d.Hide()
+			}
+			l.showImportCodeDialog()
+		},
+	)
+	importArchiveBtn := widget.NewButtonWithIcon(
+		lang.LocalizeKey("profile.import_file", "アーカイブからインポート"),
+		theme.FolderOpenIcon(),
+		func() {
+			if d != nil {
+				d.Hide()
+			}
+			l.importProfileFromArchiveFileDialog()
+		},
+	)
+	content := container.NewVBox(
+		widget.NewLabel(lang.LocalizeKey("profile.import_source_hint", "Choose how to import profile data.")),
+		importCodeBtn,
+		importArchiveBtn,
+		widget.NewSeparator(),
+		widget.NewLabel(lang.LocalizeKey("profile.import_drop_hint", "Or drop an archive (.aupack) onto this window to import.")),
+	)
+	d = dialog.NewCustom(
+		lang.LocalizeKey("profile.import_source_title", "Import Profile"),
+		lang.LocalizeKey("common.cancel", "Cancel"),
+		content,
+		l.state.Window,
+	)
+	d.Resize(fyne.NewSize(500, 220))
+	d.Show()
+}
+
+func (l *Launcher) showImportCodeDialog() {
 	entry := widget.NewMultiLineEntry()
 	entry.PlaceHolder = "mod-of-us://profile/..."
 	entry.SetMinRowsVisible(3)
@@ -159,6 +326,79 @@ func (l *Launcher) showImportDialog() {
 		l.state.SharedURI = strings.TrimSpace(entry.Text)
 		l.checkSharedURI()
 	}, l.state.Window)
+}
+
+func (l *Launcher) importProfileFromArchiveFileDialog() {
+	path, err := l.state.ExplorerOpenFile(
+		lang.LocalizeKey("profile.import_file_dialog_type", "アーカイブ"),
+		"*.aupack",
+	)
+	if err != nil {
+		slog.Info("Archive selection cancelled or failed", "error", err)
+		return
+	}
+	l.importProfileFromArchiveFile(path)
+}
+
+func (l *Launcher) importProfileFromArchiveFile(path string) {
+	shared, iconPNG, err := l.state.Core.HandleSharedProfileArchiveFile(path)
+	if err != nil {
+		dialog.ShowError(err, l.state.Window)
+		return
+	}
+	l.confirmAndImportProfile(shared, iconPNG)
+}
+
+func (l *Launcher) importProfileFromArchiveURI(uri fyne.URI) {
+	if uri == nil {
+		dialog.ShowError(errors.New(lang.LocalizeKey("profile.import_drop_unsupported", "Dropped item is not supported.")), l.state.Window)
+		return
+	}
+	if !strings.EqualFold(uri.Extension(), ".aupack") {
+		dialog.ShowError(errors.New(lang.LocalizeKey("profile.import_drop_unsupported", "Dropped item is not supported.")), l.state.Window)
+		return
+	}
+
+	reader, err := storage.Reader(uri)
+	if err != nil {
+		dialog.ShowError(fmt.Errorf("failed to read dropped archive: %w", err), l.state.Window)
+		return
+	}
+	defer reader.Close()
+
+	tempFile, err := os.CreateTemp("", "mod-of-us-profile-*.aupack")
+	if err != nil {
+		dialog.ShowError(fmt.Errorf("failed to create temp file for dropped archive: %w", err), l.state.Window)
+		return
+	}
+	defer os.Remove(tempFile.Name())
+	if _, err := io.Copy(tempFile, reader); err != nil {
+		dialog.ShowError(fmt.Errorf("failed to save dropped archive: %w", err), l.state.Window)
+		return
+	}
+
+	stat, err := tempFile.Stat()
+	if err != nil {
+		dialog.ShowError(fmt.Errorf("failed to stat temp file: %w", err), l.state.Window)
+		return
+	}
+
+	shared, iconPNG, err := l.state.Core.HandleSharedProfileArchive(tempFile, stat.Size())
+	if err != nil {
+		dialog.ShowError(err, l.state.Window)
+		return
+	}
+	l.confirmAndImportProfile(shared, iconPNG)
+}
+
+func (l *Launcher) handleDroppedURIs(uris []fyne.URI) {
+	for _, uri := range uris {
+		if uri != nil && strings.EqualFold(uri.Extension(), ".aupack") {
+			l.importProfileFromArchiveURI(uri)
+			return
+		}
+	}
+	dialog.ShowError(errors.New(lang.LocalizeKey("profile.import_drop_no_zip", "ドロップされた項目にアーカイブ(.aupack)が見つかりませんでした。")), l.state.Window)
 }
 
 func (l *Launcher) checkSharedURI() {
@@ -175,6 +415,10 @@ func (l *Launcher) checkSharedURI() {
 	// Reset SharedURI so we don't prompt again on refresh
 	l.state.SharedURI = ""
 
+	l.confirmAndImportProfile(prof, nil)
+}
+
+func (l *Launcher) confirmAndImportProfile(prof *profile.SharedProfile, iconPNG []byte) {
 	dialog.ShowConfirm(lang.LocalizeKey("profile.import_title", "Import Profile"), lang.LocalizeKey("profile.import_message", "Do you want to import the shared profile '{{.Name}}'?", map[string]any{"Name": prof.Name}), func(confirm bool) {
 		if !confirm {
 			return
@@ -186,17 +430,17 @@ func (l *Launcher) checkSharedURI() {
 					if !confirm {
 						return
 					}
-					l.importProfile(prof)
+					l.importProfile(prof, iconPNG)
 				}, l.state.Window)
 				return
 			}
 		}
 
-		l.importProfile(prof)
+		l.importProfile(prof, iconPNG)
 	}, l.state.Window)
 }
 
-func (l *Launcher) importProfile(shared *profile.SharedProfile) {
+func (l *Launcher) importProfile(shared *profile.SharedProfile, iconPNG []byte) {
 	prof := profile.Profile{
 		ID:          shared.ID,
 		Name:        shared.Name,
@@ -218,6 +462,12 @@ func (l *Launcher) importProfile(shared *profile.SharedProfile) {
 	if err := l.state.ProfileManager.Add(prof); err != nil {
 		dialog.ShowError(err, l.state.Window)
 		return
+	}
+	if len(iconPNG) > 0 {
+		if err := l.state.ProfileManager.SaveIconPNG(prof.ID, iconPNG); err != nil {
+			dialog.ShowError(err, l.state.Window)
+			return
+		}
 	}
 	l.refreshProfiles()
 }

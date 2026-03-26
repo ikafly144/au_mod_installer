@@ -125,6 +125,7 @@ type State struct {
 	SharedURI     string
 
 	OnSharedURIReceived func(uri string)
+	OnDroppedURIs       func([]fyne.URI)
 }
 
 func (s *State) ModInstallDir() string {
