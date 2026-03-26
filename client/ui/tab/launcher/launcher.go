@@ -934,9 +934,12 @@ func (l *Launcher) runLaunch() {
 
 	go func() {
 		var launchErr error
+		progressShown := true
 		defer func() {
 			fyne.DoAndWait(func() {
-				launchDialog.Hide()
+				if progressShown {
+					launchDialog.Hide()
+				}
 				l.checkLaunchState() // Re-enable button logic
 			})
 			if launchErr != nil {
@@ -971,6 +974,10 @@ func (l *Launcher) runLaunch() {
 		}
 
 		l.state.ClearError()
+		fyne.DoAndWait(func() {
+			launchDialog.Hide()
+			progressShown = false
+		})
 
 		// Proceed to Launch
 		l.state.Launch(path)
