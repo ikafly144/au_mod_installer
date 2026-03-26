@@ -42,10 +42,12 @@ type Output struct {
 
 func main() {
 	ruleFile := flag.String("rule", "", "Path to the rule file")
+	listReleases := flag.Bool("list", false, "List available releases")
+	tag := flag.String("tag", "", "Specific release tag to fetch")
 	flag.Parse()
 
 	if *ruleFile == "" {
-		fmt.Fprintln(os.Stderr, "Usage: fetch-gh-release -rule <path-to-rule.json>")
+		fmt.Fprintln(os.Stderr, "Usage: fetch-gh-release -rule <path-to-rule.json> [-list] [-tag <version>]")
 		os.Exit(1)
 	}
 
@@ -79,10 +81,47 @@ func main() {
 		client = client.WithAuthToken(token)
 	}
 
-	release, _, err := client.Repositories.GetLatestRelease(ctx, owner, repo)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to fetch latest release from %s: %v\n", rule.GithubRepo, err)
-		os.Exit(1)
+	if *listReleases {
+		releases, _, err := client.Repositories.ListReleases(ctx, owner, repo, &github.ListOptions{PerPage: 10})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to list releases from %s: %v\n", rule.GithubRepo, err)
+			os.Exit(1)
+		}
+
+		type ReleaseInfo struct {
+			TagName     string `json:"tag_name"`
+			Name        string `json:"name"`
+			PublishedAt string `json:"published_at"`
+		}
+
+		var output []ReleaseInfo
+		for _, r := range releases {
+			output = append(output, ReleaseInfo{
+				TagName:     r.GetTagName(),
+				Name:        r.GetName(),
+				PublishedAt: r.GetPublishedAt().String(),
+			})
+		}
+
+		outJson, _ := json.MarshalIndent(output, "", "  ")
+		fmt.Println(string(outJson))
+		return
+	}
+
+	var release *github.RepositoryRelease
+
+	if *tag != "" {
+		release, _, err = client.Repositories.GetReleaseByTag(ctx, owner, repo, *tag)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to fetch release %s from %s: %v\n", *tag, rule.GithubRepo, err)
+			os.Exit(1)
+		}
+	} else {
+		release, _, err = client.Repositories.GetLatestRelease(ctx, owner, repo)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to fetch latest release from %s: %v\n", rule.GithubRepo, err)
+			os.Exit(1)
+		}
 	}
 
 	out := Output{

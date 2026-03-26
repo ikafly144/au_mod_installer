@@ -4,6 +4,7 @@ go 1.26
 
 require (
 	fyne.io/fyne/v2 v2.7.2
+	github.com/AlecAivazis/survey/v2 v2.3.7
 	github.com/Microsoft/go-winio v0.6.2
 	github.com/TheTitanrain/w32 v0.0.0-20200114052255-2654d97dbd3d
 	github.com/gin-gonic/gin v1.12.0
@@ -71,12 +72,14 @@ require (
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/jsummers/gobmp v0.0.0-20230614200233-a9de23ed2e25 // indirect
+	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/lucor/goinfo v0.9.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mcuadros/go-version v0.0.0-20190830083331-035f6764e8d2 // indirect
+	github.com/mgutz/ansi v0.0.0-20170206155736-9520e82c474b // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/natefinch/atomic v1.0.1 // indirect
@@ -102,6 +105,7 @@ require (
 	golang.org/x/image v0.32.0 // indirect
 	golang.org/x/net v0.52.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
+	golang.org/x/term v0.41.0 // indirect
 	golang.org/x/text v0.35.0 // indirect
 	golang.org/x/tools v0.42.0 // indirect
 	golang.org/x/tools/go/vcs v0.1.0-deprecated // indirect

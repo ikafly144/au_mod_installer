@@ -41,9 +41,9 @@ type ModVersionDetails struct {
 type ModVersionFile struct {
 	ID string `json:"id"`
 
-	Filename    string   `json:"filename"`
-	ContentType FileType `json:"content_type"`
-	Size        int64    `json:"size"`
+	Filename    string      `json:"filename"`
+	ContentType ContentType `json:"content_type"`
+	Size        int64       `json:"size"`
 
 	// ContentTypeが `binary` か `plugin_dll` の場合、ExtractPathの位置に配置される。nullの場合は、`plugin_dll`は BepInEx/plugins に、`binary`はゲームのルートに配置される。
 	// `archive` の場合は、アーカイブを展開した後のファイルの配置に影響する。ExtractPathがnullの場合、アーカイブ内のファイルはすべてゲームのルートに配置される。
@@ -57,12 +57,12 @@ type ModVersionFile struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-type FileType string
+type ContentType string
 
 const (
-	FileTypeArchive   FileType = "archive"
-	FileTypePluginDll FileType = "plugin_dll"
-	FileTypeBinary    FileType = "binary"
+	ContentTypeArchive   ContentType = "archive"
+	ContentTypePluginDll ContentType = "plugin_dll"
+	ContentTypeBinary    ContentType = "binary"
 )
 
 type TargetPlatform string

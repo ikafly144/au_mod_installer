@@ -208,12 +208,12 @@ func DownloadMods(cacheDir string, modVersions []ModVersion, binaryType aumgr.Bi
 			slog.Info("Downloading mod file", "url", response.Request.URL, "contentLength", contentLength)
 
 			switch file.ContentType {
-			case model.FileTypeArchive:
+			case model.ContentTypeArchive:
 				_, err := extractZip(response.Body, contentLength, modCacheRoot, progress, totalDownloadCount)
 				if err != nil {
 					return err
 				}
-			case model.FileTypeBinary, model.FileTypePluginDll:
+			case model.ContentTypeBinary, model.ContentTypePluginDll:
 				path := file.ExtractPath
 				var filename string
 				// RFC-6266 parsing for filename from Content-Disposition header
@@ -242,7 +242,7 @@ func DownloadMods(cacheDir string, modVersions []ModVersion, binaryType aumgr.Bi
 						return fmt.Errorf("file path is empty for normal file type")
 					}
 				}
-				if file.ContentType == model.FileTypePluginDll {
+				if file.ContentType == model.ContentTypePluginDll {
 					if filename == "" {
 						return fmt.Errorf("failed to determine plugin filename for URL: %v", file.Downloads)
 					}

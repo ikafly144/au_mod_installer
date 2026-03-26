@@ -1,0 +1,18 @@
+{
+    "mod_id": "nebula-loader",
+    "github_repo": "ikafly144/nebula-build",
+    "dependencies": [
+        {
+            "mod_id": "bepinex",
+            "version_id": "any",
+            "dependency_type": "required"
+        }
+    ],
+    "files": [
+        {
+            "artifact": "NebulaLoader\\.dll",
+            "content_type": "plugin_dll",
+            "target_platform": "any"
+        }
+    ]
+}

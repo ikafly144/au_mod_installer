@@ -58,23 +58,6 @@ type ModPack struct {
 	Version string `json:"version,omitempty"`
 }
 
-// Deprecated: use model.ModVersionFile instead
-type ModFile struct {
-	Compatible []aumgr.BinaryType `json:"compatible"`
-	FileType   FileType           `json:"file_type"`
-	// When FileType is Normal or Plugin, Path is used.
-	Path string `json:"path,omitempty"`
-	URL  string `json:"url"`
-}
-
-type FileType string
-
-const (
-	FileTypeZip    FileType = "zip"
-	FileTypeNormal FileType = "normal"
-	FileTypePlugin FileType = "plugin"
-)
-
 func (m ModVersion) IsCompatible(launcherType aumgr.LauncherType, binaryType aumgr.BinaryType, gameVersion string) bool {
 	if m.CompatibleFilesCount(binaryType) == 0 && len(m.Files) > 0 {
 		return false

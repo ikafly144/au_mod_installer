@@ -1,0 +1,24 @@
+{
+    "mod_id": "nebula",
+    "github_repo": "Dolly1016/Nebula",
+    "dependencies": [
+        {
+            "mod_id": "bepinex",
+            "version_id": "any",
+            "dependency_type": "required"
+        },
+        {
+            "mod_id": "nebula-loader",
+            "version_id": "any",
+            "dependency_type": "required"
+        }
+    ],
+    "files": [
+        {
+            "artifact": "Nebula\\.dll",
+            "content_type": "binary",
+            "extract_path": "BepInEx/nebula/Nebula.dll",
+            "target_platform": "any"
+        }
+    ]
+}
