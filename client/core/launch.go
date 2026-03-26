@@ -75,7 +75,7 @@ func (a *App) PrepareLaunch(gamePath string, profileID uuid.UUID) (string, func(
 		if meta.BinaryType != "" && meta.BinaryType != binaryType {
 			needSync = true
 		}
-	} else {
+	} else if err != nil {
 		// If metadata is not found, we can assume it's an old profile and try to prepare it anyway
 		return "", nil, fmt.Errorf("profile metadata not found. the profile might be created with an older version of the installer. please sync profile to update it to the latest format: %w", err)
 	}
