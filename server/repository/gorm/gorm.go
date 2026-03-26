@@ -93,8 +93,18 @@ func (r *GormRepository) UpdateMod(modID string, details *model.ModDetails) erro
 	return result.Error
 }
 
+func (r *GormRepository) UpdateModFields(modID string, updates map[string]any) error {
+	result := r.db.Model(&model.ModDetails{}).Where("id = ?", modID).Updates(updates)
+	return result.Error
+}
+
 func (r *GormRepository) UpdateModVersion(modID, versionID string, details *model.ModVersionDetails) error {
 	result := r.db.Model(&model.ModVersionDetails{}).Where("mod_id = ? AND id = ?", modID, versionID).Updates(details)
+	return result.Error
+}
+
+func (r *GormRepository) UpdateModVersionFields(modID, versionID string, updates map[string]any) error {
+	result := r.db.Model(&model.ModVersionDetails{}).Where("mod_id = ? AND id = ?", modID, versionID).Updates(updates)
 	return result.Error
 }
 
