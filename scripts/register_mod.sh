@@ -21,6 +21,7 @@ usage() {
     echo "  --name <name>    Mod name"
     echo "  --author <name>  Mod author"
     echo "  --desc <text>    Mod description"
+    echo "  --thumbnail <url> Mod thumbnail URL"
     echo "  --db <url>       Database connection string"
     echo "  --dry-run        Print command without executing"
     echo "  --build-source <source> Set build source: 'local' or 'module' (default: module)"
@@ -46,6 +47,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --desc)
             MOD_DESC="$2"
+            shift 2
+            ;;
+        --thumbnail)
+            MOD_THUMBNAIL="$2"
             shift 2
             ;;
         --db)
@@ -118,6 +123,10 @@ fi
 echo "Registering Mod ID: $MOD_ID"
 
 # Interactive prompts if missing
+if [ -z "$MOD_THUMBNAIL" ]; then
+    MOD_THUMBNAIL=$(jq -r '.thumbnail_url // empty' "$RULE_FILE")
+fi
+
 if [ -z "$MOD_NAME" ]; then
     read -p "Enter Mod Name [$MOD_ID]: " input
     MOD_NAME="${input:-$MOD_ID}"
@@ -159,6 +168,10 @@ CMD+=(mod add --id "$MOD_ID" --name "$MOD_NAME" --author "$MOD_AUTHOR")
 
 if [ -n "$MOD_DESC" ]; then
     CMD+=(--desc "$MOD_DESC")
+fi
+
+if [ -n "$MOD_THUMBNAIL" ]; then
+    CMD+=(--thumbnail-url "$MOD_THUMBNAIL")
 fi
 
 echo "Executing: ${CMD[*]}"
