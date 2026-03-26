@@ -1,10 +1,11 @@
 package musmgr
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 func (f *commandFactory) newVersionInfoCommand() *cli.Command {
@@ -12,20 +13,20 @@ func (f *commandFactory) newVersionInfoCommand() *cli.Command {
 		Name:      "info",
 		Usage:     "Get details of a mod version",
 		ArgsUsage: "<mod-id> <version-id>",
-		BashComplete: func(c *cli.Context) {
-			if c.NArg() <= 1 {
-				f.printModIDCompletions(c)
-				return
+		ShellComplete: func(ctx context.Context, cmd *cli.Command) {
+			if cmd.NArg() <= 1 {
+				f.printModIDCompletions(cmd)
 			}
-			if c.NArg() <= 2 {
-				f.printVersionIDCompletions(c, c.Args().Get(0))
+			if cmd.NArg() <= 2 {
+				f.printVersionIDCompletions(cmd, cmd.Args().Get(0))
 			}
+			cli.DefaultCompleteWithFlags(ctx, cmd)
 		},
-		Action: func(c *cli.Context) error {
-			if err := requireDB(c); err != nil {
+		Action: wrapAction(func(ctx context.Context, cmd *cli.Command) error {
+			if err := requireDB(cmd); err != nil {
 				return err
 			}
-			if c.NArg() < 2 {
+			if cmd.NArg() < 2 {
 				return fmt.Errorf("mod-id and version-id required")
 			}
 
@@ -34,7 +35,7 @@ func (f *commandFactory) newVersionInfoCommand() *cli.Command {
 				return err
 			}
 
-			modVersion, err := repo.GetModVersionDetails(c.Args().Get(0), c.Args().Get(1))
+			modVersion, err := repo.GetModVersionDetails(cmd.Args().Get(0), cmd.Args().Get(1))
 			if err != nil {
 				return err
 			}
@@ -44,6 +45,6 @@ func (f *commandFactory) newVersionInfoCommand() *cli.Command {
 			}
 			fmt.Println(string(b))
 			return nil
-		},
+		}),
 	}
 }

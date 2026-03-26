@@ -16,7 +16,7 @@ require (
 	github.com/rs/zerolog v1.34.1-0.20260317125229-2f5b8a91be2c
 	github.com/sqweek/dialog v0.0.0-20240226140203-065105509627
 	github.com/stretchr/testify v1.11.1
-	github.com/urfave/cli/v2 v2.27.1
+	github.com/urfave/cli/v3 v3.8.0
 	github.com/zzl/go-win32api v1.2.0
 	golang.org/x/mod v0.33.0
 	golang.org/x/sys v0.42.0
@@ -93,6 +93,7 @@ require (
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.3.1 // indirect
+	github.com/urfave/cli/v2 v2.27.1 // indirect
 	github.com/xrash/smetrics v0.0.0-20201216005158-039620a65673 // indirect
 	github.com/yuin/goldmark v1.7.13 // indirect
 	go.mongodb.org/mongo-driver/v2 v2.5.0 // indirect

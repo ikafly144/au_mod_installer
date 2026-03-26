@@ -1,9 +1,10 @@
 package musmgr
 
 import (
+	"context"
 	"fmt"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 
 	"github.com/ikafly144/au_mod_installer/server/model"
 )
@@ -13,28 +14,29 @@ func (f *commandFactory) newVersionEditCommand() *cli.Command {
 		Name:      "edit",
 		Usage:     "Edit an existing mod version",
 		ArgsUsage: "<mod-id> <version-id>",
-		BashComplete: func(c *cli.Context) {
-			if c.NArg() <= 1 {
-				f.printModIDCompletions(c)
+		ShellComplete: func(ctx context.Context, cmd *cli.Command) {
+			if cmd.NArg() <= 1 {
+				f.printModIDCompletions(cmd)
 				return
 			}
-			if c.NArg() <= 2 {
-				f.printVersionIDCompletions(c, c.Args().Get(0))
+			if cmd.NArg() <= 2 {
+				f.printVersionIDCompletions(cmd, cmd.Args().Get(0))
 			}
+			cli.DefaultCompleteWithFlags(ctx, cmd)
 		},
 		Flags: []cli.Flag{
 			&cli.StringSliceFlag{Name: "dependency", Usage: "Replace dependencies. Format: mod_id:version_id:type"},
 			&cli.BoolFlag{Name: "set-latest", Usage: "Set this version as latest on the mod"},
 			&cli.BoolFlag{Name: "clear-latest-version", Usage: "Clear latest version on the mod"},
 		},
-		Action: func(c *cli.Context) error {
-			if err := requireDB(c); err != nil {
+		Action: func(ctx context.Context, cmd *cli.Command) error {
+			if err := requireDB(cmd); err != nil {
 				return err
 			}
-			if c.NArg() < 2 {
+			if cmd.NArg() < 2 {
 				return fmt.Errorf("mod-id and version-id required")
 			}
-			if c.Bool("set-latest") && c.Bool("clear-latest-version") {
+			if cmd.Bool("set-latest") && cmd.Bool("clear-latest-version") {
 				return fmt.Errorf("set-latest and clear-latest-version cannot be used together")
 			}
 
@@ -43,13 +45,13 @@ func (f *commandFactory) newVersionEditCommand() *cli.Command {
 				return err
 			}
 
-			modID := c.Args().Get(0)
-			versionID := c.Args().Get(1)
+			modID := cmd.Args().Get(0)
+			versionID := cmd.Args().Get(1)
 			changed := false
 
-			if c.IsSet("dependency") {
+			if cmd.IsSet("dependency") {
 				updates := map[string]any{
-					"dependencies": model.DependencyArray(parseDependencies(c.StringSlice("dependency"))),
+					"dependencies": model.DependencyArray(parseDependencies(cmd.StringSlice("dependency"))),
 				}
 				if err := repo.UpdateModVersionFields(modID, versionID, updates); err != nil {
 					return err
@@ -57,12 +59,12 @@ func (f *commandFactory) newVersionEditCommand() *cli.Command {
 				changed = true
 			}
 
-			if c.Bool("set-latest") {
+			if cmd.Bool("set-latest") {
 				if err := repo.UpdateModFields(modID, map[string]any{"latest_version_id": versionID}); err != nil {
 					return fmt.Errorf("failed to update latest version: %w", err)
 				}
 				changed = true
-			} else if c.Bool("clear-latest-version") {
+			} else if cmd.Bool("clear-latest-version") {
 				if err := repo.UpdateModFields(modID, map[string]any{"latest_version_id": nil}); err != nil {
 					return fmt.Errorf("failed to clear latest version: %w", err)
 				}

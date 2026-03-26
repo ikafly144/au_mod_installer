@@ -1,10 +1,11 @@
 package musmgr
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 
 	"github.com/ikafly144/au_mod_installer/server/model"
 )
@@ -15,29 +16,37 @@ func (f *commandFactory) newModAddCommand() *cli.Command {
 		Usage: "Add a new mod",
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "id", Usage: "Mod ID (default: uuid)", Value: ""},
-			&cli.StringFlag{Name: "name", Required: true},
-			&cli.StringFlag{Name: "author", Required: true},
-			&cli.StringFlag{Name: "desc", Required: false},
+			&cli.StringFlag{Name: "name", Usage: "Mod name (required)"},
+			&cli.StringFlag{Name: "author", Usage: "Mod author (required)"},
+			&cli.StringFlag{Name: "desc", Usage: "Mod description"},
 		},
-		Action: func(c *cli.Context) error {
-			if err := requireDB(c); err != nil {
+		ShellComplete: cli.DefaultCompleteWithFlags,
+		Action: wrapAction(func(ctx context.Context, cmd *cli.Command) error {
+			if err := requireDB(cmd); err != nil {
 				return err
 			}
+			if cmd.String("name") == "" {
+				return fmt.Errorf("name required")
+			}
+			if cmd.String("author") == "" {
+				return fmt.Errorf("author required")
+			}
+
 			repo, err := f.newRepository()
 			if err != nil {
 				return err
 			}
 
-			id := c.String("id")
+			id := cmd.String("id")
 			if id == "" {
 				id = uuid.New().String()
 			}
 
 			mod := &model.ModDetails{
 				ID:          id,
-				Name:        c.String("name"),
-				Author:      c.String("author"),
-				Description: c.String("desc"),
+				Name:        cmd.String("name"),
+				Author:      cmd.String("author"),
+				Description: cmd.String("desc"),
 			}
 
 			if _, err := repo.CreateMod(mod); err != nil {
@@ -45,6 +54,6 @@ func (f *commandFactory) newModAddCommand() *cli.Command {
 			}
 			fmt.Printf("Created mod: %s\n", mod.ID)
 			return nil
-		},
+		}),
 	}
 }

@@ -1,6 +1,11 @@
 package musmgr
 
 import (
+	"context"
+	"fmt"
+	"os"
+
+	"github.com/urfave/cli/v3"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
@@ -13,6 +18,22 @@ type commandFactory struct {
 
 func newCommandFactory(dbURL *string) *commandFactory {
 	return &commandFactory{dbURL: dbURL}
+}
+
+func wrapAction(action cli.ActionFunc) cli.ActionFunc {
+	return func(ctx context.Context, cmd *cli.Command) error {
+		for _, arg := range os.Args {
+			if arg == "--generate-shell-completion" {
+				for _, f := range cmd.VisibleFlags() {
+					for _, name := range f.Names() {
+						fmt.Println("--" + name)
+					}
+				}
+				return nil
+			}
+		}
+		return action(ctx, cmd)
+	}
 }
 
 func (f *commandFactory) newRepository() (*gormrepo.GormRepository, error) {

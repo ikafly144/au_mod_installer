@@ -1,10 +1,11 @@
 package musmgr
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 func (f *commandFactory) newModInfoCommand() *cli.Command {
@@ -12,16 +13,17 @@ func (f *commandFactory) newModInfoCommand() *cli.Command {
 		Name:      "info",
 		Usage:     "Get details of a mod",
 		ArgsUsage: "<mod-id>",
-		BashComplete: func(c *cli.Context) {
-			if c.NArg() <= 1 {
-				f.printModIDCompletions(c)
+		ShellComplete: func(ctx context.Context, cmd *cli.Command) {
+			if cmd.NArg() <= 1 {
+				f.printModIDCompletions(cmd)
 			}
+			cli.DefaultCompleteWithFlags(ctx, cmd)
 		},
-		Action: func(c *cli.Context) error {
-			if err := requireDB(c); err != nil {
+		Action: wrapAction(func(ctx context.Context, cmd *cli.Command) error {
+			if err := requireDB(cmd); err != nil {
 				return err
 			}
-			if c.NArg() < 1 {
+			if cmd.NArg() < 1 {
 				return fmt.Errorf("mod-id required")
 			}
 
@@ -30,7 +32,7 @@ func (f *commandFactory) newModInfoCommand() *cli.Command {
 				return err
 			}
 
-			mod, err := repo.GetModDetails(c.Args().First())
+			mod, err := repo.GetModDetails(cmd.Args().First())
 			if err != nil {
 				return err
 			}
@@ -40,6 +42,6 @@ func (f *commandFactory) newModInfoCommand() *cli.Command {
 			}
 			fmt.Println(string(b))
 			return nil
-		},
+		}),
 	}
 }

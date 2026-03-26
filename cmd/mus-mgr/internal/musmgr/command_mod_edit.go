@@ -1,9 +1,10 @@
 package musmgr
 
 import (
+	"context"
 	"fmt"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 func (f *commandFactory) newModEditCommand() *cli.Command {
@@ -11,10 +12,11 @@ func (f *commandFactory) newModEditCommand() *cli.Command {
 		Name:      "edit",
 		Usage:     "Edit an existing mod",
 		ArgsUsage: "<mod-id>",
-		BashComplete: func(c *cli.Context) {
-			if c.NArg() <= 1 {
-				f.printModIDCompletions(c)
+		ShellComplete: func(ctx context.Context, cmd *cli.Command) {
+			if cmd.NArg() <= 1 {
+				f.printModIDCompletions(cmd)
 			}
+			cli.DefaultCompleteWithFlags(ctx, cmd)
 		},
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "name", Usage: "Updated mod name"},
@@ -23,11 +25,11 @@ func (f *commandFactory) newModEditCommand() *cli.Command {
 			&cli.StringFlag{Name: "latest-version-id", Usage: "Updated latest version ID"},
 			&cli.BoolFlag{Name: "clear-latest-version", Usage: "Clear latest version ID"},
 		},
-		Action: func(c *cli.Context) error {
-			if err := requireDB(c); err != nil {
+		Action: wrapAction(func(ctx context.Context, cmd *cli.Command) error {
+			if err := requireDB(cmd); err != nil {
 				return err
 			}
-			if c.NArg() < 1 {
+			if cmd.NArg() < 1 {
 				return fmt.Errorf("mod-id required")
 			}
 
@@ -36,23 +38,23 @@ func (f *commandFactory) newModEditCommand() *cli.Command {
 				return err
 			}
 
-			modID := c.Args().First()
+			modID := cmd.Args().First()
 			updates := make(map[string]any)
 
-			if c.IsSet("name") {
-				updates["name"] = c.String("name")
+			if cmd.IsSet("name") {
+				updates["name"] = cmd.String("name")
 			}
-			if c.IsSet("author") {
-				updates["author"] = c.String("author")
+			if cmd.IsSet("author") {
+				updates["author"] = cmd.String("author")
 			}
-			if c.IsSet("desc") {
-				updates["description"] = c.String("desc")
+			if cmd.IsSet("desc") {
+				updates["description"] = cmd.String("desc")
 			}
 
-			if c.Bool("clear-latest-version") {
+			if cmd.Bool("clear-latest-version") {
 				updates["latest_version_id"] = nil
-			} else if c.IsSet("latest-version-id") {
-				updates["latest_version_id"] = c.String("latest-version-id")
+			} else if cmd.IsSet("latest-version-id") {
+				updates["latest_version_id"] = cmd.String("latest-version-id")
 			}
 
 			if len(updates) == 0 {
@@ -64,6 +66,6 @@ func (f *commandFactory) newModEditCommand() *cli.Command {
 			}
 			fmt.Println("Updated mod:", modID)
 			return nil
-		},
+		}),
 	}
 }

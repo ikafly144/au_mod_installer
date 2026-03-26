@@ -1,17 +1,18 @@
 package musmgr
 
 import (
+	"context"
 	"fmt"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 func (f *commandFactory) newModListCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "list",
 		Usage: "List mods",
-		Action: func(c *cli.Context) error {
-			if err := requireDB(c); err != nil {
+		Action: wrapAction(func(ctx context.Context, cmd *cli.Command) error {
+			if err := requireDB(cmd); err != nil {
 				return err
 			}
 			repo, err := f.newRepository()
@@ -31,6 +32,6 @@ func (f *commandFactory) newModListCommand() *cli.Command {
 				fmt.Printf("%s\t%s\t%s\n", mod.ID, mod.Name, mod.Author)
 			}
 			return nil
-		},
+		}),
 	}
 }

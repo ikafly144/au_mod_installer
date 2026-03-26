@@ -1,9 +1,10 @@
 package musmgr
 
 import (
+	"context"
 	"fmt"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 func (f *commandFactory) newModDeleteCommand() *cli.Command {
@@ -11,16 +12,17 @@ func (f *commandFactory) newModDeleteCommand() *cli.Command {
 		Name:      "delete",
 		Usage:     "Delete a mod",
 		ArgsUsage: "<mod-id>",
-		BashComplete: func(c *cli.Context) {
-			if c.NArg() <= 1 {
-				f.printModIDCompletions(c)
+		ShellComplete: func(ctx context.Context, cmd *cli.Command) {
+			if cmd.NArg() <= 1 {
+				f.printModIDCompletions(cmd)
 			}
+			cli.DefaultCompleteWithFlags(ctx, cmd)
 		},
-		Action: func(c *cli.Context) error {
-			if err := requireDB(c); err != nil {
+		Action: wrapAction(func(ctx context.Context, cmd *cli.Command) error {
+			if err := requireDB(cmd); err != nil {
 				return err
 			}
-			if c.NArg() < 1 {
+			if cmd.NArg() < 1 {
 				return fmt.Errorf("mod-id required")
 			}
 
@@ -29,11 +31,11 @@ func (f *commandFactory) newModDeleteCommand() *cli.Command {
 				return err
 			}
 
-			if err := repo.DeleteMod(c.Args().First()); err != nil {
+			if err := repo.DeleteMod(cmd.Args().First()); err != nil {
 				return err
 			}
-			fmt.Println("Deleted mod:", c.Args().First())
+			fmt.Println("Deleted mod:", cmd.Args().First())
 			return nil
-		},
+		}),
 	}
 }

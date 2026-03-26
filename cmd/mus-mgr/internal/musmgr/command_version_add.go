@@ -1,10 +1,11 @@
 package musmgr
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 
 	"github.com/ikafly144/au_mod_installer/server/model"
 )
@@ -14,23 +15,28 @@ func (f *commandFactory) newVersionAddCommand() *cli.Command {
 		Name:  "add",
 		Usage: "Add a new version for a mod",
 		Flags: []cli.Flag{
-			&cli.StringFlag{Name: "mod-id", Required: true, Usage: "Target mod ID"},
+			&cli.StringFlag{Name: "mod-id", Usage: "Target mod ID (required)"},
 			&cli.StringFlag{Name: "version-id", Usage: "Version ID (default: auto-incremented SemVer)"},
 			&cli.StringSliceFlag{Name: "file", Usage: "Files to add. Multiple flags supported. Format: path=...,type=...,url=...,extract_path=...,target_platform=... or direct URL/Path"},
 			&cli.StringSliceFlag{Name: "dependency", Usage: "Dependencies to add. Multiple flags supported. Format: mod_id:version_id:type (type is optional, default: required)"},
 			&cli.BoolFlag{Name: "set-latest", Usage: "Set this version as the latest version for the mod"},
 		},
-		Action: func(c *cli.Context) error {
-			if err := requireDB(c); err != nil {
+		ShellComplete: cli.DefaultCompleteWithFlags,
+		Action: wrapAction(func(ctx context.Context, cmd *cli.Command) error {
+			if err := requireDB(cmd); err != nil {
 				return err
 			}
+			if cmd.String("mod-id") == "" {
+				return fmt.Errorf("mod-id required")
+			}
+
 			repo, err := f.newRepository()
 			if err != nil {
 				return err
 			}
 
-			modID := c.String("mod-id")
-			versionID := c.String("version-id")
+			modID := cmd.String("mod-id")
+			versionID := cmd.String("version-id")
 			if versionID == "" {
 				existingIDs, err := repo.GetModVersionIds(modID)
 				if err != nil {
@@ -43,10 +49,10 @@ func (f *commandFactory) newVersionAddCommand() *cli.Command {
 			ver := &model.ModVersionDetails{
 				ID:           versionID,
 				ModID:        &modID,
-				Dependencies: parseDependencies(c.StringSlice("dependency")),
+				Dependencies: parseDependencies(cmd.StringSlice("dependency")),
 			}
 
-			for _, fileFlag := range c.StringSlice("file") {
+			for _, fileFlag := range cmd.StringSlice("file") {
 				pf := parseFileFlag(fileFlag)
 
 				filename, size, hashStr, err := fileMetadataFromParsedFile(pf)
@@ -74,7 +80,7 @@ func (f *commandFactory) newVersionAddCommand() *cli.Command {
 			}
 			fmt.Printf("Created version: %s\n", ver.ID)
 
-			if c.Bool("set-latest") {
+			if cmd.Bool("set-latest") {
 				update := &model.ModDetails{LatestVersionID: &ver.ID}
 				if err := repo.UpdateMod(modID, update); err != nil {
 					return fmt.Errorf("failed to update latest version: %w", err)
@@ -83,6 +89,6 @@ func (f *commandFactory) newVersionAddCommand() *cli.Command {
 			}
 
 			return nil
-		},
+		}),
 	}
 }

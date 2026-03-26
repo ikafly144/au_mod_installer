@@ -3,10 +3,10 @@ package musmgr
 import (
 	"fmt"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
-func (f *commandFactory) printModIDCompletions(c *cli.Context) {
+func (f *commandFactory) printModIDCompletions(cmd *cli.Command) {
 	repo, err := f.newRepository()
 	if err != nil {
 		return
@@ -17,11 +17,11 @@ func (f *commandFactory) printModIDCompletions(c *cli.Context) {
 		return
 	}
 	for _, id := range ids {
-		fmt.Fprintln(c.App.Writer, id)
+		fmt.Fprintln(cmd.Writer, id)
 	}
 }
 
-func (f *commandFactory) printVersionIDCompletions(c *cli.Context, modID string) {
+func (f *commandFactory) printVersionIDCompletions(cmd *cli.Command, modID string) {
 	repo, err := f.newRepository()
 	if err != nil {
 		return
@@ -32,6 +32,6 @@ func (f *commandFactory) printVersionIDCompletions(c *cli.Context, modID string)
 		return
 	}
 	for _, id := range ids {
-		fmt.Fprintln(c.App.Writer, id)
+		fmt.Fprintln(cmd.Writer, id)
 	}
 }

@@ -1,9 +1,10 @@
 package musmgr
 
 import (
+	"context"
 	"fmt"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 func (f *commandFactory) newVersionListCommand() *cli.Command {
@@ -11,16 +12,17 @@ func (f *commandFactory) newVersionListCommand() *cli.Command {
 		Name:      "list",
 		Usage:     "List versions for a mod",
 		ArgsUsage: "<mod-id>",
-		BashComplete: func(c *cli.Context) {
-			if c.NArg() <= 1 {
-				f.printModIDCompletions(c)
+		ShellComplete: func(ctx context.Context, cmd *cli.Command) {
+			if cmd.NArg() <= 1 {
+				f.printModIDCompletions(cmd)
 			}
+			cli.DefaultCompleteWithFlags(ctx, cmd)
 		},
-		Action: func(c *cli.Context) error {
-			if err := requireDB(c); err != nil {
+		Action: wrapAction(func(ctx context.Context, cmd *cli.Command) error {
+			if err := requireDB(cmd); err != nil {
 				return err
 			}
-			if c.NArg() < 1 {
+			if cmd.NArg() < 1 {
 				return fmt.Errorf("mod-id required")
 			}
 
@@ -29,7 +31,7 @@ func (f *commandFactory) newVersionListCommand() *cli.Command {
 				return err
 			}
 
-			ids, err := repo.GetModVersionIds(c.Args().First())
+			ids, err := repo.GetModVersionIds(cmd.Args().First())
 			if err != nil {
 				return err
 			}
@@ -37,6 +39,6 @@ func (f *commandFactory) newVersionListCommand() *cli.Command {
 				fmt.Println(id)
 			}
 			return nil
-		},
+		}),
 	}
 }
