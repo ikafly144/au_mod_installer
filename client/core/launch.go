@@ -65,13 +65,24 @@ func (a *App) PrepareLaunch(gamePath string, profileID uuid.UUID) (string, func(
 		return "", nil, fmt.Errorf("failed to get game version: %w", err)
 	}
 
+	needSync := false
+
 	// Check profile compatibility
 	if meta, err := modmgr.GetProfileMetadata(profileDir); err == nil && meta != nil {
 		if meta.GameVersion != "" && meta.GameVersion != gameVersion {
-			return "", nil, fmt.Errorf("game version mismatch: profile installed for %s, but running %s. please sync profile", meta.GameVersion, gameVersion)
+			needSync = true
 		}
 		if meta.BinaryType != "" && meta.BinaryType != binaryType {
-			return "", nil, fmt.Errorf("binary type mismatch: profile installed for %s, but running %s. please sync profile", meta.BinaryType, binaryType)
+			needSync = true
+		}
+	} else {
+		// If metadata is not found, we can assume it's an old profile and try to prepare it anyway
+		return "", nil, fmt.Errorf("profile metadata not found. the profile might be created with an older version of the installer. please sync profile to update it to the latest format: %w", err)
+	}
+
+	if needSync {
+		if err := a.SyncProfile(profileID, binaryType, gameVersion); err != nil {
+			return "", nil, fmt.Errorf("failed to sync profile: %w", err)
 		}
 	}
 
