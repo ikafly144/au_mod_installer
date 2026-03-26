@@ -29,7 +29,7 @@ func WithStateInit(init func(*uicommon.State)) func(*Config) {
 	}
 }
 
-func Main(w fyne.Window, version string, sharedURI string, cfg ...func(*Config)) error {
+func Main(w fyne.Window, version string, sharedURI string, sharedArchive string, cfg ...func(*Config)) error {
 	var config Config
 
 	for _, c := range cfg {
@@ -41,6 +41,7 @@ func Main(w fyne.Window, version string, sharedURI string, cfg ...func(*Config))
 		return err
 	}
 	state.SharedURI = sharedURI
+	state.SharedArchive = sharedArchive
 
 	for _, init := range config.stateInits {
 		init(state)

@@ -132,10 +132,15 @@ func (l *Launcher) init() {
 	l.refreshProfiles()
 	l.checkLaunchState()
 	l.checkSharedURI()
+	l.checkSharedArchive()
 
 	l.state.OnSharedURIReceived = func(uri string) {
 		l.state.SharedURI = uri
 		fyne.Do(l.checkSharedURI)
+	}
+	l.state.OnSharedArchiveReceived = func(path string) {
+		l.state.SharedArchive = path
+		fyne.Do(l.checkSharedArchive)
 	}
 	l.state.OnDroppedURIs = func(uris []fyne.URI) {
 		l.handleDroppedURIs(uris)
@@ -416,6 +421,15 @@ func (l *Launcher) checkSharedURI() {
 	l.state.SharedURI = ""
 
 	l.confirmAndImportProfile(prof, nil)
+}
+
+func (l *Launcher) checkSharedArchive() {
+	if l.state.SharedArchive == "" {
+		return
+	}
+	path := l.state.SharedArchive
+	l.state.SharedArchive = ""
+	l.importProfileFromArchiveFile(path)
 }
 
 func (l *Launcher) confirmAndImportProfile(prof *profile.SharedProfile, iconPNG []byte) {

@@ -36,9 +36,14 @@ var pipeName = `\\.\pipe\au_mod_installer_ipc`
 
 func main() {
 	sharedURI := ""
+	sharedArchive := ""
 	for _, arg := range os.Args[1:] {
 		if strings.HasPrefix(arg, "mod-of-us://") {
 			sharedURI = arg
+			break
+		}
+		if strings.EqualFold(filepath.Ext(arg), ".aupack") {
+			sharedArchive = arg
 			break
 		}
 	}
@@ -59,12 +64,21 @@ func main() {
 		slog.Error("Another instance is already running", "error", err)
 
 		// Try to send URI to the existing instance via IPC
-		if sharedURI != "" {
+		if sharedURI != "" || sharedArchive != "" {
 			conn, err := winio.DialPipe(pipeName, nil)
 			if err == nil {
 				defer conn.Close()
-				_, _ = conn.Write([]byte(sharedURI + "\n"))
-				slog.Info("Sent shared URI to existing instance", "uri", sharedURI)
+				if sharedURI != "" {
+					_, _ = conn.Write([]byte("uri:" + sharedURI + "\n"))
+					slog.Info("Sent shared URI to existing instance", "uri", sharedURI)
+				}
+				if sharedArchive != "" {
+					absArchive, absErr := filepath.Abs(sharedArchive)
+					if absErr == nil {
+						_, _ = conn.Write([]byte("archive:" + absArchive + "\n"))
+						slog.Info("Sent shared archive to existing instance", "path", absArchive)
+					}
+				}
 			}
 		}
 
@@ -125,13 +139,13 @@ func main() {
 			slog.Error("Failed to unlock lockfile", "error", err)
 		}
 	}()
-	mainErr := realMain(sharedURI)
+	mainErr := realMain(sharedURI, sharedArchive)
 	if mainErr != nil {
 		os.Exit(1)
 	}
 }
 
-func realMain(sharedURI string) error {
+func realMain(sharedURI string, sharedArchive string) error {
 	var (
 		localMode string
 		server    string
@@ -211,7 +225,7 @@ func realMain(sharedURI string) error {
 		}
 	}
 
-	if err := ui.Main(w, version, sharedURI,
+	if err := ui.Main(w, version, sharedURI, sharedArchive,
 		ui.WithStateOptions(
 			uicommon.WithRestClient(client),
 		),
@@ -256,10 +270,23 @@ func startIPCListener(s *uicommon.State) {
 					}
 					break
 				}
-				uri := strings.TrimSpace(line)
-				if uri != "" && s.OnSharedURIReceived != nil {
-					slog.Info("Received shared URI via IPC", "uri", uri)
-					s.OnSharedURIReceived(uri)
+				message := strings.TrimSpace(line)
+				if message == "" {
+					continue
+				}
+				switch {
+				case strings.HasPrefix(message, "uri:"):
+					uri := strings.TrimPrefix(message, "uri:")
+					if uri != "" && s.OnSharedURIReceived != nil {
+						slog.Info("Received shared URI via IPC", "uri", uri)
+						s.OnSharedURIReceived(uri)
+					}
+				case strings.HasPrefix(message, "archive:"):
+					path := strings.TrimPrefix(message, "archive:")
+					if path != "" && s.OnSharedArchiveReceived != nil {
+						slog.Info("Received shared archive path via IPC", "path", path)
+						s.OnSharedArchiveReceived(path)
+					}
 				}
 			}
 		}(conn)
@@ -295,6 +322,28 @@ func registerScheme() error {
 	if err == nil {
 		_ = shellKey.SetStringValue("", "\""+execPath+"\" \"%1\"")
 		shellKey.Close()
+	}
+
+	extKey, _, err := registry.CreateKey(registry.CURRENT_USER, `Software\Classes\.aupack`, registry.ALL_ACCESS)
+	if err == nil {
+		_ = extKey.SetStringValue("", "mod-of-us.aupack")
+		extKey.Close()
+	}
+
+	fileTypeKey, _, err := registry.CreateKey(registry.CURRENT_USER, `Software\Classes\mod-of-us.aupack`, registry.ALL_ACCESS)
+	if err == nil {
+		_ = fileTypeKey.SetStringValue("", "Mod of Us Archive")
+		iconKey, _, iconErr := registry.CreateKey(fileTypeKey, "DefaultIcon", registry.ALL_ACCESS)
+		if iconErr == nil {
+			_ = iconKey.SetStringValue("", "\""+execPath+"\",0")
+			iconKey.Close()
+		}
+		openCommandKey, _, openErr := registry.CreateKey(fileTypeKey, `shell\open\command`, registry.ALL_ACCESS)
+		if openErr == nil {
+			_ = openCommandKey.SetStringValue("", "\""+execPath+"\" \"%1\"")
+			openCommandKey.Close()
+		}
+		fileTypeKey.Close()
 	}
 
 	return nil

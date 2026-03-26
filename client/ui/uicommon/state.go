@@ -123,9 +123,11 @@ type State struct {
 
 	ActiveProfile binding.String
 	SharedURI     string
+	SharedArchive string
 
-	OnSharedURIReceived func(uri string)
-	OnDroppedURIs       func([]fyne.URI)
+	OnSharedURIReceived     func(uri string)
+	OnSharedArchiveReceived func(path string)
+	OnDroppedURIs           func([]fyne.URI)
 }
 
 func (s *State) ModInstallDir() string {
