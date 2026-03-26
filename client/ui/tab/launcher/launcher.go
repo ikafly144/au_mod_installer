@@ -449,6 +449,11 @@ func (l *Launcher) importProfile(shared *profile.SharedProfile, iconPNG []byte) 
 		UpdatedAt:   time.Now(),
 	}
 
+	if p, ok := l.state.ProfileManager.Get(shared.ID); ok {
+		prof.PlayDurationNS = p.PlayDurationNS
+		prof.LastLaunchedAt = p.LastLaunchedAt
+	}
+
 	// Fetch mod version infos
 	for modID, versionID := range shared.ModVersions {
 		info, err := l.state.Rest.GetModVersion(modID, versionID)
