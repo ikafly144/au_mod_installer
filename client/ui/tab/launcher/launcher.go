@@ -58,6 +58,11 @@ type Launcher struct {
 	sortMode          string
 	sortDescending    bool
 
+	modThumbMu             sync.Mutex
+	modThumbnailImageCache map[string]image.Image
+	modThumbnailFetched    map[string]bool
+	modThumbnailLoading    map[string]bool
+
 	canLaunchListener binding.DataListener
 }
 
@@ -74,6 +79,14 @@ const (
 	sortModeName     = "name"
 	sortModePlaytime = "playtime"
 	sortModeRecent   = "recent"
+
+	launcherListThumbMinSize = float32(88)
+	launcherGridCardWidth    = float32(124) // Icon area + inner gaps
+	launcherGridCardHeight   = float32(172)
+	launcherGridIconAreaSize = float32(116)
+	launcherGridIconInset    = float32(2)
+	launcherGridMenuSize     = float32(22)
+	launcherGridMenuInset    = float32(4)
 )
 
 func NewLauncherTab(s *uicommon.State) uicommon.Tab {
@@ -84,14 +97,17 @@ func NewLauncherTab(s *uicommon.State) uicommon.Tab {
 	sortMode := normalizeSortMode(fyne.CurrentApp().Preferences().StringWithFallback(prefLauncherSortMode, sortModeName))
 	sortDescending := fyne.CurrentApp().Preferences().BoolWithFallback(prefLauncherSortDescending, defaultSortDescendingForMode(sortMode))
 	l = Launcher{
-		state:               s,
-		launchButton:        widget.NewButtonWithIcon(lang.LocalizeKey("launcher.launch", "Launch"), theme.MediaPlayIcon(), l.runLaunch),
-		createProfileButton: widget.NewButtonWithIcon(lang.LocalizeKey("profile.create", "Create Profile"), theme.ContentAddIcon(), l.createProfile),
-		importProfileButton: widget.NewButtonWithIcon(lang.LocalizeKey("profile.import_clipboard", "Import from Clipboard"), theme.ContentPasteIcon(), l.showImportDialog),
-		greetingContent:     widget.NewLabelWithStyle(fmt.Sprintf("バージョン：%s (%s)", s.Version, revision), fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
-		sortMode:            sortMode,
-		sortDescending:      sortDescending,
-		isGridView:          viewMode == viewModeGrid,
+		state:                  s,
+		launchButton:           widget.NewButtonWithIcon(lang.LocalizeKey("launcher.launch", "Launch"), theme.MediaPlayIcon(), l.runLaunch),
+		createProfileButton:    widget.NewButtonWithIcon(lang.LocalizeKey("profile.create", "Create Profile"), theme.ContentAddIcon(), l.createProfile),
+		importProfileButton:    widget.NewButtonWithIcon(lang.LocalizeKey("profile.import_clipboard", "Import from Clipboard"), theme.ContentPasteIcon(), l.showImportDialog),
+		greetingContent:        widget.NewLabelWithStyle(fmt.Sprintf("バージョン：%s (%s)", s.Version, revision), fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
+		sortMode:               sortMode,
+		sortDescending:         sortDescending,
+		isGridView:             viewMode == viewModeGrid,
+		modThumbnailImageCache: map[string]image.Image{},
+		modThumbnailFetched:    map[string]bool{},
+		modThumbnailLoading:    map[string]bool{},
 	}
 	l.createProfileButton.Importance = widget.HighImportance
 
@@ -212,37 +228,81 @@ func (l *Launcher) setupProfileList() {
 			return len(l.profiles)
 		},
 		func() fyne.CanvasObject {
-			img := l.newProfileIconCanvas(profile.Profile{}, 96, 8)
+			img := l.newProfileIconCanvas(profile.Profile{}, launcherListThumbMinSize, 8)
+			imgBg := canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground))
+			imgBg.CornerRadius = 3
+			imgArea := container.NewStack(imgBg, img)
 
 			title := widget.NewLabel("Profile Name")
 			title.TextStyle = fyne.TextStyle{Bold: true}
 			title.SizeName = theme.SizeNameSubHeadingText
-			desc := widget.NewLabel("Profile Description")
-			desc.Wrapping = fyne.TextWrapWord
-			desc.SizeName = theme.SizeNameCaptionText
-			label := container.NewVBox(title, desc)
+			meta := widget.NewLabel("Last launched")
+			meta.SizeName = theme.SizeNameCaptionText
+			meta.TextStyle = fyne.TextStyle{Monospace: true}
+			stats := widget.NewLabel("Mods and play time")
+			stats.SizeName = theme.SizeNameCaptionText
+			textArea := container.NewVBox(title, meta, stats)
 			menuBtn := widget.NewButtonWithIcon("", theme.MoreHorizontalIcon(), nil)
 			menuBtn.Importance = widget.LowImportance
 
-			return container.NewPadded(container.NewBorder(nil, nil, img, menuBtn, img, label, menuBtn))
+			content := container.New(&launcherListItemLayout{
+				minThumbSize: launcherListThumbMinSize,
+				spacing:      theme.Padding(),
+			},
+				imgArea,
+				menuBtn,
+				container.NewPadded(textArea),
+			)
+			tappable := uicommon.NewTappableContainerWithSecondary(content, nil, nil)
+
+			bg := canvas.NewRectangle(theme.Color(theme.ColorNameBackground))
+			bg.StrokeColor = theme.Color(theme.ColorNameButton)
+			bg.StrokeWidth = 1
+			bg.CornerRadius = theme.InputRadiusSize()
+
+			return container.NewStack(bg, container.NewPadded(tappable))
 		},
 		func(id widget.ListItemID, item fyne.CanvasObject) {
 			if id >= len(l.profiles) {
 				return
 			}
 			prof := l.profiles[id]
-			c := item.(*fyne.Container).Objects[0].(*fyne.Container)
-			img := c.Objects[0].(*canvas.Image)
-			l.refreshProfileIconCanvas(img, prof, 96)
-			label := c.Objects[1].(*fyne.Container).Objects[0].(*widget.Label)
-			desc := c.Objects[1].(*fyne.Container).Objects[1].(*widget.Label)
-			desc.SetText(fmt.Sprintf("Last Updated: %s Mods: %d", prof.UpdatedAt.Format("2006-01-02 15:04:05"), len(prof.ModVersions)))
-			menuBtn := c.Objects[2].(*widget.Button)
-			label.SetText(prof.Name)
+			root := item.(*fyne.Container)
+			bg := root.Objects[0].(*canvas.Rectangle)
+			tappable := root.Objects[1].(*fyne.Container).Objects[0].(*uicommon.TappableContainer)
+			content := tappable.Content.(*fyne.Container)
+
+			imgArea := content.Objects[0].(*fyne.Container)
+			img := imgArea.Objects[1].(*canvas.Image)
+			l.refreshProfileIconCanvas(img, prof, int(launcherListThumbMinSize))
+
+			textArea := content.Objects[2].(*fyne.Container).Objects[0].(*fyne.Container)
+			title := textArea.Objects[0].(*widget.Label)
+			meta := textArea.Objects[1].(*widget.Label)
+			stats := textArea.Objects[2].(*widget.Label)
+			menuBtn := content.Objects[1].(*widget.Button)
+			title.SetText(prof.Name)
+			meta.SetText(l.profileMetaText(prof))
+			stats.SetText(fmt.Sprintf("Mods: %d  Play: %s", len(prof.ModVersions), formatPlayDuration(time.Duration(prof.PlayDurationNS))))
+
+			tappable.OnTapped = func() {
+				l.profileList.Select(id)
+			}
+			tappable.OnSecondaryTapped = func(ev *fyne.PointEvent) {
+				l.showProfileMenuAt(ev.AbsolutePosition, prof)
+			}
 
 			menuBtn.OnTapped = func() {
 				l.showProfileMenu(menuBtn, prof)
 			}
+
+			bg.StrokeColor = theme.Color(theme.ColorNameButton)
+			bg.StrokeWidth = 1
+			if prof.ID == l.selectedProfileID {
+				bg.StrokeColor = theme.Color(theme.ColorNamePrimary)
+				bg.StrokeWidth = 2
+			}
+			bg.Refresh()
 		},
 	)
 
@@ -253,18 +313,137 @@ func (l *Launcher) setupProfileList() {
 		l.selectedProfileID = l.profiles[id].ID
 		_ = l.state.ActiveProfile.Set(l.selectedProfileID.String())
 		l.checkLaunchState()
+		l.profileList.Refresh()
 		l.refreshProfileGrid()
 	}
 	l.profileList.OnUnselected = func(id widget.ListItemID) {
 		l.selectedProfileID = uuid.Nil
 		l.checkLaunchState()
+		l.profileList.Refresh()
 		l.refreshProfileGrid()
 	}
 }
 
+type launcherListItemLayout struct {
+	minThumbSize float32
+	spacing      float32
+}
+
+func (l *launcherListItemLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
+	if len(objects) < 3 {
+		return
+	}
+	thumb := objects[0]
+	menu := objects[1]
+	body := objects[2]
+
+	menuSize := menu.MinSize()
+	menu.Resize(menuSize)
+	menuX := size.Width - menuSize.Width
+	if menuX < 0 {
+		menuX = 0
+	}
+	menuY := (size.Height - menuSize.Height) / 2
+	if menuY < 0 {
+		menuY = 0
+	}
+	menu.Move(fyne.NewPos(menuX, menuY))
+
+	thumbSide := max(size.Height, l.minThumbSize)
+	maxThumbSide := size.Width - menuSize.Width - l.spacing*2
+	if maxThumbSide < 0 {
+		maxThumbSide = 0
+	}
+	if thumbSide > maxThumbSide {
+		thumbSide = maxThumbSide
+	}
+	thumb.Resize(fyne.NewSize(thumbSide, thumbSide))
+	// thumb.Move(fyne.NewPos(0, (size.Height-thumbSide)/2))
+
+	bodyX := thumbSide + l.spacing
+	bodyRight := menuX - l.spacing
+	bodyWidth := bodyRight - bodyX
+	if bodyWidth < 0 {
+		bodyWidth = 0
+	}
+	body.Resize(fyne.NewSize(bodyWidth, size.Height))
+	body.Move(fyne.NewPos(bodyX, 0))
+}
+
+func (l *launcherListItemLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
+	if len(objects) < 3 {
+		return fyne.NewSize(0, 0)
+	}
+	thumbMinSize := objects[0].MinSize()
+	menuMinSize := objects[1].MinSize()
+	bodyMinSize := objects[2].MinSize()
+
+	thumbSide := max(l.minThumbSize, max(thumbMinSize.Width, thumbMinSize.Height))
+	height := max(thumbSide, max(menuMinSize.Height, bodyMinSize.Height))
+	width := thumbSide + l.spacing + bodyMinSize.Width + l.spacing + menuMinSize.Width
+	return fyne.NewSize(width, height)
+}
+
 func (l *Launcher) setupProfileGrid() {
-	l.profileGrid = container.NewGridWrap(fyne.NewSize(132, 172))
+	l.profileGrid = container.New(&launcherProfileGridLayout{
+		cardSize: fyne.NewSize(launcherGridCardWidth, launcherGridCardHeight),
+		spacing:  theme.Padding(),
+	})
 	l.profileGridScroll = container.NewVScroll(l.profileGrid)
+}
+
+type launcherProfileGridLayout struct {
+	cardSize fyne.Size
+	spacing  float32
+	lastCols int
+}
+
+func (l *launcherProfileGridLayout) columnCount(width float32) int {
+	if l.cardSize.Width <= 0 {
+		return 1
+	}
+	cols := int((width + l.spacing) / (l.cardSize.Width + l.spacing))
+	if cols < 1 {
+		return 1
+	}
+	return cols
+}
+
+func (l *launcherProfileGridLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
+	if len(objects) == 0 {
+		return
+	}
+	cols := l.columnCount(size.Width)
+	l.lastCols = cols
+
+	gridWidth := float32(cols)*l.cardSize.Width + float32(cols-1)*l.spacing
+	offsetX := (size.Width - gridWidth) / 2
+	if offsetX < 0 {
+		offsetX = 0
+	}
+
+	for i, obj := range objects {
+		row := i / cols
+		col := i % cols
+		x := offsetX + float32(col)*(l.cardSize.Width+l.spacing)
+		y := float32(row) * (l.cardSize.Height + l.spacing)
+		obj.Move(fyne.NewPos(x, y))
+		obj.Resize(l.cardSize)
+	}
+}
+
+func (l *launcherProfileGridLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
+	if len(objects) == 0 {
+		return fyne.NewSize(0, 0)
+	}
+	cols := l.lastCols
+	if cols < 1 {
+		cols = 1
+	}
+	rows := (len(objects) + cols - 1) / cols
+	width := float32(cols)*l.cardSize.Width + float32(cols-1)*l.spacing
+	height := float32(rows)*l.cardSize.Height + float32(max(rows-1, 0))*l.spacing
+	return fyne.NewSize(width, height)
 }
 
 func (l *Launcher) setupToolbar() {
@@ -360,7 +539,8 @@ func (l *Launcher) refreshProfileGrid() {
 		index := i
 		p := prof
 
-		img := l.newProfileIconCanvas(p, 116, 3)
+		iconSize := launcherGridIconAreaSize - launcherGridIconInset*2
+		img := l.newProfileIconCanvas(p, iconSize, 3)
 
 		text := canvas.NewText(prof.Name, theme.Color(theme.ColorNameForeground))
 		text.TextStyle = fyne.TextStyle{Bold: true}
@@ -369,20 +549,27 @@ func (l *Launcher) refreshProfileGrid() {
 
 		menuBtn := widget.NewButtonWithIcon("", theme.MoreHorizontalIcon(), nil)
 		menuBtn.Importance = widget.LowImportance
-		menuBtn.Resize(fyne.NewSize(22, 22))
-		menuBtn.Move(fyne.NewPos(94, 4))
+		menuBtn.Resize(fyne.NewSquareSize(launcherGridMenuSize))
+		menuBtn.Move(fyne.NewPos(
+			launcherGridIconAreaSize-launcherGridMenuSize-launcherGridMenuInset,
+			launcherGridMenuInset,
+		))
 		menuBtn.OnTapped = func() {
 			l.showProfileMenu(menuBtn, p)
 		}
 
 		iconAreaBg := canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground))
-		iconAreaBg.CornerRadius = 8
+		iconAreaBg.CornerRadius = 6
+		iconAreaBg.Resize(fyne.NewSquareSize(launcherGridIconAreaSize))
+		iconAreaBg.SetMinSize(fyne.NewSquareSize(launcherGridIconAreaSize))
+		img.Move(fyne.NewPos(launcherGridIconInset, launcherGridIconInset))
+		img.Resize(fyne.NewSquareSize(iconSize))
+		iconAreaSizer := canvas.NewRectangle(color.Transparent)
+		iconAreaSizer.SetMinSize(fyne.NewSquareSize(launcherGridIconAreaSize))
 		iconArea := container.NewStack(
-			iconAreaBg,
-			container.NewCenter(img),
-			container.NewWithoutLayout(menuBtn),
+			iconAreaSizer,
+			container.NewWithoutLayout(iconAreaBg, img, menuBtn),
 		)
-		iconAreaSized := container.NewPadded(iconArea)
 
 		cardContent := container.NewBorder(
 			nil,
@@ -390,7 +577,12 @@ func (l *Launcher) refreshProfileGrid() {
 			nil,
 			nil,
 			container.NewVBox(
-				container.NewCenter(iconAreaSized),
+				container.New(
+					layout.NewGridWrapLayout(
+						fyne.NewSquareSize(launcherGridIconAreaSize),
+					),
+					iconArea,
+				),
 				container.NewCenter(text),
 			),
 		)
@@ -973,35 +1165,13 @@ func (l *Launcher) openProfileEditor(prof profile.Profile) {
 
 	iconPlaceholder := l.newProfileIconCanvasFromPNG(currentIconPNG, 128, 8)
 	selectIconBtn := widget.NewButtonWithIcon(lang.LocalizeKey("profile.icon.select", "Select Icon"), theme.FolderOpenIcon(), func() {
-		path, err := l.state.ExplorerOpenFile("Profile Icon", "*.png;*.jpg;*.jpeg;*.gif")
-		if err != nil {
-			slog.Info("File selection cancelled or failed", "error", err)
-			return
-		}
-		f, err := os.Open(path)
-		if err != nil {
-			dialog.ShowError(err, l.state.Window)
-			return
-		}
-		defer f.Close()
-
-		decoded, _, err := image.Decode(f)
-		if err != nil {
-			dialog.ShowError(errors.New(lang.LocalizeKey("profile.icon.invalid", "Selected file is not a valid image.")), l.state.Window)
-			return
-		}
-
-		iconPNG, err := encodeSquarePNG(decoded)
-		if err != nil {
-			dialog.ShowError(err, l.state.Window)
-			return
-		}
-
-		selectedIconPNG = iconPNG
-		currentIconPNG = iconPNG
-		removeIcon = false
-		l.refreshProfileIconCanvasFromPNG(iconPlaceholder, currentIconPNG, 128)
-		removeIconBtn.Enable()
+		l.showProfileIconSelectionDialog(currentProfile, func(iconPNG []byte) {
+			selectedIconPNG = iconPNG
+			currentIconPNG = iconPNG
+			removeIcon = false
+			l.refreshProfileIconCanvasFromPNG(iconPlaceholder, currentIconPNG, 128)
+			removeIconBtn.Enable()
+		})
 	})
 	removeIconBtn = widget.NewButtonWithIcon(lang.LocalizeKey("profile.icon.remove", "Remove Icon"), theme.DeleteIcon(), func() {
 		selectedIconPNG = nil
@@ -1021,10 +1191,23 @@ func (l *Launcher) openProfileEditor(prof profile.Profile) {
 	modList := widget.NewList(
 		func() int { return len(currentProfile.Versions()) },
 		func() fyne.CanvasObject {
+			thumb := l.newModThumbnailCanvas("", 64, 6)
+			thumbBg := canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground))
+			thumbBg.CornerRadius = 6
+			thumbArea := container.NewStack(thumbBg, container.NewCenter(thumb))
+
 			label := widget.NewLabel("Mod Name")
+			label.Wrapping = fyne.TextWrapWord
 			badge := widget.NewLabel("")
 			badge.Hide()
-			return container.NewBorder(nil, nil, nil, widget.NewButtonWithIcon("", theme.DeleteIcon(), nil), container.NewHBox(label, badge))
+			textArea := container.NewVBox(label, badge)
+			deleteBtn := widget.NewButtonWithIcon("", theme.DeleteIcon(), nil)
+			content := container.New(layout.NewBorderLayout(nil, nil, thumbArea, deleteBtn),
+				thumbArea,
+				deleteBtn,
+				container.NewPadded(textArea),
+			)
+			return container.NewPadded(content)
 		},
 		func(id widget.ListItemID, item fyne.CanvasObject) {
 			// This will be overridden by UpdateItem below
@@ -1054,15 +1237,17 @@ func (l *Launcher) openProfileEditor(prof profile.Profile) {
 			return
 		}
 		v := currentProfile.Versions()[id]
-		c := item.(*fyne.Container)
-		hbox := c.Objects[0].(*fyne.Container)
-		label := hbox.Objects[0].(*widget.Label)
-		badge := hbox.Objects[1].(*widget.Label)
+		c := item.(*fyne.Container).Objects[0].(*fyne.Container)
+		thumbArea := c.Objects[0].(*fyne.Container)
+		thumb := thumbArea.Objects[1].(*fyne.Container).Objects[0].(*canvas.Image)
+		textArea := c.Objects[2].(*fyne.Container).Objects[0].(*fyne.Container)
+		label := textArea.Objects[0].(*widget.Label)
+		badge := textArea.Objects[1].(*widget.Label)
 		delBtn := c.Objects[1].(*widget.Button)
 
-		fyne.Do(func() {
-			label.SetText(v.ModID + " (" + v.ID + ")")
-		})
+		l.refreshModThumbnailCanvas(thumb, v.ModID, 64)
+		l.ensureModThumbnailLoaded(v.ModID, modList.Refresh)
+		label.SetText(v.ModID + " (" + v.ID + ")")
 
 		if latestID, ok := updatesAvailable[v.ModID]; ok {
 			badge.SetText(lang.LocalizeKey("repository.update_available", "Update Available") + " (" + latestID + ")")
@@ -1173,6 +1358,169 @@ func (l *Launcher) openProfileEditor(prof profile.Profile) {
 	d.Show()
 }
 
+func (l *Launcher) showProfileIconSelectionDialog(prof profile.Profile, onSelect func([]byte)) {
+	var d *dialog.CustomDialog
+	selectFromExplorerBtn := widget.NewButtonWithIcon(
+		lang.LocalizeKey("profile.icon.select_from_explorer", "Choose from Explorer"),
+		theme.FolderOpenIcon(),
+		func() {
+			iconPNG, err := l.pickProfileIconFromExplorer()
+			if err != nil {
+				dialog.ShowError(err, l.state.Window)
+				return
+			}
+			if len(iconPNG) == 0 {
+				return
+			}
+			if onSelect != nil {
+				onSelect(iconPNG)
+			}
+			d.Dismiss()
+		},
+	)
+
+	modIDSet := map[string]struct{}{}
+	modIDs := make([]string, 0, len(prof.Versions()))
+	for _, version := range prof.Versions() {
+		if version.ModID == "" {
+			continue
+		}
+		if _, exists := modIDSet[version.ModID]; exists {
+			continue
+		}
+		modIDSet[version.ModID] = struct{}{}
+		modIDs = append(modIDs, version.ModID)
+	}
+	sort.Strings(modIDs)
+
+	modsLabel := widget.NewLabelWithStyle(
+		lang.LocalizeKey("profile.icon.select_from_mod_thumbnails", "Choose from MOD thumbnails"),
+		fyne.TextAlignLeading,
+		fyne.TextStyle{Bold: true},
+	)
+
+	var modArea fyne.CanvasObject
+	if len(modIDs) == 0 {
+		modArea = widget.NewLabel(lang.LocalizeKey("profile.icon.no_mods_in_profile", "No MODs in this profile."))
+	} else {
+		modGrid := container.NewGridWrap(fyne.NewSize(130, 148))
+		for _, modID := range modIDs {
+			modID := modID
+			thumb := l.newModThumbnailCanvas(modID, 88, 8)
+			l.ensureModThumbnailLoaded(modID, modGrid.Refresh)
+			thumbBg := canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground))
+			thumbBg.CornerRadius = 8
+
+			name := widget.NewLabel(modID)
+			name.Alignment = fyne.TextAlignCenter
+			name.Wrapping = fyne.TextWrapWord
+
+			itemBody := container.NewVBox(
+				container.NewCenter(container.NewStack(thumbBg, container.NewCenter(thumb))),
+				name,
+			)
+			item := uicommon.NewTappableContainer(itemBody, func() {
+				iconPNG, err := l.profileIconPNGFromModThumbnail(modID)
+				if err != nil {
+					dialog.ShowError(err, l.state.Window)
+					return
+				}
+				if onSelect != nil {
+					onSelect(iconPNG)
+				}
+				d.Dismiss()
+			})
+
+			itemBg := canvas.NewRectangle(theme.Color(theme.ColorNameBackground))
+			itemBg.StrokeColor = theme.Color(theme.ColorNameButton)
+			itemBg.StrokeWidth = 1
+			itemBg.CornerRadius = theme.InputRadiusSize()
+			modGrid.Add(container.NewStack(itemBg, container.NewPadded(item)))
+		}
+		scroll := container.NewVScroll(modGrid)
+		scroll.SetMinSize(fyne.NewSize(0, 300))
+		modArea = scroll
+	}
+
+	content := container.NewVBox(
+		widget.NewLabel(lang.LocalizeKey("profile.icon.select_source_hint", "Select how to choose the profile icon.")),
+		selectFromExplorerBtn,
+		widget.NewSeparator(),
+		modsLabel,
+		modArea,
+	)
+
+	d = dialog.NewCustom(
+		lang.LocalizeKey("profile.icon.select_source_title", "Select Profile Icon"),
+		lang.LocalizeKey("common.cancel", "Cancel"),
+		content,
+		l.state.Window,
+	)
+	d.Resize(fyne.NewSize(560, 500))
+	d.Show()
+}
+
+func (l *Launcher) pickProfileIconFromExplorer() ([]byte, error) {
+	path, err := l.state.ExplorerOpenFile("Profile Icon", "*.png;*.jpg;*.jpeg;*.gif")
+	if err != nil {
+		slog.Info("File selection cancelled or failed", "error", err)
+		return nil, nil
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	decoded, _, err := image.Decode(f)
+	if err != nil {
+		return nil, errors.New(lang.LocalizeKey("profile.icon.invalid", "Selected file is not a valid image."))
+	}
+
+	iconPNG, err := encodeSquarePNG(decoded)
+	if err != nil {
+		return nil, err
+	}
+	return iconPNG, nil
+}
+
+func (l *Launcher) profileIconPNGFromModThumbnail(modID string) ([]byte, error) {
+	if modID == "" {
+		return nil, errors.New(lang.LocalizeKey("profile.icon.mod_thumbnail_unavailable", "MOD thumbnail is unavailable."))
+	}
+
+	l.modThumbMu.Lock()
+	cached := l.modThumbnailImageCache[modID]
+	l.modThumbMu.Unlock()
+	if cached != nil {
+		return encodeSquarePNG(cached)
+	}
+	if l.state.Rest == nil {
+		return nil, errors.New(lang.LocalizeKey("profile.icon.mod_thumbnail_unavailable", "MOD thumbnail is unavailable."))
+	}
+
+	thumbBytes, err := l.state.Rest.GetModThumbnail(modID)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", lang.LocalizeKey("profile.icon.mod_thumbnail_load_failed", "Failed to load MOD thumbnail."), err)
+	}
+	if len(thumbBytes) == 0 {
+		return nil, errors.New(lang.LocalizeKey("profile.icon.mod_thumbnail_unavailable", "MOD thumbnail is unavailable."))
+	}
+
+	decoded, _, err := image.Decode(bytes.NewReader(thumbBytes))
+	if err != nil {
+		return nil, errors.New(lang.LocalizeKey("profile.icon.mod_thumbnail_invalid", "MOD thumbnail is not a valid image."))
+	}
+	decoded = centerCropSquare(decoded)
+
+	l.modThumbMu.Lock()
+	l.modThumbnailImageCache[modID] = decoded
+	l.modThumbnailFetched[modID] = true
+	l.modThumbMu.Unlock()
+
+	return encodeSquarePNG(decoded)
+}
+
 func (l *Launcher) showAddModDialog(onAdd func([]modmgr.ModVersion)) {
 	contentBox := container.NewVBox()
 	scroll := container.NewVScroll(contentBox)
@@ -1180,18 +1528,20 @@ func (l *Launcher) showAddModDialog(onAdd func([]modmgr.ModVersion)) {
 	// Create dialog first
 	var d *dialog.CustomDialog
 
-	buildItem := func(title, subtitle string, onTap func()) fyne.CanvasObject {
-		imgRect := canvas.NewRectangle(theme.Color(theme.ColorNameDisabled))
-		imgRect.SetMinSize(fyne.NewSquareSize(80))
-		img := container.NewCenter(imgRect)
+	buildItem := func(modID, title, subtitle string, onTap func()) fyne.CanvasObject {
+		thumb := l.newModThumbnailCanvas(modID, 80, 6)
+		l.ensureModThumbnailLoaded(modID, contentBox.Refresh)
+		thumbBg := canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground))
+		thumbBg.CornerRadius = 6
+		thumbArea := container.NewStack(thumbBg, container.NewCenter(thumb))
 
 		textContainer := container.NewVBox(
 			widget.NewLabelWithStyle(title, fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 			widget.NewLabel(subtitle),
 		)
 
-		itemContent := container.New(layout.NewBorderLayout(nil, nil, img, nil),
-			img,
+		itemContent := container.New(layout.NewBorderLayout(nil, nil, thumbArea, nil),
+			thumbArea,
 			container.NewPadded(textContainer),
 		)
 
@@ -1212,7 +1562,7 @@ func (l *Launcher) showAddModDialog(onAdd func([]modmgr.ModVersion)) {
 		fyne.Do(func() {
 			contentBox.Objects = nil
 			for range modIDs {
-				contentBox.Add(buildItem(lang.LocalizeKey("profile.loading_mod", "Loading mod details..."), "", nil))
+				contentBox.Add(buildItem("", lang.LocalizeKey("profile.loading_mod", "Loading mod details..."), "", nil))
 			}
 			contentBox.Refresh()
 		})
@@ -1230,12 +1580,12 @@ func (l *Launcher) showAddModDialog(onAdd func([]modmgr.ModVersion)) {
 						}
 						title := lang.LocalizeKey("profile.failed_mod", "Failed to load mod '{{.ID}}'", map[string]any{"ID": id})
 						subtitle := lang.LocalizeKey("profile.failed_mod_description", "Reopen this dialog to retry")
-						contentBox.Objects[index] = buildItem(title, subtitle, nil)
+						contentBox.Objects[index] = buildItem(id, title, subtitle, nil)
 						contentBox.Refresh()
 						return
 					}
 
-					contentBox.Objects[index] = buildItem(mod.Name, mod.Author, func() {
+					contentBox.Objects[index] = buildItem(mod.ID, mod.Name, mod.Author, func() {
 						detailsDialog := l.newModDetailsDialog(mod, func(v modmgr.ModVersion) {
 							onAdd([]modmgr.ModVersion{v})
 							d.Dismiss()
@@ -1339,6 +1689,73 @@ func (l *Launcher) refreshProfileIconCanvasFromPNG(target *canvas.Image, iconPNG
 	target.Image = l.squareIconImageFromPNG(iconPNG, fallbackSize, uuid.Nil)
 	target.SetMinSize(fyne.NewSquareSize(float32(fallbackSize)))
 	target.Refresh()
+}
+
+func placeholderModThumbnail(size int) image.Image {
+	return image.NewPaletted(image.Rect(0, 0, max(size, 1), max(size, 1)), color.Palette{theme.Color(theme.ColorNameDisabled)})
+}
+
+func (l *Launcher) modThumbnailImage(modID string, fallbackSize int) image.Image {
+	l.modThumbMu.Lock()
+	img := l.modThumbnailImageCache[modID]
+	l.modThumbMu.Unlock()
+	if img == nil {
+		return placeholderModThumbnail(fallbackSize)
+	}
+	return img
+}
+
+func (l *Launcher) newModThumbnailCanvas(modID string, size float32, cornerRadius float32) *canvas.Image {
+	img := canvas.NewImageFromImage(l.modThumbnailImage(modID, int(size)))
+	img.CornerRadius = cornerRadius
+	img.SetMinSize(fyne.NewSquareSize(size))
+	img.FillMode = canvas.ImageFillContain
+	return img
+}
+
+func (l *Launcher) refreshModThumbnailCanvas(target *canvas.Image, modID string, fallbackSize int) {
+	target.Image = l.modThumbnailImage(modID, fallbackSize)
+	target.SetMinSize(fyne.NewSquareSize(float32(fallbackSize)))
+	target.Refresh()
+}
+
+func (l *Launcher) ensureModThumbnailLoaded(modID string, onLoaded func()) {
+	if modID == "" || l.state.Rest == nil {
+		return
+	}
+	l.modThumbMu.Lock()
+	if l.modThumbnailFetched[modID] || l.modThumbnailLoading[modID] {
+		l.modThumbMu.Unlock()
+		return
+	}
+	l.modThumbnailLoading[modID] = true
+	l.modThumbMu.Unlock()
+
+	go func(targetModID string) {
+		thumbBytes, err := l.state.Rest.GetModThumbnail(targetModID)
+		var decoded image.Image
+		if err == nil && len(thumbBytes) > 0 {
+			decoded, _, err = image.Decode(bytes.NewReader(thumbBytes))
+			if err == nil {
+				decoded = centerCropSquare(decoded)
+			}
+		}
+		if err != nil {
+			slog.Debug("Failed to load mod thumbnail", "modID", targetModID, "error", err)
+		}
+
+		l.modThumbMu.Lock()
+		delete(l.modThumbnailLoading, targetModID)
+		l.modThumbnailFetched[targetModID] = true
+		if decoded != nil {
+			l.modThumbnailImageCache[targetModID] = decoded
+		}
+		l.modThumbMu.Unlock()
+
+		if onLoaded != nil {
+			fyne.Do(onLoaded)
+		}
+	}(modID)
 }
 
 func (l *Launcher) newModDetailsDialog(mod *modmgr.Mod, onSelect func(modmgr.ModVersion)) *dialog.CustomDialog {

@@ -1,7 +1,11 @@
 package repo
 
 import (
+	"bytes"
 	"fmt"
+	"image"
+	"image/color"
+	imagedraw "image/draw"
 	"log/slog"
 	"strings"
 	"sync"
@@ -22,13 +26,26 @@ import (
 	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 	"github.com/ikafly144/au_mod_installer/pkg/profile"
+
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
 )
 
-const ModsPerPage = 10
+const (
+	ModsPerPage          = 10
+	repositoryThumbSize  = float32(114)
+	repositoryDetailSize = float32(114)
+)
 
 type Repository struct {
 	state *uicommon.State
 	mu    sync.Mutex
+
+	thumbMu             sync.Mutex
+	thumbnailImageCache map[string]image.Image
+	thumbnailFetched    map[string]bool
+	thumbnailLoading    map[string]bool
 
 	lastModID  string
 	noMoreMods bool
@@ -51,11 +68,14 @@ func NewRepository(state *uicommon.State) *Repository {
 	bind := binding.NewList(func(a, b *modmgr.Mod) bool { return a.ID == b.ID })
 
 	repo := &Repository{
-		state:            state,
-		lastModID:        "",
-		modsBind:         bind,
-		modListContainer: container.NewVBox(),
-		stateLabel:       widget.NewLabel(""),
+		state:               state,
+		lastModID:           "",
+		modsBind:            bind,
+		modListContainer:    container.NewVBox(),
+		stateLabel:          widget.NewLabel(""),
+		thumbnailImageCache: map[string]image.Image{},
+		thumbnailFetched:    map[string]bool{},
+		thumbnailLoading:    map[string]bool{},
 	}
 
 	// Initialize UI components
@@ -139,12 +159,11 @@ func (r *Repository) updateModList(filter string) {
 			continue
 		}
 
-		// Create List Item
-		imgRect := canvas.NewRectangle(theme.Color(theme.ColorNameDisabled))
-		imgRect.SetMinSize(fyne.NewSquareSize(80))
-		// Use a container that centers the image to maintain its aspect ratio
-		// while the BorderLayout stretches the container itself.
-		img := container.NewCenter(imgRect)
+		thumb := r.newModThumbnailCanvas(mod.ID, repositoryThumbSize, 3)
+		r.ensureThumbnailLoaded(mod.ID)
+		thumbBg := canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground))
+		thumbBg.CornerRadius = 6
+		thumbArea := container.NewStack(thumbBg, container.NewCenter(thumb))
 
 		titleLabel := widget.NewLabelWithStyle(mod.Name, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 
@@ -166,18 +185,19 @@ func (r *Repository) updateModList(filter string) {
 			}
 		}
 
+		authorLabel := widget.NewLabel(mod.Author)
+		descriptionLabel := widget.NewLabel(repositoryListSummary(mod.Description, 120))
+		titleRow := container.NewBorder(nil, nil, nil, updateBadge, titleLabel)
 		textContainer := container.NewVBox(
-			container.NewHBox(titleLabel, updateBadge),
-			widget.NewLabel(mod.Author),
-			widget.NewLabel(mod.Description),
+			titleRow,
+			authorLabel,
+			descriptionLabel,
 		)
-		textContainer.Objects[2].(*widget.Label).Wrapping = fyne.TextWrapWord
 
-		// Border layout with centered img on the left
-		content := container.New(layout.NewBorderLayout(nil, nil, img, nil),
-			img,
-			container.NewPadded(textContainer),
-		)
+		content := container.New(&modListItemLayout{
+			minThumbSize: repositoryThumbSize,
+			spacing:      theme.Padding(),
+		}, thumbArea, container.NewPadded(textContainer))
 
 		// Make it clickable
 		card := uicommon.NewTappableContainer(content, func() {
@@ -223,8 +243,11 @@ func (r *Repository) showModDetails(mod *modmgr.Mod) {
 	topBar := container.NewHBox(backBtn)
 
 	// Header Info
-	img := canvas.NewSquare(theme.Color(theme.ColorNameDisabled))
-	img.SetMinSize(fyne.NewSize(128, 128))
+	img := r.newModThumbnailCanvas(mod.ID, repositoryDetailSize, 10)
+	r.ensureThumbnailLoaded(mod.ID)
+	imgBg := canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground))
+	imgBg.CornerRadius = 10
+	imgArea := container.NewStack(imgBg, container.NewCenter(img))
 
 	headerText := container.NewVBox(
 		widget.NewLabelWithStyle(mod.Name, fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
@@ -243,8 +266,8 @@ func (r *Repository) showModDetails(mod *modmgr.Mod) {
 		r.installModVersion(mod, mod.LatestVersionID)
 	}))
 
-	header := container.New(layout.NewBorderLayout(nil, nil, img, nil),
-		img,
+	header := container.New(layout.NewBorderLayout(nil, nil, imgArea, nil),
+		imgArea,
 		headerText,
 	)
 
@@ -519,10 +542,143 @@ func (r *Repository) reloadMods() {
 	r.lastModID = ""
 	r.noMoreMods = false
 	r.mu.Unlock()
+	r.thumbMu.Lock()
+	r.thumbnailImageCache = map[string]image.Image{}
+	r.thumbnailFetched = map[string]bool{}
+	r.thumbnailLoading = map[string]bool{}
+	r.thumbMu.Unlock()
 	fyne.DoAndWait(r.modScroll.ScrollToTop)
 	_ = r.modsBind.Set([]*modmgr.Mod{})
 	if err, _ := r.fetchMods(); err != nil {
 		slog.Error("Failed to reload mods in repository tab", "error", err)
 		r.state.SetError(fmt.Errorf("%s", lang.LocalizeKey("repository.failed_to_load", "Failed to load mods: {{.Error}}", map[string]any{"Error": err.Error()})))
 	}
+}
+
+func repositoryListSummary(text string, maxRunes int) string {
+	line := strings.Join(strings.Fields(strings.ReplaceAll(text, "\n", " ")), " ")
+	if maxRunes <= 0 {
+		return line
+	}
+	runes := []rune(line)
+	if len(runes) <= maxRunes {
+		return line
+	}
+	return string(runes[:maxRunes-1]) + "…"
+}
+
+func placeholderModThumbnail(size int) image.Image {
+	return image.NewPaletted(image.Rect(0, 0, max(size, 1), max(size, 1)), color.Palette{theme.Color(theme.ColorNameDisabled)})
+}
+
+func centerCropSquareThumbnail(src image.Image) image.Image {
+	bounds := src.Bounds()
+	width := bounds.Dx()
+	height := bounds.Dy()
+	if width <= 0 || height <= 0 {
+		return placeholderModThumbnail(1)
+	}
+	side := min(width, height)
+	startX := bounds.Min.X + (width-side)/2
+	startY := bounds.Min.Y + (height-side)/2
+	dstRect := image.Rect(0, 0, side, side)
+	dst := image.NewRGBA(dstRect)
+	imagedraw.Draw(dst, dstRect, src, image.Point{X: startX, Y: startY}, imagedraw.Src)
+	return dst
+}
+
+func (r *Repository) modThumbnailImage(modID string, fallbackSize int) image.Image {
+	r.thumbMu.Lock()
+	img := r.thumbnailImageCache[modID]
+	r.thumbMu.Unlock()
+	if img == nil {
+		return placeholderModThumbnail(fallbackSize)
+	}
+	return img
+}
+
+func (r *Repository) newModThumbnailCanvas(modID string, size float32, cornerRadius float32) *canvas.Image {
+	img := canvas.NewImageFromImage(r.modThumbnailImage(modID, int(size)))
+	img.FillMode = canvas.ImageFillContain
+	img.CornerRadius = cornerRadius
+	img.SetMinSize(fyne.NewSquareSize(size))
+	return img
+}
+
+func (r *Repository) ensureThumbnailLoaded(modID string) {
+	if modID == "" || r.state.Rest == nil {
+		return
+	}
+	r.thumbMu.Lock()
+	if r.thumbnailFetched[modID] || r.thumbnailLoading[modID] {
+		r.thumbMu.Unlock()
+		return
+	}
+	r.thumbnailLoading[modID] = true
+	r.thumbMu.Unlock()
+
+	go func(targetModID string) {
+		thumbBytes, err := r.state.Rest.GetModThumbnail(targetModID)
+		var decoded image.Image
+		if err == nil && len(thumbBytes) > 0 {
+			decoded, _, err = image.Decode(bytes.NewReader(thumbBytes))
+			if err == nil {
+				decoded = centerCropSquareThumbnail(decoded)
+			}
+		}
+		if err != nil {
+			slog.Debug("Failed to load mod thumbnail", "modID", targetModID, "error", err)
+		}
+
+		r.thumbMu.Lock()
+		delete(r.thumbnailLoading, targetModID)
+		r.thumbnailFetched[targetModID] = true
+		if decoded != nil {
+			r.thumbnailImageCache[targetModID] = decoded
+		}
+		r.thumbMu.Unlock()
+
+		r.updateModList(r.currentSearchText())
+	}(modID)
+}
+
+type modListItemLayout struct {
+	minThumbSize float32
+	spacing      float32
+}
+
+func (l *modListItemLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
+	if len(objects) < 2 {
+		return
+	}
+	thumb := objects[0]
+	body := objects[1]
+
+	thumbSide := size.Height
+	if thumbSide < l.minThumbSize {
+		thumbSide = l.minThumbSize
+	}
+	if thumbSide > size.Width {
+		thumbSide = size.Width
+	}
+	thumb.Resize(fyne.NewSize(thumbSide, thumbSide))
+	thumb.Move(fyne.NewPos(0, (size.Height-thumbSide)/2))
+
+	bodyX := thumbSide + l.spacing
+	bodyWidth := size.Width - bodyX
+	if bodyWidth < 0 {
+		bodyWidth = 0
+	}
+	body.Resize(fyne.NewSize(bodyWidth, size.Height))
+	body.Move(fyne.NewPos(bodyX, 0))
+}
+
+func (l *modListItemLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
+	if len(objects) < 2 {
+		return fyne.NewSize(0, 0)
+	}
+	thumbMin := objects[0].MinSize()
+	bodyMin := objects[1].MinSize()
+	height := max(thumbMin.Height, max(bodyMin.Height, l.minThumbSize))
+	return fyne.NewSize(height+l.spacing+bodyMin.Width, height)
 }
