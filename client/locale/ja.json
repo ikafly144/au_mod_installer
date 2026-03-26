@@ -132,6 +132,7 @@
     "profile.import_title": "プロファイルのインポート",
     "profile.import_message": "共有されたプロファイル「{{.Name}}」をインポートしますか？",
     "profile.import_url_loading": "アーカイブをダウンロードしています...",
+    "profile.apply_latest": "最新バージョンを適用",
     "profile.edit": "編集",
     "profile.duplicate": "複製",
     "profile.delete": "削除",
@@ -198,6 +199,7 @@
     "repository.mod_not_found_description": "このModの詳細は利用できません。",
     "repository.update_available": "アップデート利用可能",
     "launcher.error.no_profile": "起動するプロファイルを選択してください。",
+    "launcher.launch.waiting_for_game": "ゲームの起動を待っています...",
     "launcher.sync.title": "プロファイル同期中",
     "launcher.sync.in_progress": "プロファイルを同期しています。しばらくお待ちください...",
     "launcher.sync.success": "プロファイルの再同期とMod再ダウンロードが完了しました。"

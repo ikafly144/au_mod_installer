@@ -14,10 +14,7 @@ import (
 )
 
 func (s *State) Launch(path string) {
-	if !s.launchLock.TryLock() {
-		s.SetError(errors.New(lang.LocalizeKey("error.game_already_running", "Already running.")))
-		return
-	}
+	s.launchLock.Lock()
 	defer s.launchLock.Unlock()
 
 	if s.Core.DetectLauncherType(path) == aumgr.LauncherEpicGames {
@@ -52,6 +49,7 @@ func (s *State) Launch(path string) {
 	}()
 
 	startedAt := time.Now()
+	time.Sleep(200 * time.Millisecond)
 	s.ShowGameRunningDialog()
 	if err := s.Core.ExecuteLaunch(path, profileDir); err != nil {
 		s.HideGameRunningDialog()
@@ -59,6 +57,8 @@ func (s *State) Launch(path string) {
 		slog.Warn("Failed to launch Among Us", "error", err)
 		return
 	}
+	slog.Info("Launched Among Us successfully")
+	s.waitUntilGameExited()
 	s.HideGameRunningDialog()
 	finishedAt := time.Now()
 	if activeProfileID != uuid.Nil {
@@ -68,6 +68,25 @@ func (s *State) Launch(path string) {
 	}
 	_ = s.CanLaunch.Set(true)
 	_ = s.CanInstall.Set(true)
+}
+
+func (s *State) waitUntilGameExited() {
+	const (
+		maxWait    = 10 * time.Second
+		pollPeriod = 200 * time.Millisecond
+	)
+	deadline := time.Now().Add(maxWait)
+	for time.Now().Before(deadline) {
+		running, err := s.Core.IsGameRunning()
+		if err != nil {
+			slog.Warn("Failed to check running process after launch", "error", err)
+			return
+		}
+		if !running {
+			return
+		}
+		time.Sleep(pollPeriod)
+	}
 }
 
 func (s *State) updateProfileLaunchMetrics(profileID uuid.UUID, startedAt, finishedAt time.Time) error {

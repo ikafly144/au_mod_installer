@@ -95,6 +95,7 @@ const (
 
 	profileArchiveDownloadTimeout  = 30 * time.Second
 	profileArchiveDownloadMaxBytes = int64(64 << 20)
+	launchWaitingDialogMinVisible  = 700 * time.Millisecond
 )
 
 func NewLauncherTab(s *uicommon.State) uicommon.Tab {
@@ -1057,8 +1058,20 @@ func (l *Launcher) runLaunch() {
 	go func() {
 		var launchErr error
 		progressShown := true
+		var waitingDialog dialog.Dialog
+		restoreRunningShownHook := l.state.SetOnGameRunningDialogShown(func() {
+			if waitingDialog != nil {
+				waitingDialog.Hide()
+				waitingDialog = nil
+			}
+		})
 		defer func() {
+			restoreRunningShownHook()
 			fyne.DoAndWait(func() {
+				if waitingDialog != nil {
+					waitingDialog.Hide()
+					waitingDialog = nil
+				}
 				if progressShown {
 					launchDialog.Hide()
 				}
@@ -1099,6 +1112,17 @@ func (l *Launcher) runLaunch() {
 		fyne.DoAndWait(func() {
 			launchDialog.Hide()
 			progressShown = false
+			waitingProgress := widget.NewProgressBarInfinite()
+			waitingDialog = dialog.NewCustomWithoutButtons(
+				lang.LocalizeKey("launch.running.title", "Game Running"),
+				container.NewVBox(
+					widget.NewLabel(lang.LocalizeKey("launcher.launch.waiting_for_game", "ゲームの起動を待っています...")),
+					waitingProgress,
+				),
+				l.state.Window,
+			)
+			waitingDialog.Resize(fyne.NewSize(420, 130))
+			waitingDialog.Show()
 		})
 
 		// Proceed to Launch
@@ -1599,6 +1623,28 @@ func (l *Launcher) openProfileEditor(prof profile.Profile) {
 	)
 
 	updatesAvailable := make(map[string]string) // ModID -> LatestVersionID
+	var applyLatestBtn *widget.Button
+	applyLatestBtn = widget.NewButtonWithIcon(
+		lang.LocalizeKey("profile.apply_latest", "最新バージョンを適用"),
+		theme.DownloadIcon(),
+		func() {
+			if len(updatesAvailable) == 0 {
+				return
+			}
+			for modID, latestID := range updatesAvailable {
+				version, fetchErr := l.state.Rest.GetModVersion(modID, latestID)
+				if fetchErr != nil {
+					dialog.ShowError(fmt.Errorf("failed to fetch latest version for %s:%s: %w", modID, latestID, fetchErr), l.state.Window)
+					return
+				}
+				currentProfile.AddModVersion(*version)
+				delete(updatesAvailable, modID)
+			}
+			applyLatestBtn.Hide()
+			modList.Refresh()
+		},
+	)
+	applyLatestBtn.Hide()
 	go func() {
 		installed := make(map[string]string)
 		for _, v := range currentProfile.Versions() {
@@ -1610,6 +1656,11 @@ func (l *Launcher) openProfileEditor(prof profile.Profile) {
 				updatesAvailable[modID] = latest.ID
 			}
 			fyne.Do(func() {
+				if len(updatesAvailable) > 0 {
+					applyLatestBtn.Show()
+				} else {
+					applyLatestBtn.Hide()
+				}
 				modList.Refresh()
 			})
 		}
@@ -1643,6 +1694,10 @@ func (l *Launcher) openProfileEditor(prof profile.Profile) {
 
 		delBtn.OnTapped = func() {
 			currentProfile.RemoveModVersion(v.ModID)
+			delete(updatesAvailable, v.ModID)
+			if len(updatesAvailable) == 0 {
+				applyLatestBtn.Hide()
+			}
 			modList.Refresh()
 		}
 	}
@@ -1721,7 +1776,12 @@ func (l *Launcher) openProfileEditor(prof profile.Profile) {
 				),
 			),
 			widget.NewSeparator(),
-			widget.NewLabel(lang.LocalizeKey("profile.mods", "Mods")),
+			container.NewBorder(
+				nil,
+				nil,
+				widget.NewLabel(lang.LocalizeKey("profile.mods", "Mods")),
+				applyLatestBtn,
+			),
 		),
 		addModBtn, nil, nil,
 		modList,

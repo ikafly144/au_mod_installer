@@ -112,6 +112,7 @@ type State struct {
 	dialogLock       sync.Mutex
 	activeDialog     dialog.Dialog
 	runningDialog    dialog.Dialog
+	onRunningShown   func()
 
 	Core           *core.App
 	Rest           rest.Client
@@ -172,10 +173,15 @@ func (s *State) ShowGameRunningDialog() {
 	if s.Window == nil {
 		return
 	}
-	fyne.Do(func() {
+	fyne.DoAndWait(func() {
+		var onShown func()
 		s.dialogLock.Lock()
 		if s.runningDialog != nil {
+			onShown = s.onRunningShown
 			s.dialogLock.Unlock()
+			if onShown != nil {
+				onShown()
+			}
 			return
 		}
 		label := widget.NewLabel(lang.LocalizeKey("launch.running.dialog", "Among Us is running. This dialog closes automatically when the game exits."))
@@ -194,7 +200,11 @@ func (s *State) ShowGameRunningDialog() {
 		})
 		d.Resize(fyne.NewSize(420, 120))
 		s.runningDialog = d
+		onShown = s.onRunningShown
 		s.dialogLock.Unlock()
+		if onShown != nil {
+			onShown()
+		}
 		d.Show()
 	})
 }
@@ -209,6 +219,18 @@ func (s *State) HideGameRunningDialog() {
 			d.Hide()
 		}
 	})
+}
+
+func (s *State) SetOnGameRunningDialogShown(onShown func()) func() {
+	s.dialogLock.Lock()
+	prev := s.onRunningShown
+	s.onRunningShown = onShown
+	s.dialogLock.Unlock()
+	return func() {
+		s.dialogLock.Lock()
+		s.onRunningShown = prev
+		s.dialogLock.Unlock()
+	}
 }
 
 func (s *State) showDialog(factory func() dialog.Dialog) {
@@ -344,7 +366,9 @@ func (i *State) RefreshModInstallation() {
 }
 
 func (s *State) checkPlayingProcess() bool {
-	s.launchLock.Lock()
+	if !s.launchLock.TryLock() {
+		return false
+	}
 	defer s.launchLock.Unlock()
 	installDisabled := false
 	if ok, err := s.CanInstall.Get(); err == nil && !ok {
