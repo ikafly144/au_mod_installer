@@ -8,6 +8,7 @@ RULE_FILE=""
 MOD_NAME=""
 MOD_AUTHOR=""
 MOD_DESC=""
+BUILD_SOURCE="module"
 
 DRY_RUN=false
 
@@ -21,6 +22,7 @@ usage() {
     echo "  --desc <text>    Mod description"
     echo "  --db <url>       Database connection string"
     echo "  --dry-run        Print command without executing"
+    echo "  --build-source <source> Set build source: 'local' or 'module' (default: module)"
     echo "  --help           Show this help message"
     exit 0
 }
@@ -46,6 +48,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --db)
             DB_URL="$2"
+            shift 2
+            ;;
+        --build-source)
+            BUILD_SOURCE="$2"
             shift 2
             ;;
         --dry-run)
@@ -83,8 +89,16 @@ cd "$(dirname "$0")/.." || exit 1
 
 # Check mus-mgr
 if [ ! -f "bin/mus-mgr" ]; then
-    echo "Building mus-mgr..."
-    go build -o bin/mus-mgr ./cmd/mus-mgr
+    echo "Building mus-mgr (Source: $BUILD_SOURCE)..."
+    mkdir -p bin
+    
+    if [ "$BUILD_SOURCE" == "module" ]; then
+        # shellcheck disable=SC2155
+        export GOBIN="$(pwd)/bin"
+        go install github.com/ikafly144/au_mod_installer/cmd/mus-mgr
+    else
+        go build -o bin/mus-mgr ./cmd/mus-mgr
+    fi
 fi
 
 # Extract mod_id
