@@ -12,6 +12,7 @@ VERBOSE=false
 BUILD=true
 INTERACTIVE=false
 BUILD_SOURCE="module"
+BUILD_VERSION="latest"
 
 usage() {
     echo "Usage: $0 [command] [options]"
@@ -27,6 +28,7 @@ usage() {
     echo "  --dry-run       Show what would happen without making changes"
     echo "  --no-build      Skip building tools (if already built)"
     echo "  --build-source <source> Set build source: 'local' or 'module' (default: module)"
+    echo "  --build-version <ver> Set build version for module source (default: latest)"
     echo "  --interactive   Enable interactive selection of releases"
     echo "  --verbose       Enable verbose output"
     echo "  --help          Show this help message"
@@ -76,6 +78,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --build-source)
             BUILD_SOURCE="$2"
+            shift 2
+            ;;
+        --build-version)
+            BUILD_VERSION="$2"
             shift 2
             ;;
         --interactive)
@@ -132,8 +138,8 @@ if [ "$BUILD" = true ] && [ "$COMMAND" != "list" ]; then
         # Use go install with GOBIN for module source
         # shellcheck disable=SC2155
         export GOBIN="$(pwd)/bin"
-        go install github.com/ikafly144/au_mod_installer/cmd/fetch-gh-release
-        go install github.com/ikafly144/au_mod_installer/cmd/mus-mgr
+        go install "github.com/ikafly144/au_mod_installer/cmd/fetch-gh-release@$BUILD_VERSION"
+        go install "github.com/ikafly144/au_mod_installer/cmd/mus-mgr@$BUILD_VERSION"
     else
         # Use go build with local path
         go build -o bin/fetch-gh-release ./cmd/fetch-gh-release

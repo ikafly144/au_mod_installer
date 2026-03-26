@@ -9,6 +9,7 @@ MOD_NAME=""
 MOD_AUTHOR=""
 MOD_DESC=""
 BUILD_SOURCE="module"
+BUILD_VERSION="latest"
 
 DRY_RUN=false
 
@@ -23,6 +24,7 @@ usage() {
     echo "  --db <url>       Database connection string"
     echo "  --dry-run        Print command without executing"
     echo "  --build-source <source> Set build source: 'local' or 'module' (default: module)"
+    echo "  --build-version <ver> Set build version for module source (default: latest)"
     echo "  --help           Show this help message"
     exit 0
 }
@@ -52,6 +54,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --build-source)
             BUILD_SOURCE="$2"
+            shift 2
+            ;;
+        --build-version)
+            BUILD_VERSION="$2"
             shift 2
             ;;
         --dry-run)
@@ -95,7 +101,7 @@ if [ ! -f "bin/mus-mgr" ]; then
     if [ "$BUILD_SOURCE" == "module" ]; then
         # shellcheck disable=SC2155
         export GOBIN="$(pwd)/bin"
-        go install github.com/ikafly144/au_mod_installer/cmd/mus-mgr
+        go install "github.com/ikafly144/au_mod_installer/cmd/mus-mgr@$BUILD_VERSION"
     else
         go build -o bin/mus-mgr ./cmd/mus-mgr
     fi
