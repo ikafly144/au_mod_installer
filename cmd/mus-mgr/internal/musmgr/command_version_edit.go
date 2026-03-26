@@ -13,12 +13,24 @@ func (f *commandFactory) newVersionEditCommand() *cli.Command {
 		Name:      "edit",
 		Usage:     "Edit an existing mod version",
 		ArgsUsage: "<mod-id> <version-id>",
+		BashComplete: func(c *cli.Context) {
+			if c.NArg() <= 1 {
+				f.printModIDCompletions(c)
+				return
+			}
+			if c.NArg() <= 2 {
+				f.printVersionIDCompletions(c, c.Args().Get(0))
+			}
+		},
 		Flags: []cli.Flag{
 			&cli.StringSliceFlag{Name: "dependency", Usage: "Replace dependencies. Format: mod_id:version_id:type"},
 			&cli.BoolFlag{Name: "set-latest", Usage: "Set this version as latest on the mod"},
 			&cli.BoolFlag{Name: "clear-latest-version", Usage: "Clear latest version on the mod"},
 		},
 		Action: func(c *cli.Context) error {
+			if err := requireDB(c); err != nil {
+				return err
+			}
 			if c.NArg() < 2 {
 				return fmt.Errorf("mod-id and version-id required")
 			}

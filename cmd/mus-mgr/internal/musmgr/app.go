@@ -7,15 +7,16 @@ func NewApp() *cli.App {
 	factory := newCommandFactory(&dbURL)
 
 	return &cli.App{
-		Name:  "mus-mgr",
-		Usage: "Manage the au_mod_installer server database",
+		Name:                 "mus-mgr",
+		Usage:                "Manage the au_mod_installer server database",
+		EnableBashCompletion: true,
+		Suggest:              true,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:        "db",
 				Usage:       "PostgreSQL connection string",
 				EnvVars:     []string{"DATABASE_URL"},
 				Destination: &dbURL,
-				Required:    true,
 			},
 		},
 		Commands: []*cli.Command{

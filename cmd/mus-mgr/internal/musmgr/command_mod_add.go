@@ -20,6 +20,9 @@ func (f *commandFactory) newModAddCommand() *cli.Command {
 			&cli.StringFlag{Name: "desc", Required: false},
 		},
 		Action: func(c *cli.Context) error {
+			if err := requireDB(c); err != nil {
+				return err
+			}
 			repo, err := f.newRepository()
 			if err != nil {
 				return err

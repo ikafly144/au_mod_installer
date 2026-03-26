@@ -11,6 +11,11 @@ func (f *commandFactory) newModEditCommand() *cli.Command {
 		Name:      "edit",
 		Usage:     "Edit an existing mod",
 		ArgsUsage: "<mod-id>",
+		BashComplete: func(c *cli.Context) {
+			if c.NArg() <= 1 {
+				f.printModIDCompletions(c)
+			}
+		},
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "name", Usage: "Updated mod name"},
 			&cli.StringFlag{Name: "author", Usage: "Updated mod author"},
@@ -19,6 +24,9 @@ func (f *commandFactory) newModEditCommand() *cli.Command {
 			&cli.BoolFlag{Name: "clear-latest-version", Usage: "Clear latest version ID"},
 		},
 		Action: func(c *cli.Context) error {
+			if err := requireDB(c); err != nil {
+				return err
+			}
 			if c.NArg() < 1 {
 				return fmt.Errorf("mod-id required")
 			}

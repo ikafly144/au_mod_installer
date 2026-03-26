@@ -11,6 +11,9 @@ func (f *commandFactory) newModListCommand() *cli.Command {
 		Name:  "list",
 		Usage: "List mods",
 		Action: func(c *cli.Context) error {
+			if err := requireDB(c); err != nil {
+				return err
+			}
 			repo, err := f.newRepository()
 			if err != nil {
 				return err

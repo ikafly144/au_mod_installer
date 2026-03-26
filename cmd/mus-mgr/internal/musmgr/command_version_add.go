@@ -21,6 +21,9 @@ func (f *commandFactory) newVersionAddCommand() *cli.Command {
 			&cli.BoolFlag{Name: "set-latest", Usage: "Set this version as the latest version for the mod"},
 		},
 		Action: func(c *cli.Context) error {
+			if err := requireDB(c); err != nil {
+				return err
+			}
 			repo, err := f.newRepository()
 			if err != nil {
 				return err

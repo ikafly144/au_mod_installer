@@ -11,6 +11,9 @@ func (f *commandFactory) newMigrateCommand() *cli.Command {
 		Name:  "migrate",
 		Usage: "Migrate the database schema",
 		Action: func(c *cli.Context) error {
+			if err := requireDB(c); err != nil {
+				return err
+			}
 			repo, err := f.newRepository()
 			if err != nil {
 				return err
