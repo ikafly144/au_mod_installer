@@ -43,7 +43,12 @@ func main() {
 		}
 	}
 
-	lockPath := filepath.Join(os.Getenv("PROGRAMDATA"), "au_mod_installer.lock")
+	pd, err := windows.KnownFolderPath(windows.FOLDERID_ProgramData, 0)
+	if err != nil {
+		slog.Error("Failed to get ProgramData folder path", "error", err)
+		os.Exit(1)
+	}
+	lockPath := filepath.Join(pd, "au_mod_installer.lock")
 	lock, err := lockfile.New(lockPath)
 	if err != nil {
 		slog.Error("Failed to create lockfile", "error", err)

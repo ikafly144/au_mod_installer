@@ -5,6 +5,7 @@ import (
 	"image/color"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -16,6 +17,7 @@ import (
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"golang.org/x/sys/windows"
 
 	"github.com/google/uuid"
 
@@ -23,19 +25,18 @@ import (
 	"github.com/ikafly144/au_mod_installer/common/versioning"
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 	"github.com/ikafly144/au_mod_installer/pkg/profile"
-	"github.com/ikafly144/au_mod_installer/pkg/progress"
 )
 
 type Settings struct {
-	state               *uicommon.State
-	BranchSelect        *widget.Select
-	ApiServerEntry      *widget.Entry
-	SaveConfigButton    *widget.Button
-	ImportProfileButton *widget.Button
-	ClearCacheButton    *widget.Button
+	state                   *uicommon.State
+	BranchSelect            *widget.Select
+	ApiServerEntry          *widget.Entry
+	SaveConfigButton        *widget.Button
+	ImportProfileButton     *widget.Button
+	ClearCacheButton        *widget.Button
+	DeleteAmongUsDataButton *widget.Button
 
 	uninstallButton      *widget.Button
-	progressBar          *progress.FyneProgress
 	installationListener binding.DataListener
 
 	epicAccountLabel *widget.Label
@@ -68,7 +69,6 @@ func NewSettings(state *uicommon.State) *Settings {
 		BranchSelect:     branchSelect,
 		ApiServerEntry:   apiServerEntry,
 		uninstallButton:  widget.NewButtonWithIcon(lang.LocalizeKey("installation.uninstall", "Uninstall from Game Folder"), theme.DeleteIcon(), nil), // nil callback initially, set in init
-		progressBar:      progress.NewFyneProgress(widget.NewProgressBar()),
 		epicAccountLabel: widget.NewLabel(""),
 	}
 
@@ -93,6 +93,9 @@ func NewSettings(state *uicommon.State) *Settings {
 
 	s.ImportProfileButton = widget.NewButtonWithIcon(lang.LocalizeKey("settings.import_profile", "Import Profile from Current Installation"), theme.DocumentSaveIcon(), s.importProfile)
 	s.ClearCacheButton = widget.NewButtonWithIcon(lang.LocalizeKey("settings.clear_cache", "Clear Mod Cache"), theme.DeleteIcon(), s.clearCache)
+
+	s.DeleteAmongUsDataButton = widget.NewButtonWithIcon(lang.LocalizeKey("settings.delete_among_us_data", "Delete Among Us Data"), theme.DeleteIcon(), s.deleteAmongUsData)
+	s.DeleteAmongUsDataButton.Importance = widget.DangerImportance
 
 	return s
 }
@@ -148,6 +151,11 @@ func (s *Settings) Tab() (*container.TabItem, error) {
 			"",
 			settingsEntry(lang.LocalizeKey("settings.select_update_channel", "Select Update Channel"), s.BranchSelect),
 		),
+		widget.NewCard(
+			lang.LocalizeKey("settings.cache_management", "Cache Management"),
+			"",
+			container.NewVBox(s.ClearCacheButton),
+		),
 	))
 
 	accountPage := container.NewVScroll(container.NewVBox(
@@ -161,24 +169,27 @@ func (s *Settings) Tab() (*container.TabItem, error) {
 		),
 	))
 
-	maintenancePage := container.NewVScroll(container.NewVBox(
-		widget.NewCard(
-			lang.LocalizeKey("settings.cache_management", "Cache Management"),
-			"",
-			container.NewVBox(s.ClearCacheButton),
-		),
+	warningText := widget.NewRichText(
+		&widget.TextSegment{
+			Style: widget.RichTextStyleStrong,
+			Text:  lang.LocalizeKey("settings.page.advanced.warning", "These settings typically do not need to be changed. If you choose to change them, please do so carefully with an understanding of what they do."),
+		},
+	)
+	warningText.Wrapping = fyne.TextWrapBreak
+
+	advancedPage := container.NewVScroll(container.NewVBox(
+		warningText,
 		widget.NewCard(
 			lang.LocalizeKey("settings.legacy_migration", "Legacy Migration"),
 			"",
 			container.NewVBox(s.ImportProfileButton),
 		),
 		widget.NewCard(
-			lang.LocalizeKey("installation.installation_status", "Installation Status (Direct Install)"),
+			lang.LocalizeKey("installation.legacy_installation_status", "Legacy Installation Status"),
 			"",
 			container.NewVBox(
 				s.state.ModInstalledInfo,
 				s.uninstallButton,
-				s.progressBar.Canvas(),
 			),
 		),
 		widget.NewCard(
@@ -189,17 +200,22 @@ func (s *Settings) Tab() (*container.TabItem, error) {
 				s.SaveConfigButton,
 			),
 		),
+		widget.NewCard(
+			lang.LocalizeKey("settings.data_management", "Data Management"),
+			"",
+			container.NewVBox(s.DeleteAmongUsDataButton),
+		),
 	))
 
 	pageTitles := []string{
 		lang.LocalizeKey("settings.page.general", "General"),
 		lang.LocalizeKey("settings.page.account", "Account"),
-		lang.LocalizeKey("settings.page.maintenance", "Maintenance"),
+		lang.LocalizeKey("settings.page.advanced", "Advanced"),
 	}
 	pageContents := []fyne.CanvasObject{
 		basicPage,
 		accountPage,
-		maintenancePage,
+		advancedPage,
 	}
 
 	pageTitle := widget.NewLabelWithStyle(pageTitles[0], fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
@@ -290,7 +306,7 @@ func (s *Settings) runUninstall() {
 	slog.Info("Uninstalling mod", "path", path)
 
 	go func() {
-		if err := s.state.Core.UninstallMod(path, s.progressBar); err != nil {
+		if err := s.state.Core.UninstallMod(path, nil); err != nil {
 			s.state.ShowErrorDialog(errors.New(lang.LocalizeKey("installation.error.failed_to_uninstall", "Failed to uninstall mod: ") + err.Error()))
 			slog.Warn("Failed to uninstall mod", "error", err)
 			return
@@ -356,6 +372,27 @@ func (s *Settings) importProfile() {
 			return
 		}
 		dialog.ShowInformation(lang.LocalizeKey("common.success", "Success"), lang.LocalizeKey("settings.profile_imported", "Profile imported successfully."), s.state.Window)
+	}, s.state.Window)
+}
+
+func (s *Settings) deleteAmongUsData() {
+	dialog.ShowConfirm(lang.LocalizeKey("settings.delete_among_us_data_confirm_title", "Delete Among Us Data"), lang.LocalizeKey("settings.delete_among_us_data_confirm_message", "Are you sure you want to delete all Among Us data? This will reset all your Among Us settings and save data. This action cannot be undone."), func(confirm bool) {
+		if !confirm {
+			return
+		}
+		appDataDir, err := windows.KnownFolderPath(windows.FOLDERID_LocalAppDataLow, 0)
+		if err != nil {
+			slog.Error("Failed to get LocalAppDataLow folder path", "error", err)
+			dialog.ShowError(err, s.state.Window)
+			return
+		}
+		auDataDir := filepath.Join(appDataDir, "Innersloth", "Among Us")
+		if err := os.RemoveAll(auDataDir); err != nil {
+			dialog.ShowError(err, s.state.Window)
+		} else {
+			dialog.ShowInformation(lang.LocalizeKey("common.success", "Success"), lang.LocalizeKey("settings.among_us_data_deleted", "Among Us data deleted successfully."), s.state.Window)
+			s.state.RefreshModInstallation()
+		}
 	}, s.state.Window)
 }
 

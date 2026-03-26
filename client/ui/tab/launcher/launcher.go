@@ -429,8 +429,6 @@ func (l *Launcher) Tab() (*container.TabItem, error) {
 			container.NewHBox(l.toggleViewButton, l.sortOrderButton, l.sortSelect),
 			container.NewHBox(l.createProfileButton, l.importProfileButton),
 		)),
-		// widget.NewRichTextFromMarkdown("### "+lang.LocalizeKey("installation.installation_status", "Installation Status")), l.state.ModInstalledInfo,
-		// widget.NewSeparator(),
 	)
 
 	footer := container.NewVBox(
