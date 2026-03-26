@@ -21,8 +21,6 @@ type sharedArchiveProfileDocument struct {
 	SharedProfile json.RawMessage `json:"sharedprofile"`
 }
 
-const maxSharedArchiveDataSize = 64 << 20 // 64 MiB
-
 func EncodeSharedArchive(shared SharedProfile, iconPNG []byte) ([]byte, error) {
 	sharedJSON, err := json.Marshal(shared)
 	if err != nil {

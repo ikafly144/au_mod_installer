@@ -131,6 +131,7 @@
     "profile.import_drop_no_zip": "ドロップされた項目にアーカイブ(.aupack)が見つかりませんでした。",
     "profile.import_title": "プロファイルのインポート",
     "profile.import_message": "共有されたプロファイル「{{.Name}}」をインポートしますか？",
+    "profile.import_url_loading": "アーカイブをダウンロードしています...",
     "profile.edit": "編集",
     "profile.duplicate": "複製",
     "profile.delete": "削除",

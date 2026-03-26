@@ -3,6 +3,8 @@
 package ui
 
 import (
+	"log/slog"
+
 	"github.com/ikafly144/au_mod_installer/client/ui/tab/launcher"
 	"github.com/ikafly144/au_mod_installer/client/ui/tab/repo"
 	"github.com/ikafly144/au_mod_installer/client/ui/tab/settings"
@@ -81,6 +83,12 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 	w.CenterOnScreen()
 	w.Resize(fyne.NewSize(440, 720))
 	w.SetFixedSize(true)
-	w.ShowAndRun()
+	w.Show()
+	if cleanup, err := state.EnableNativeTextDrop(); err != nil {
+		slog.Warn("Failed to enable native OLE text drop", "error", err)
+	} else {
+		w.SetOnClosed(cleanup)
+	}
+	fyne.CurrentApp().Run()
 	return nil
 }

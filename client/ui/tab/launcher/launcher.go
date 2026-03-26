@@ -2,6 +2,7 @@ package launcher
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"image"
@@ -10,6 +11,8 @@ import (
 	"image/png"
 	"io"
 	"log/slog"
+	"net/http"
+	neturl "net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -89,6 +92,9 @@ const (
 	launcherGridIconInset    = float32(2)
 	launcherGridMenuSize     = float32(22)
 	launcherGridMenuInset    = float32(4)
+
+	profileArchiveDownloadTimeout  = 30 * time.Second
+	profileArchiveDownloadMaxBytes = int64(64 << 20)
 )
 
 func NewLauncherTab(s *uicommon.State) uicommon.Tab {
@@ -410,15 +416,25 @@ func (l *Launcher) checkSharedURI() {
 	if l.state.SharedURI == "" {
 		return
 	}
+	sharedURI := strings.TrimSpace(l.state.SharedURI)
+	l.state.SharedURI = ""
+	if sharedURI == "" {
+		return
+	}
 
-	prof, err := l.state.Core.HandleSharedProfile(l.state.SharedURI)
+	if parsed, err := neturl.Parse(sharedURI); err == nil {
+		switch {
+		case strings.EqualFold(parsed.Scheme, "http"), strings.EqualFold(parsed.Scheme, "https"):
+			l.importProfileFromArchiveURL(parsed.String())
+			return
+		}
+	}
+
+	prof, err := l.state.Core.HandleSharedProfile(sharedURI)
 	if err != nil {
 		dialog.ShowError(err, l.state.Window)
 		return
 	}
-
-	// Reset SharedURI so we don't prompt again on refresh
-	l.state.SharedURI = ""
 
 	l.confirmAndImportProfile(prof, nil)
 }
@@ -430,6 +446,98 @@ func (l *Launcher) checkSharedArchive() {
 	path := l.state.SharedArchive
 	l.state.SharedArchive = ""
 	l.importProfileFromArchiveFile(path)
+}
+
+func (l *Launcher) importProfileFromArchiveURL(archiveURL string) {
+	if archiveURL == "" {
+		return
+	}
+
+	var loadingDialog dialog.Dialog
+	fyne.DoAndWait(func() {
+		progress := widget.NewProgressBarInfinite()
+		content := container.NewVBox(
+			widget.NewLabel(lang.LocalizeKey("profile.import_url_loading", "アーカイブをダウンロードしています...")),
+			progress,
+		)
+		loadingDialog = dialog.NewCustomWithoutButtons(
+			lang.LocalizeKey("profile.import_title", "Import Profile"),
+			content,
+			l.state.Window,
+		)
+		loadingDialog.Resize(fyne.NewSize(420, 130))
+		loadingDialog.Show()
+	})
+
+	go func() {
+		path, err := l.downloadArchiveURLToTempFile(archiveURL)
+		fyne.Do(func() {
+			if loadingDialog != nil {
+				loadingDialog.Hide()
+			}
+		})
+		if err != nil {
+			fyne.Do(func() {
+				dialog.ShowError(err, l.state.Window)
+			})
+			return
+		}
+		defer os.Remove(path)
+		fyne.DoAndWait(func() {
+			l.importProfileFromArchiveFile(path)
+		})
+	}()
+}
+
+func (l *Launcher) downloadArchiveURLToTempFile(archiveURL string) (string, error) {
+	parsedURL, err := neturl.Parse(archiveURL)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse archive URL: %w", err)
+	}
+	if !strings.EqualFold(parsedURL.Scheme, "http") && !strings.EqualFold(parsedURL.Scheme, "https") {
+		return "", fmt.Errorf("unsupported archive URL scheme: %s", parsedURL.Scheme)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), profileArchiveDownloadTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, parsedURL.String(), nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create archive request: %w", err)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to download archive: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("failed to download archive: unexpected status %s", resp.Status)
+	}
+	if resp.ContentLength > profileArchiveDownloadMaxBytes {
+		return "", fmt.Errorf("archive is too large: %d bytes (max %d)", resp.ContentLength, profileArchiveDownloadMaxBytes)
+	}
+
+	tempFile, err := os.CreateTemp("", "mod-of-us-profile-url-*.aupack")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp archive file: %w", err)
+	}
+	tempPath := tempFile.Name()
+	written, copyErr := io.Copy(tempFile, io.LimitReader(resp.Body, profileArchiveDownloadMaxBytes+1))
+	closeErr := tempFile.Close()
+	if copyErr != nil {
+		_ = os.Remove(tempPath)
+		return "", fmt.Errorf("failed to save downloaded archive: %w", copyErr)
+	}
+	if closeErr != nil {
+		_ = os.Remove(tempPath)
+		return "", fmt.Errorf("failed to finalize downloaded archive: %w", closeErr)
+	}
+	if written > profileArchiveDownloadMaxBytes {
+		_ = os.Remove(tempPath)
+		return "", fmt.Errorf("archive is too large: more than %d bytes", profileArchiveDownloadMaxBytes)
+	}
+	return tempPath, nil
 }
 
 func (l *Launcher) confirmAndImportProfile(prof *profile.SharedProfile, iconPNG []byte) {
