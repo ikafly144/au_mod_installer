@@ -17,7 +17,7 @@ func (f *commandFactory) printModIDCompletions(cmd *cli.Command) {
 		return
 	}
 	for _, id := range ids {
-		fmt.Fprintln(cmd.Writer, id)
+		_, _ = fmt.Fprintln(cmd.Writer, id)
 	}
 }
 
@@ -32,6 +32,6 @@ func (f *commandFactory) printVersionIDCompletions(cmd *cli.Command, modID strin
 		return
 	}
 	for _, id := range ids {
-		fmt.Fprintln(cmd.Writer, id)
+		_, _ = fmt.Fprintln(cmd.Writer, id)
 	}
 }
