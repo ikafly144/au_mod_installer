@@ -45,6 +45,12 @@ func (c *clientImpl) GetModVersion(modID string, versionID string) (*modmgr.ModV
 	return &modVersion, err
 }
 
+func (c *clientImpl) GetModThumbnail(modID string) ([]byte, error) {
+	var thumbnail []byte
+	err := c.do(rest.EndpointGetModThumbnail.Compile(nil, modID), nil, &thumbnail, 1)
+	return thumbnail, err
+}
+
 func (c *clientImpl) GetLatestModVersion(modID string) (*modmgr.ModVersion, error) {
 	mod, err := c.GetMod(modID)
 	if err != nil {

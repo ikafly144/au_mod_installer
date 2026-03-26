@@ -80,6 +80,25 @@ func router(srv *service.ModService, pathPrefix string, basePath string) http.Ha
 
 		ctx.JSON(http.StatusOK, details)
 	})
+	api.GET(rest.EndpointGetModThumbnail.Route, func(ctx *gin.Context) {
+		modID := ctx.Param("mod_id")
+
+		modDetails, err := srv.GetModDetails(modID)
+		if err != nil {
+			slog.ErrorContext(ctx, "Failed to get mod details", "mod_id", modID, "error", err)
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get mod details"})
+			return
+		}
+
+		thumbnailURI := modDetails.ThumbnailURI
+
+		if thumbnailURI == nil {
+			ctx.JSON(http.StatusNotFound, gin.H{"error": "Thumbnail not found"})
+			return
+		}
+
+		ctx.Redirect(http.StatusFound, *thumbnailURI)
+	})
 	api.GET(rest.EndpointHealth.Route, func(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})

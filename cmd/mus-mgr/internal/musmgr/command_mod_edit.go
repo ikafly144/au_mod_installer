@@ -22,6 +22,8 @@ func (f *commandFactory) newModEditCommand() *cli.Command {
 			&cli.StringFlag{Name: "name", Usage: "Updated mod name"},
 			&cli.StringFlag{Name: "author", Usage: "Updated mod author"},
 			&cli.StringFlag{Name: "desc", Usage: "Updated mod description"},
+			&cli.StringFlag{Name: "thumbnail-url", Usage: "Updated mod thumbnail URL"},
+			&cli.BoolFlag{Name: "clear-thumbnail", Usage: "Clear thumbnail URL"},
 			&cli.StringFlag{Name: "latest-version-id", Usage: "Updated latest version ID"},
 			&cli.BoolFlag{Name: "clear-latest-version", Usage: "Clear latest version ID"},
 		},
@@ -49,6 +51,12 @@ func (f *commandFactory) newModEditCommand() *cli.Command {
 			}
 			if cmd.IsSet("desc") {
 				updates["description"] = cmd.String("desc")
+			}
+
+			if cmd.Bool("clear-thumbnail") {
+				updates["thumbnail_uri"] = nil
+			} else if cmd.IsSet("thumbnail-url") {
+				updates["thumbnail_uri"] = cmd.String("thumbnail-url")
 			}
 
 			if cmd.Bool("clear-latest-version") {

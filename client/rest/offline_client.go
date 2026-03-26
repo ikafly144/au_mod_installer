@@ -44,3 +44,7 @@ func (c *OfflineClient) GetLatestModVersion(modID string) (*modmgr.ModVersion, e
 func (c *OfflineClient) CheckForUpdates(installedVersions map[string]string) (map[string]*modmgr.ModVersion, error) {
 	return nil, errors.New("offline mode: update check not available")
 }
+
+func (c *OfflineClient) GetModThumbnail(modID string) ([]byte, error) {
+	return nil, errors.New("offline mode: thumbnail not available")
+}

@@ -2,6 +2,7 @@ package rest
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"os"
 
@@ -122,4 +123,8 @@ func (f *FileClient) CheckForUpdates(installedVersions map[string]string) (map[s
 		}
 	}
 	return updates, nil
+}
+
+func (f *FileClient) GetModThumbnail(modID string) ([]byte, error) {
+	return nil, fmt.Errorf("not implemented")
 }

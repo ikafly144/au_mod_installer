@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/ikafly144/au_mod_installer/common/rest"
@@ -75,8 +76,17 @@ func (c *clientImpl) do(endpoint *rest.CompiledEndpoint, rqBody any, rsBody any,
 		return fmt.Errorf("request failed with status code %d", resp.StatusCode)
 	}
 	if rsBody != nil {
-		if err := json.NewDecoder(resp.Body).Decode(rsBody); err != nil {
-			return err
+		switch v := rsBody.(type) {
+		case *[]byte:
+			var err error
+			*v, err = io.ReadAll(resp.Body)
+			if err != nil {
+				return err
+			}
+		default:
+			if err := json.NewDecoder(resp.Body).Decode(rsBody); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

@@ -19,6 +19,7 @@ func (f *commandFactory) newModAddCommand() *cli.Command {
 			&cli.StringFlag{Name: "name", Usage: "Mod name (required)"},
 			&cli.StringFlag{Name: "author", Usage: "Mod author (required)"},
 			&cli.StringFlag{Name: "desc", Usage: "Mod description"},
+			&cli.StringFlag{Name: "thumbnail-url", Usage: "Mod thumbnail URL"},
 		},
 		ShellComplete: cli.DefaultCompleteWithFlags,
 		Action: wrapAction(func(ctx context.Context, cmd *cli.Command) error {
@@ -47,6 +48,11 @@ func (f *commandFactory) newModAddCommand() *cli.Command {
 				Name:        cmd.String("name"),
 				Author:      cmd.String("author"),
 				Description: cmd.String("desc"),
+			}
+
+			if cmd.IsSet("thumbnail-url") {
+				url := cmd.String("thumbnail-url")
+				mod.ThumbnailURI = &url
 			}
 
 			if _, err := repo.CreateMod(mod); err != nil {

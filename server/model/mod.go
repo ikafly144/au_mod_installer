@@ -66,10 +66,11 @@ func (a *StringArray) Scan(value any) error {
 }
 
 type ModDetails struct {
-	ID          string `gorm:"primaryKey" json:"id"`
-	Name        string `gorm:"not null" json:"name"`
-	Description string `gorm:"not null" json:"description"`
-	Author      string `gorm:"not null" json:"author"`
+	ID           string  `gorm:"primaryKey" json:"id"`
+	Name         string  `gorm:"not null" json:"name"`
+	Description  string  `gorm:"not null" json:"description"`
+	Author       string  `gorm:"not null" json:"author"`
+	ThumbnailURI *string `gorm:"default:null" json:"-"`
 
 	LatestVersionID *string `gorm:"index;default:null;" json:"latest_version"`
 
