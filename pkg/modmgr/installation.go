@@ -207,9 +207,13 @@ func DownloadMods(cacheDir string, modVersions []ModVersion, binaryType aumgr.Bi
 			contentLength := response.ContentLength
 			slog.Info("Downloading mod file", "url", response.Request.URL, "contentLength", contentLength)
 
+			hashChecker := checkDownloadedFileHash(&file)
+
+			body := io.TeeReader(response.Body, hashChecker)
+
 			switch file.ContentType {
 			case model.ContentTypeArchive:
-				_, err := extractZip(response.Body, contentLength, modCacheRoot, progress, totalDownloadCount)
+				_, err := extractZip(body, contentLength, modCacheRoot, progress, totalDownloadCount)
 				if err != nil {
 					return err
 				}
@@ -270,11 +274,17 @@ func DownloadMods(cacheDir string, modVersions []ModVersion, binaryType aumgr.Bi
 					progress: progress,
 					buf:      destFile,
 				}
-				if _, err := io.Copy(buf, response.Body); err != nil {
+				if _, err := io.Copy(buf, body); err != nil {
 					return err
 				}
 			default:
 				return fmt.Errorf("unknown file type: %s", file.ContentType)
+			}
+
+			if computedHash, err := hashChecker.Sum(); err != nil {
+				return fmt.Errorf("downloaded file hash mismatch: %w", err)
+			} else {
+				slog.Info("File hash verified", "hash", computedHash)
 			}
 		}
 	}
