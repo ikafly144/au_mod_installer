@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"github.com/ikafly144/au_mod_installer/client/rest"
 	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
@@ -29,8 +28,6 @@ type App struct {
 	ProfileManager     *profile.Manager
 	EpicSessionManager *aumgr.EpicSessionManager
 	EpicApi            *aumgr.EpicApi
-
-	launchLock sync.Mutex
 }
 
 func New(version string, restClient rest.Client) (*App, error) {
@@ -71,17 +68,6 @@ func (a *App) DetectGamePath() (string, error) {
 
 func (a *App) DetectLauncherType(path string) aumgr.LauncherType {
 	return aumgr.DetectLauncherType(path)
-}
-
-func (a *App) IsGameRunning() (bool, error) {
-	a.launchLock.Lock()
-	defer a.launchLock.Unlock()
-
-	pid, err := aumgr.IsAmongUsRunning()
-	if err != nil {
-		return false, err
-	}
-	return pid != 0, nil
 }
 
 func (a *App) UninstallMod(gamePath string, progressListener progress.Progress) error {

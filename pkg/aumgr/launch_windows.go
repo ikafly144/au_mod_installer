@@ -12,18 +12,18 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-func LaunchAmongUs(launcherType LauncherType, amongUsDir string, dllDir string, exchangeCode string) error {
+func LaunchAmongUs(launcherType LauncherType, amongUsDir string, dllDir string, exchangeCode string, onStarted func(pid int) error) error {
 	switch launcherType {
 	case LauncherSteam:
-		return launchSteam(amongUsDir, dllDir)
+		return launchSteam(amongUsDir, dllDir, onStarted)
 	case LauncherEpicGames:
-		return launchEpicGames(amongUsDir, dllDir, exchangeCode)
+		return launchEpicGames(amongUsDir, dllDir, exchangeCode, onStarted)
 	default:
-		return launchDefault(amongUsDir, dllDir)
+		return launchDefault(amongUsDir, dllDir, onStarted)
 	}
 }
 
-func launchDefault(amongUsDir string, dllDir string, args ...string) error {
+func launchDefault(amongUsDir string, dllDir string, onStarted func(pid int) error, args ...string) error {
 	exePath := filepath.Join(amongUsDir, "Among Us.exe")
 	if _, err := os.Stat(exePath); os.IsNotExist(err) {
 		return fmt.Errorf("among Us executable not found: %s", exePath)
@@ -66,14 +66,24 @@ func launchDefault(amongUsDir string, dllDir string, args ...string) error {
 	}
 
 	slog.Info("Launching Among Us", "path", exePath, "args", logArgs)
-	if err := cmd.Run(); err != nil {
+	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("failed to start Among Us: %w", err)
+	}
+	if onStarted != nil && cmd.Process != nil {
+		if err := onStarted(cmd.Process.Pid); err != nil {
+			_ = cmd.Process.Kill()
+			_ = cmd.Wait()
+			return fmt.Errorf("launch started but failed to notify process start: %w", err)
+		}
+	}
+	if err := cmd.Wait(); err != nil {
+		return fmt.Errorf("failed while running Among Us: %w", err)
 	}
 
 	return nil
 }
 
-func launchSteam(amongUsDir string, dllDir string) error {
+func launchSteam(amongUsDir string, dllDir string, onStarted func(pid int) error) error {
 	steamRunning, err := isSteamRunning()
 	if err != nil {
 		return fmt.Errorf("failed to check Steam process: %w", err)
@@ -83,7 +93,7 @@ func launchSteam(amongUsDir string, dllDir string) error {
 	}
 
 	// Directly launch the executable to support SetDllDirectory
-	return launchDefault(amongUsDir, dllDir)
+	return launchDefault(amongUsDir, dllDir, onStarted)
 }
 
 func isSteamRunning() (bool, error) {
@@ -94,12 +104,12 @@ func isSteamRunning() (bool, error) {
 	return findProcessByName(processes, "steam.exe") != nil, nil
 }
 
-func launchEpicGames(amongUsDir string, dllDir string, exchangeCode string) error {
+func launchEpicGames(amongUsDir string, dllDir string, exchangeCode string, onStarted func(pid int) error) error {
 	args := []string{}
 	if exchangeCode != "" {
 		args = append(args, "-AUTH_PASSWORD="+exchangeCode)
 		args = append(args, "-AUTH_TYPE=exchangecode")
 		args = append(args, "-AUTH_LOGIN=unused")
 	}
-	return launchDefault(amongUsDir, dllDir, args...)
+	return launchDefault(amongUsDir, dllDir, onStarted, args...)
 }

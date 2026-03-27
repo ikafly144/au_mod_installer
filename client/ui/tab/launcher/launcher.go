@@ -69,6 +69,11 @@ type Launcher struct {
 	modThumbnailLoading    map[string]bool
 
 	canLaunchListener binding.DataListener
+
+	runningProfileMu   sync.Mutex
+	runningProfileID   uuid.UUID
+	launchingProfileID uuid.UUID
+	launchingProfile   bool
 }
 
 var _ uicommon.Tab = (*Launcher)(nil)
@@ -1030,8 +1035,18 @@ func (l *Launcher) runLaunch() {
 			break
 		}
 	}
+	if targetProfile.ID == uuid.Nil {
+		l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("launcher.error.no_profile", "Please select a profile to launch.")))
+		return
+	}
+	if l.isAnyProfileBusy() {
+		l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("error.game_already_running", "Already running.")))
+		return
+	}
 
 	launchDialog, launchProgress := l.newLaunchProgressDialog()
+	l.setLaunchingProfile(targetProfile.ID, true)
+	l.checkLaunchState()
 	l.launchButton.Disable()
 	if err := l.state.CanInstall.Set(false); err != nil {
 		slog.Warn("Failed to set canInstall", "error", err)
@@ -1044,24 +1059,13 @@ func (l *Launcher) runLaunch() {
 	go func() {
 		var launchErr error
 		progressShown := true
-		var waitingDialog dialog.Dialog
-		restoreRunningShownHook := l.state.SetOnGameRunningDialogShown(func() {
-			if waitingDialog != nil {
-				waitingDialog.Hide()
-				waitingDialog = nil
-			}
-		})
 		defer func() {
-			restoreRunningShownHook()
+			l.setLaunchingProfile(targetProfile.ID, false)
 			fyne.DoAndWait(func() {
-				if waitingDialog != nil {
-					waitingDialog.Hide()
-					waitingDialog = nil
-				}
 				if progressShown {
 					launchDialog.Hide()
 				}
-				l.checkLaunchState() // Re-enable button logic
+				fyne.DoAndWait(l.checkLaunchState)
 			})
 			if launchErr != nil {
 				l.state.SetError(launchErr)
@@ -1098,22 +1102,15 @@ func (l *Launcher) runLaunch() {
 		fyne.DoAndWait(func() {
 			launchDialog.Hide()
 			progressShown = false
-			waitingProgress := widget.NewProgressBarInfinite()
-			waitingDialog = dialog.NewCustomWithoutButtons(
-				lang.LocalizeKey("launch.running.title", "Game Running"),
-				container.NewVBox(
-					widget.NewLabel(lang.LocalizeKey("launcher.launch.waiting_for_game", "ゲームの起動を待っています...")),
-					waitingProgress,
-				),
-				l.state.Window,
-			)
-			waitingDialog.Resize(fyne.NewSize(420, 130))
-			waitingDialog.Show()
 		})
+		l.setLaunchingProfile(targetProfile.ID, false)
+		l.setRunningProfile(targetProfile.ID)
+		fyne.DoAndWait(l.checkLaunchState)
 
 		// Proceed to Launch
 		l.state.Launch(path)
-		fyne.Do(l.refreshProfiles)
+		l.clearRunningProfile(targetProfile.ID)
+		fyne.DoAndWait(l.checkLaunchState)
 	}()
 }
 
@@ -1127,6 +1124,22 @@ func (l *Launcher) newLaunchProgressDialog() (*dialog.CustomDialog, *progress.Fy
 }
 
 func (l *Launcher) checkLaunchState() {
+	runningProfileID, launching := l.currentBusyProfile()
+	if runningProfileID != uuid.Nil && launching {
+		l.launchButton.SetText(lang.LocalizeKey("launcher.launch.preparing", "Preparing launch..."))
+		l.launchButton.SetIcon(theme.MediaStopIcon())
+		l.launchButton.Disable()
+		return
+	}
+	if runningProfileID != uuid.Nil {
+		l.launchButton.SetText(lang.LocalizeKey("launcher.launch.running", "Running..."))
+		l.launchButton.SetIcon(theme.MediaStopIcon())
+		l.launchButton.Disable()
+		return
+	}
+	l.launchButton.SetText(lang.LocalizeKey("launcher.launch", "Launch"))
+	l.launchButton.SetIcon(theme.MediaPlayIcon())
+
 	// Enable launch if profile selected and game path exists
 	// We might also check if game is running (handled in state.Launch but button state is good to have)
 
@@ -1147,22 +1160,68 @@ func (l *Launcher) checkLaunchState() {
 		return
 	}
 
-	// Check "CanLaunch" from state (e.g. game running)
-	// state.CanLaunch is updated by RefreshModInstallation which checks "InstalledMod" status.
-	// We want to ignore "InstalledMod" status for Profile launch, but respect "Game Running".
-	// s.checkPlayingProcess() updates CanInstall/CanLaunch if running.
-	// We can trust s.CanInstall or s.CanLaunch for "Not Running" status?
-	// s.CanLaunch is false if "Not Installed".
-	// Let's rely on s.CanInstall as a proxy for "Not Running"?
-	// Or better, just check if running?
-	// But `state.Launch` has a lock.
-
-	// For now, let's enable it if profile is selected and game exists.
-	// The `state.Launch` will show error if already running.
 	l.launchButton.Enable()
 }
 
+func (l *Launcher) setRunningProfile(profileID uuid.UUID) {
+	if profileID == uuid.Nil {
+		return
+	}
+	l.runningProfileMu.Lock()
+	l.runningProfileID = profileID
+	l.runningProfileMu.Unlock()
+}
+
+func (l *Launcher) clearRunningProfile(profileID uuid.UUID) {
+	l.runningProfileMu.Lock()
+	if l.runningProfileID == profileID {
+		l.runningProfileID = uuid.Nil
+	}
+	l.runningProfileMu.Unlock()
+}
+
+func (l *Launcher) setLaunchingProfile(profileID uuid.UUID, launching bool) {
+	l.runningProfileMu.Lock()
+	l.launchingProfile = launching
+	if launching {
+		l.launchingProfileID = profileID
+	} else if l.launchingProfileID == profileID {
+		l.launchingProfileID = uuid.Nil
+	}
+	l.runningProfileMu.Unlock()
+}
+
+func (l *Launcher) currentBusyProfile() (uuid.UUID, bool) {
+	l.runningProfileMu.Lock()
+	defer l.runningProfileMu.Unlock()
+	if l.launchingProfile {
+		return l.launchingProfileID, true
+	}
+	return l.runningProfileID, false
+}
+
+func (l *Launcher) isAnyProfileBusy() bool {
+	runningProfileID, launching := l.currentBusyProfile()
+	return launching || runningProfileID != uuid.Nil
+}
+
+func (l *Launcher) isProfileBusy(profileID uuid.UUID) bool {
+	if profileID == uuid.Nil {
+		return false
+	}
+	l.runningProfileMu.Lock()
+	defer l.runningProfileMu.Unlock()
+	if l.launchingProfile && l.launchingProfileID == profileID {
+		return true
+	}
+	return l.runningProfileID == profileID
+}
+
 func (l *Launcher) syncProfile(prof profile.Profile) {
+	if l.isProfileBusy(prof.ID) {
+		dialog.ShowError(errors.New(lang.LocalizeKey("error.game_already_running", "Already running.")), l.state.Window)
+		return
+	}
 	path, err := l.state.SelectedGamePath.Get()
 	if err != nil || path == "" {
 		dialog.ShowError(errors.New(lang.LocalizeKey("launcher.error.no_path", "Game path is not specified.")), l.state.Window)
@@ -1384,25 +1443,40 @@ func formatPlayDuration(d time.Duration) string {
 }
 
 func (l *Launcher) showProfileMenuAt(pos fyne.Position, prof profile.Profile) {
+	isBusy := l.isProfileBusy(prof.ID)
+	editItem := fyne.NewMenuItem(lang.LocalizeKey("profile.edit", "Edit"), func() {
+		l.openProfileEditor(prof)
+	})
+	syncItem := fyne.NewMenuItem(lang.LocalizeKey("profile.sync", "Sync (Clear & Re-download)"), func() {
+		l.syncProfile(prof)
+	})
+	shareItem := fyne.NewMenuItem(lang.LocalizeKey("profile.share", "Share"), func() {
+		l.shareProfile(prof)
+	})
+	openFolderItem := fyne.NewMenuItem(lang.LocalizeKey("profile.open_folder", "Open Folder"), func() {
+		l.openProfileFolder(prof)
+	})
+	duplicateItem := fyne.NewMenuItem(lang.LocalizeKey("profile.duplicate", "Duplicate"), func() {
+		l.showDuplicateDialog(prof)
+	})
+	deleteItem := fyne.NewMenuItem(lang.LocalizeKey("profile.delete", "Delete"), func() {
+		l.deleteProfile(prof.ID)
+	})
+	if isBusy {
+		editItem.Disabled = true
+		syncItem.Disabled = true
+		shareItem.Disabled = true
+		openFolderItem.Disabled = true
+		duplicateItem.Disabled = true
+		deleteItem.Disabled = true
+	}
 	menu := fyne.NewMenu("",
-		fyne.NewMenuItem(lang.LocalizeKey("profile.edit", "Edit"), func() {
-			l.openProfileEditor(prof)
-		}),
-		fyne.NewMenuItem(lang.LocalizeKey("profile.sync", "Sync (Clear & Re-download)"), func() {
-			l.syncProfile(prof)
-		}),
-		fyne.NewMenuItem(lang.LocalizeKey("profile.share", "Share"), func() {
-			l.shareProfile(prof)
-		}),
-		fyne.NewMenuItem(lang.LocalizeKey("profile.open_folder", "Open Folder"), func() {
-			l.openProfileFolder(prof)
-		}),
-		fyne.NewMenuItem(lang.LocalizeKey("profile.duplicate", "Duplicate"), func() {
-			l.showDuplicateDialog(prof)
-		}),
-		fyne.NewMenuItem(lang.LocalizeKey("profile.delete", "Delete"), func() {
-			l.deleteProfile(prof.ID)
-		}),
+		editItem,
+		syncItem,
+		shareItem,
+		openFolderItem,
+		duplicateItem,
+		deleteItem,
 	)
 	widget.ShowPopUpMenuAtPosition(menu, l.state.Window.Canvas(), pos)
 }

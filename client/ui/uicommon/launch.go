@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/ikafly144/au_mod_installer/client/core"
 	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
 )
 
@@ -32,6 +33,24 @@ func (s *State) Launch(path string) {
 		slog.Warn("Failed to parse active profile ID", "error", err)
 		activeProfileID = uuid.Nil
 	}
+	if activeProfileID == uuid.Nil {
+		s.ShowErrorDialog(errors.New(lang.LocalizeKey("launcher.error.no_profile", "Please select a profile to launch.")))
+		return
+	}
+	profileLock, err := s.Core.AcquireProfileLaunchLock(activeProfileID)
+	if err != nil {
+		if errors.Is(err, core.ErrProfileLaunchBusy) {
+			s.ShowErrorDialog(errors.New(lang.LocalizeKey("error.game_already_running", "Already running.")))
+			return
+		}
+		s.ShowErrorDialog(err)
+		return
+	}
+	defer func() {
+		if err := profileLock.Release(); err != nil {
+			slog.Warn("Failed to release profile launch lock", "error", err)
+		}
+	}()
 
 	profileDir, cleanup, err := s.Core.PrepareLaunch(path, activeProfileID)
 	if err != nil {
@@ -49,17 +68,12 @@ func (s *State) Launch(path string) {
 	}()
 
 	startedAt := time.Now()
-	time.Sleep(200 * time.Millisecond)
-	s.ShowGameRunningDialog()
-	if err := s.Core.ExecuteLaunch(path, profileDir); err != nil {
-		s.HideGameRunningDialog()
+	if err := s.Core.ExecuteLaunch(path, profileDir, profileLock.SetGamePID); err != nil {
 		s.ShowErrorDialog(errors.New(lang.LocalizeKey("launch.error.launch_failed", "Failed to launch Among Us: ") + err.Error()))
 		slog.Warn("Failed to launch Among Us", "error", err)
 		return
 	}
 	slog.Info("Launched Among Us successfully")
-	s.waitUntilGameExited()
-	s.HideGameRunningDialog()
 	finishedAt := time.Now()
 	if activeProfileID != uuid.Nil {
 		if err := s.updateProfileLaunchMetrics(activeProfileID, startedAt, finishedAt); err != nil {
@@ -68,25 +82,6 @@ func (s *State) Launch(path string) {
 	}
 	_ = s.CanLaunch.Set(true)
 	_ = s.CanInstall.Set(true)
-}
-
-func (s *State) waitUntilGameExited() {
-	const (
-		maxWait    = 10 * time.Second
-		pollPeriod = 200 * time.Millisecond
-	)
-	deadline := time.Now().Add(maxWait)
-	for time.Now().Before(deadline) {
-		running, err := s.Core.IsGameRunning()
-		if err != nil {
-			slog.Warn("Failed to check running process after launch", "error", err)
-			return
-		}
-		if !running {
-			return
-		}
-		time.Sleep(pollPeriod)
-	}
 }
 
 func (s *State) updateProfileLaunchMetrics(profileID uuid.UUID, startedAt, finishedAt time.Time) error {

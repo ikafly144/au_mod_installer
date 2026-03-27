@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
-	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -85,17 +84,6 @@ func NewState(w fyne.Window, version string, options ...Option) (*State, error) 
 		return nil, err
 	}
 
-	go func() {
-		time.Sleep(time.Second)
-		for {
-			if s.checkPlayingProcess() {
-				slog.Info("Among Us is running, disabling installation and launch")
-			}
-			// Check every 5 seconds
-			<-time.After(5 * time.Second)
-		}
-	}()
-
 	return &s, nil
 }
 
@@ -111,8 +99,6 @@ type State struct {
 	launchLock       sync.Mutex
 	dialogLock       sync.Mutex
 	activeDialog     dialog.Dialog
-	runningDialog    dialog.Dialog
-	onRunningShown   func()
 
 	Core           *core.App
 	Rest           rest.Client
@@ -169,70 +155,6 @@ func (s *State) ShowInfoDialog(title, message string) {
 	})
 }
 
-func (s *State) ShowGameRunningDialog() {
-	if s.Window == nil {
-		return
-	}
-	fyne.DoAndWait(func() {
-		var onShown func()
-		s.dialogLock.Lock()
-		if s.runningDialog != nil {
-			onShown = s.onRunningShown
-			s.dialogLock.Unlock()
-			if onShown != nil {
-				onShown()
-			}
-			return
-		}
-		label := widget.NewLabel(lang.LocalizeKey("launch.running.dialog", "Among Us is running. This dialog closes automatically when the game exits."))
-		label.Wrapping = fyne.TextWrapWord
-		d := dialog.NewCustomWithoutButtons(
-			lang.LocalizeKey("launch.running.title", "Game Running"),
-			container.NewVBox(label),
-			s.Window,
-		)
-		d.SetOnClosed(func() {
-			s.dialogLock.Lock()
-			if s.runningDialog == d {
-				s.runningDialog = nil
-			}
-			s.dialogLock.Unlock()
-		})
-		d.Resize(fyne.NewSize(420, 120))
-		s.runningDialog = d
-		onShown = s.onRunningShown
-		s.dialogLock.Unlock()
-		if onShown != nil {
-			onShown()
-		}
-		d.Show()
-	})
-}
-
-func (s *State) HideGameRunningDialog() {
-	fyne.Do(func() {
-		s.dialogLock.Lock()
-		d := s.runningDialog
-		s.runningDialog = nil
-		s.dialogLock.Unlock()
-		if d != nil {
-			d.Hide()
-		}
-	})
-}
-
-func (s *State) SetOnGameRunningDialogShown(onShown func()) func() {
-	s.dialogLock.Lock()
-	prev := s.onRunningShown
-	s.onRunningShown = onShown
-	s.dialogLock.Unlock()
-	return func() {
-		s.dialogLock.Lock()
-		s.onRunningShown = prev
-		s.dialogLock.Unlock()
-	}
-}
-
 func (s *State) showDialog(factory func() dialog.Dialog) {
 	fyne.Do(func() {
 		s.dialogLock.Lock()
@@ -261,7 +183,7 @@ func (s *State) showDialog(factory func() dialog.Dialog) {
 }
 
 func (s *State) ClearError() {
-	fyne.DoAndWait(func() {
+	fyne.Do(func() {
 		s.ErrorText.Hide()
 
 		s.dialogLock.Lock()
@@ -363,37 +285,4 @@ func (i *State) RefreshModInstallation() {
 	if err := i.CanLaunch.Set(canLaunch); err != nil {
 		slog.Warn("Failed to set launchable", "error", err)
 	}
-}
-
-func (s *State) checkPlayingProcess() bool {
-	if !s.launchLock.TryLock() {
-		return false
-	}
-	defer s.launchLock.Unlock()
-	installDisabled := false
-	if ok, err := s.CanInstall.Get(); err == nil && !ok {
-		installDisabled = true
-	}
-
-	running, err := s.Core.IsGameRunning()
-	if err != nil {
-		slog.Error("Failed to check Among Us process", "error", err)
-		return false
-	}
-
-	if running {
-		_ = s.CanInstall.Set(false)
-		_ = s.CanLaunch.Set(false)
-		s.ShowGameRunningDialog()
-		return true
-	}
-
-	s.HideGameRunningDialog()
-
-	if installDisabled {
-		slog.Info("Among Us is not running, re-enabling installation")
-		_ = s.CanInstall.Set(true)
-		fyne.Do(s.RefreshModInstallation)
-	}
-	return false
 }

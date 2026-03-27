@@ -116,7 +116,7 @@ func (a *App) SyncProfile(profileID uuid.UUID, binaryType aumgr.BinaryType, game
 }
 
 // ExecuteLaunch launches the game and blocks until it exits.
-func (a *App) ExecuteLaunch(gamePath string, dllDir string) error {
+func (a *App) ExecuteLaunch(gamePath string, dllDir string, onStarted func(pid int) error) error {
 	launcherType := aumgr.DetectLauncherType(gamePath)
 	var exchangeCode string
 	if launcherType == aumgr.LauncherEpicGames {
@@ -128,5 +128,5 @@ func (a *App) ExecuteLaunch(gamePath string, dllDir string) error {
 			}
 		}
 	}
-	return aumgr.LaunchAmongUs(launcherType, gamePath, dllDir, exchangeCode)
+	return aumgr.LaunchAmongUs(launcherType, gamePath, dllDir, exchangeCode, onStarted)
 }

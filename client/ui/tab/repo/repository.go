@@ -2,6 +2,7 @@ package repo
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
@@ -23,6 +24,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/ikafly144/au_mod_installer/client/core"
 	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 	"github.com/ikafly144/au_mod_installer/pkg/profile"
@@ -398,6 +400,23 @@ func (r *Repository) installModVersion(mod *modmgr.Mod, versionID string) {
 					r.state.SetError(err)
 					return
 				}
+
+				profileLock, err := r.state.Core.AcquireProfileLaunchLock(targetProfile.ID)
+				if err != nil {
+					if errors.Is(err, core.ErrProfileLaunchBusy) {
+						r.state.SetError(errors.New(lang.LocalizeKey("error.game_already_running", "Already running.")))
+						return
+					}
+					slog.Error("Failed to acquire profile lock before adding mod", "profile", targetProfile.Name, "error", err)
+					r.state.SetError(err)
+					return
+				}
+				defer func() {
+					if err := profileLock.Release(); err != nil {
+						slog.Error("Failed to release profile lock after adding mod", "profile", targetProfile.Name, "error", err)
+						r.state.SetError(err)
+					}
+				}()
 
 				targetProfile.AddModVersion(*versionData)
 				targetProfile.UpdatedAt = time.Now()
