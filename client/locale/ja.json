@@ -134,6 +134,7 @@
     "profile.import_url_loading": "アーカイブをダウンロードしています...",
     "profile.apply_latest": "最新バージョンを適用",
     "profile.edit": "編集",
+    "profile.open_folder": "フォルダを開く",
     "profile.duplicate": "複製",
     "profile.delete": "削除",
     "profile.create": "プロファイル作成",

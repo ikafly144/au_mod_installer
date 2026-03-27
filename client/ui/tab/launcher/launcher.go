@@ -1382,6 +1382,9 @@ func (l *Launcher) showProfileMenuAt(pos fyne.Position, prof profile.Profile) {
 		fyne.NewMenuItem(lang.LocalizeKey("profile.share", "Share"), func() {
 			l.shareProfile(prof)
 		}),
+		fyne.NewMenuItem(lang.LocalizeKey("profile.open_folder", "Open Folder"), func() {
+			l.openProfileFolder(prof)
+		}),
 		fyne.NewMenuItem(lang.LocalizeKey("profile.duplicate", "Duplicate"), func() {
 			l.showDuplicateDialog(prof)
 		}),
@@ -1390,6 +1393,21 @@ func (l *Launcher) showProfileMenuAt(pos fyne.Position, prof profile.Profile) {
 		}),
 	)
 	widget.ShowPopUpMenuAtPosition(menu, l.state.Window.Canvas(), pos)
+}
+
+func (l *Launcher) openProfileFolder(prof profile.Profile) {
+	dir, err := l.state.ProfileManager.ProfileDir(prof.ID)
+	if err != nil {
+		dialog.ShowError(err, l.state.Window)
+		return
+	}
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		dialog.ShowError(fmt.Errorf("failed to create profile directory: %w", err), l.state.Window)
+		return
+	}
+	if err := l.state.ExplorerOpenFolder(dir); err != nil {
+		dialog.ShowError(err, l.state.Window)
+	}
 }
 
 // -- Profile Management Methods --

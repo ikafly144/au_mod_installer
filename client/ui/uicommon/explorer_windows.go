@@ -5,6 +5,7 @@ package uicommon
 import (
 	"errors"
 	"fmt"
+	"os/exec"
 	"syscall"
 	"unicode/utf16"
 	"unsafe"
@@ -89,4 +90,14 @@ func (s *State) ExplorerSaveFile(fileType, ext, defaultFileName string) (path st
 	}
 	path = syscall.UTF16ToString(buf[:i])
 	return path, nil
+}
+
+func (s *State) ExplorerOpenFolder(path string) error {
+	if path == "" {
+		return errors.New("folder path is empty")
+	}
+	if err := exec.Command("explorer.exe", path).Start(); err != nil {
+		return fmt.Errorf("failed to open folder in explorer: %w", err)
+	}
+	return nil
 }

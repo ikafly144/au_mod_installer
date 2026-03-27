@@ -129,6 +129,13 @@ func (m *Manager) Get(id uuid.UUID) (Profile, bool) {
 	return Profile{}, false
 }
 
+func (m *Manager) ProfileDir(id uuid.UUID) (string, error) {
+	if id == uuid.Nil {
+		return "", fmt.Errorf("profile ID cannot be nil")
+	}
+	return m.profileDir(id), nil
+}
+
 func (m *Manager) profileDir(id uuid.UUID) string {
 	return filepath.Join(m.storageDir, "profiles", id.String())
 }

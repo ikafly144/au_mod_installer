@@ -13,3 +13,7 @@ func (s *State) ExplorerOpenFile(fileType, ext string) (path string, err error) 
 func (s *State) ExplorerSaveFile(fileType, ext, defaultFileName string) (path string, err error) {
 	return "", errors.New("file explorer is not implemented on this platform")
 }
+
+func (s *State) ExplorerOpenFolder(path string) error {
+	return errors.New("file explorer is not implemented on this platform")
+}
