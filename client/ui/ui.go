@@ -84,6 +84,9 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 	w.Resize(fyne.NewSize(440, 720))
 	w.SetFixedSize(true)
 	w.Show()
+	if _, err := state.EnableNativeCustomWindowFrame(); err != nil {
+		slog.Warn("Failed to enable native custom window frame", "error", err)
+	}
 	if cleanup, err := state.EnableNativeTextDrop(); err != nil {
 		slog.Warn("Failed to enable native OLE text drop", "error", err)
 	} else {

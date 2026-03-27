@@ -14,7 +14,6 @@ import (
 	"syscall"
 	"unsafe"
 
-	"fyne.io/fyne/v2/driver"
 	"github.com/zzl/go-win32api/win32"
 )
 
@@ -48,16 +47,10 @@ func (s *State) EnableNativeTextDrop() (func(), error) {
 	if s.Window == nil {
 		return nil, fmt.Errorf("window is nil")
 	}
-	var hwnd uintptr
-	if w, ok := s.Window.(driver.NativeWindow); ok {
-		w.RunNative(func(context any) {
-			if window, ok := context.(driver.WindowsWindowContext); ok {
-				hwnd = window.HWND
-			}
-		})
-	}
-	if hwnd == 0 {
-		return nil, fmt.Errorf("failed to get HWND for native text drop")
+
+	hwnd, err := nativeHWNDFromFyneWindow(s.Window)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get HWND for native text drop: %w", err)
 	}
 
 	hr := win32.OleInitialize(nil)
