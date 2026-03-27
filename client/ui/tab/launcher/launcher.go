@@ -671,7 +671,7 @@ func (l *Launcher) setupProfileList() {
 			}
 
 			menuBtn.OnTapped = func() {
-				l.showProfileMenu(menuBtn, prof)
+				l.showProfileMenuAt(fyne.CurrentApp().Driver().AbsolutePositionForObject(menuBtn).Add(fyne.NewPos(0, fyne.CanvasObject(menuBtn).Size().Height)), prof)
 			}
 
 			bg.StrokeColor = theme.Color(theme.ColorNameButton)
@@ -814,10 +814,7 @@ func (l *launcherProfileGridLayout) MinSize(objects []fyne.CanvasObject) fyne.Si
 	if len(objects) == 0 {
 		return fyne.NewSize(0, 0)
 	}
-	cols := l.lastCols
-	if cols < 1 {
-		cols = 1
-	}
+	cols := max(l.lastCols, 1)
 	rows := (len(objects) + cols - 1) / cols
 	width := float32(cols)*l.cardSize.Width + float32(cols-1)*l.spacing
 	height := float32(rows)*l.cardSize.Height + float32(max(rows-1, 0))*l.spacing
@@ -887,27 +884,6 @@ func (l *Launcher) switchProfileView() {
 	l.profileGridScroll.Hide()
 }
 
-func (l *Launcher) showProfileMenu(anchor fyne.CanvasObject, prof profile.Profile) {
-	menu := fyne.NewMenu("",
-		fyne.NewMenuItem(lang.LocalizeKey("profile.edit", "Edit"), func() {
-			l.openProfileEditor(prof)
-		}),
-		fyne.NewMenuItem(lang.LocalizeKey("profile.sync", "Sync (Clear & Re-download)"), func() {
-			l.syncProfile(prof)
-		}),
-		fyne.NewMenuItem(lang.LocalizeKey("profile.share", "Share"), func() {
-			l.shareProfile(prof)
-		}),
-		fyne.NewMenuItem(lang.LocalizeKey("profile.duplicate", "Duplicate"), func() {
-			l.showDuplicateDialog(prof)
-		}),
-		fyne.NewMenuItem(lang.LocalizeKey("profile.delete", "Delete"), func() {
-			l.deleteProfile(prof.ID)
-		}),
-	)
-	widget.ShowPopUpMenuAtPosition(menu, l.state.Window.Canvas(), fyne.CurrentApp().Driver().AbsolutePositionForObject(anchor).Add(fyne.NewPos(0, anchor.Size().Height)))
-}
-
 func (l *Launcher) refreshProfileGrid() {
 	if l.profileGrid == nil {
 		return
@@ -933,7 +909,7 @@ func (l *Launcher) refreshProfileGrid() {
 			launcherGridMenuInset,
 		))
 		menuBtn.OnTapped = func() {
-			l.showProfileMenu(menuBtn, p)
+			l.showProfileMenuAt(fyne.CurrentApp().Driver().AbsolutePositionForObject(menuBtn).Add(fyne.NewPos(0, fyne.CanvasObject(menuBtn).Size().Height)), p)
 		}
 
 		iconAreaBg := canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground))
@@ -1849,7 +1825,6 @@ func (l *Launcher) showProfileIconSelectionDialog(prof profile.Profile, onSelect
 	} else {
 		modGrid := container.NewGridWrap(fyne.NewSize(130, 148))
 		for _, modID := range modIDs {
-			modID := modID
 			thumb := l.newModThumbnailCanvas(modID, 88, 8)
 			l.ensureModThumbnailLoaded(modID, modGrid.Refresh)
 			thumbBg := canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground))

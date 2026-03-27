@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"maps"
 
 	"github.com/ikafly144/au_mod_installer/common/rest/model"
 )
@@ -94,9 +95,7 @@ func (w *multipleHashCheckingWriter) Sum() (map[string]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		for k, v := range hash {
-			hashes[k] = v
-		}
+		maps.Copy(hashes, hash)
 	}
 	return hashes, nil
 }

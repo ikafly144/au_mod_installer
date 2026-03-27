@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 
 	"github.com/urfave/cli/v3"
 	"gorm.io/driver/postgres"
@@ -22,15 +23,13 @@ func newCommandFactory(dbURL *string) *commandFactory {
 
 func wrapAction(action cli.ActionFunc) cli.ActionFunc {
 	return func(ctx context.Context, cmd *cli.Command) error {
-		for _, arg := range os.Args {
-			if arg == "--generate-shell-completion" {
-				for _, f := range cmd.VisibleFlags() {
-					for _, name := range f.Names() {
-						fmt.Println("--" + name)
-					}
+		if slices.Contains(os.Args, "--generate-shell-completion") {
+			for _, f := range cmd.VisibleFlags() {
+				for _, name := range f.Names() {
+					fmt.Println("--" + name)
 				}
-				return nil
 			}
+			return nil
 		}
 		return action(ctx, cmd)
 	}

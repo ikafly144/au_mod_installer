@@ -88,7 +88,7 @@ func (s *State) EnableNativeTextDrop() (func(), error) {
 
 func (s *State) handleOLEDroppedText(text string) {
 	slog.Info("Received OLE dropped text", "text", text)
-	for _, line := range strings.Split(strings.ReplaceAll(text, "\r", "\n"), "\n") {
+	for line := range strings.SplitSeq(strings.ReplaceAll(text, "\r", "\n"), "\n") {
 		token := strings.TrimSpace(line)
 		if token == "" {
 			continue
