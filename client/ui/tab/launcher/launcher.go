@@ -461,10 +461,10 @@ func (l *Launcher) importProfileFromArchiveURL(archiveURL string) {
 
 	var loadingDialog dialog.Dialog
 	var loadingProgress *progress.FyneProgress
+	bar := widget.NewProgressBar()
+	bar.SetValue(0)
+	loadingProgress = progress.NewFyneProgress(bar)
 	fyne.DoAndWait(func() {
-		bar := widget.NewProgressBar()
-		bar.SetValue(0)
-		loadingProgress = progress.NewFyneProgress(bar)
 		content := container.NewVBox(
 			widget.NewLabel(lang.LocalizeKey("profile.import_url_loading", "アーカイブをダウンロードしています...")),
 			bar,
