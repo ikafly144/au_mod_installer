@@ -107,6 +107,7 @@
     "common.ok": "OK",
     "common.cancel": "キャンセル",
     "common.save": "保存",
+    "common.scroll_end_reached": "これ以上下にはありません。",
     "common.save_file": "{{.FileType}}を保存",
     "profile.save_title": "プロファイルの保存",
     "profile.name": "プロファイル名",

@@ -99,7 +99,10 @@ func NewRepository(state *uicommon.State) *Repository {
 
 	repo.modScroll = container.NewVScroll(repo.modListContainer)
 	repo.modScroll.OnScrolled = func(pos fyne.Position) {
-		if pos.Y >= repo.modListContainer.Size().Height-repo.modScroll.Size().Height {
+		threshold := float32(4)
+		bottomY := repo.modListContainer.Size().Height - repo.modScroll.Size().Height
+		reachedBottom := bottomY > threshold && pos.Y >= bottomY-threshold
+		if reachedBottom {
 			repo.LoadNext()
 		}
 	}
@@ -168,6 +171,8 @@ func (r *Repository) updateModList(filter string) {
 		thumbArea := container.NewStack(thumbBg, container.NewCenter(thumb))
 
 		titleLabel := widget.NewLabelWithStyle(mod.Name, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+		titleLabel.Wrapping = fyne.TextWrapOff
+		titleLabel.Truncation = fyne.TextTruncateEllipsis
 
 		updateBadge := widget.NewLabel("")
 		updateBadge.Hide()
@@ -188,6 +193,8 @@ func (r *Repository) updateModList(filter string) {
 		}
 
 		authorLabel := widget.NewLabel(mod.Author)
+		authorLabel.Wrapping = fyne.TextWrapOff
+		authorLabel.Truncation = fyne.TextTruncateEllipsis
 		descriptionLabel := widget.NewLabel(repositoryListSummary(mod.Description, 120))
 		titleRow := container.NewBorder(nil, nil, nil, updateBadge, titleLabel)
 		textContainer := container.NewVBox(
@@ -227,6 +234,11 @@ func (r *Repository) updateModList(filter string) {
 
 	if !noMore && len(mods) > 0 {
 		objs = append(objs, widget.NewButton(lang.LocalizeKey("repository.load_next", "Load more..."), r.LoadNext))
+	} else if len(mods) > 0 {
+		endLabel := widget.NewLabel(lang.LocalizeKey("common.scroll_end_reached", "Reached the bottom."))
+		endLabel.Alignment = fyne.TextAlignCenter
+		endLabel.Importance = widget.LowImportance
+		objs = append(objs, container.NewCenter(endLabel))
 	}
 
 	fyne.Do(func() {
@@ -251,10 +263,13 @@ func (r *Repository) showModDetails(mod *modmgr.Mod) {
 	imgBg.CornerRadius = 10
 	imgArea := container.NewStack(imgBg, container.NewCenter(img))
 
-	headerText := container.NewVBox(
-		widget.NewLabelWithStyle(mod.Name, fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-		widget.NewLabel(lang.LocalizeKey("repository.author", "Author: {{.Author}}", map[string]any{"Author": mod.Author})),
-	)
+	titleLabel := widget.NewLabelWithStyle(mod.Name, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	titleLabel.Wrapping = fyne.TextWrapOff
+	titleLabel.Truncation = fyne.TextTruncateEllipsis
+	authorLabel := widget.NewLabel(lang.LocalizeKey("repository.author", "Author: {{.Author}}", map[string]any{"Author": mod.Author}))
+	authorLabel.Wrapping = fyne.TextWrapOff
+	authorLabel.Truncation = fyne.TextTruncateEllipsis
+	headerText := container.NewVBox(titleLabel, authorLabel)
 
 	// if mod.Website != "" {
 	// 	if u, err := url.Parse(mod.Website); err == nil {
@@ -295,6 +310,8 @@ func (r *Repository) showModDetails(mod *modmgr.Mod) {
 			}
 			for _, v := range versions {
 				verLabel := widget.NewLabel(v)
+				verLabel.Wrapping = fyne.TextWrapOff
+				verLabel.Truncation = fyne.TextTruncateEllipsis
 				addBtn := widget.NewButton(lang.LocalizeKey("repository.add_to_profile", "Add to Profile"), func() {
 					r.installModVersion(mod, v)
 				})

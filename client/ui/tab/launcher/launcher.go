@@ -100,7 +100,6 @@ const (
 
 	profileArchiveDownloadTimeout  = 30 * time.Second
 	profileArchiveDownloadMaxBytes = int64(64 << 20)
-	launchWaitingDialogMinVisible  = 700 * time.Millisecond
 )
 
 func NewLauncherTab(s *uicommon.State) uicommon.Tab {
@@ -629,11 +628,15 @@ func (l *Launcher) setupProfileList() {
 			title := widget.NewLabel("Profile Name")
 			title.TextStyle = fyne.TextStyle{Bold: true}
 			title.SizeName = theme.SizeNameSubHeadingText
+			title.Wrapping = fyne.TextWrapOff
+			title.Truncation = fyne.TextTruncateEllipsis
 			meta := widget.NewLabel("Last launched")
 			meta.SizeName = theme.SizeNameCaptionText
 			meta.TextStyle = fyne.TextStyle{Monospace: true}
+			meta.Wrapping = fyne.TextWrapOff
 			stats := widget.NewLabel("Mods and play time")
 			stats.SizeName = theme.SizeNameCaptionText
+			stats.Wrapping = fyne.TextWrapOff
 			textArea := container.NewVBox(title, meta, stats)
 			menuBtn := widget.NewButtonWithIcon("", theme.MoreHorizontalIcon(), nil)
 			menuBtn.Importance = widget.LowImportance
@@ -911,8 +914,9 @@ func (l *Launcher) refreshProfileGrid() {
 		iconSize := launcherGridIconAreaSize - launcherGridIconInset*2
 		img := l.newProfileIconCanvas(p, iconSize, 3)
 
-		text := canvas.NewText(prof.Name, theme.Color(theme.ColorNameForeground))
-		text.TextStyle = fyne.TextStyle{Bold: true}
+		text := widget.NewLabelWithStyle(prof.Name, fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+		text.Wrapping = fyne.TextWrapOff
+		text.Truncation = fyne.TextTruncateEllipsis
 		desc := canvas.NewText(l.profileMetaText(p), theme.Color(theme.ColorNameDisabled))
 		desc.TextSize = theme.TextSize() * 0.76
 
@@ -952,7 +956,7 @@ func (l *Launcher) refreshProfileGrid() {
 					),
 					iconArea,
 				),
-				container.NewCenter(text),
+				text,
 			),
 		)
 		tappable := uicommon.NewTappableContainerWithSecondary(cardContent, func() {
@@ -1763,6 +1767,8 @@ func (l *Launcher) openProfileEditor(prof profile.Profile) {
 		l.refreshModThumbnailCanvas(thumb, v.ModID, 64)
 		l.ensureModThumbnailLoaded(v.ModID, modList.Refresh)
 		label.SetText(v.ModID + " (" + v.ID + ")")
+		label.Wrapping = fyne.TextWrapOff
+		label.Truncation = fyne.TextTruncateEllipsis
 
 		if latestID, ok := updatesAvailable[v.ModID]; ok {
 			badge.SetText(lang.LocalizeKey("repository.update_available", "Update Available") + " (" + latestID + ")")
@@ -1936,7 +1942,8 @@ func (l *Launcher) showProfileIconSelectionDialog(prof profile.Profile, onSelect
 
 			name := widget.NewLabel(modID)
 			name.Alignment = fyne.TextAlignCenter
-			name.Wrapping = fyne.TextWrapWord
+			name.Wrapping = fyne.TextWrapOff
+			name.Truncation = fyne.TextTruncateEllipsis
 
 			itemBody := container.NewVBox(
 				container.NewCenter(container.NewStack(thumbBg, container.NewCenter(thumb))),
@@ -2053,15 +2060,20 @@ func (l *Launcher) showAddModDialog(onAdd func([]modmgr.ModVersion)) {
 
 	buildItem := func(modID, title, subtitle string, onTap func()) fyne.CanvasObject {
 		thumb := l.newModThumbnailCanvas(modID, 80, 6)
-		l.ensureModThumbnailLoaded(modID, contentBox.Refresh)
+		l.ensureModThumbnailLoaded(modID, func() {
+			l.refreshModThumbnailCanvas(thumb, modID, 80)
+		})
 		thumbBg := canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground))
 		thumbBg.CornerRadius = 6
 		thumbArea := container.NewStack(thumbBg, container.NewCenter(thumb))
 
-		textContainer := container.NewVBox(
-			widget.NewLabelWithStyle(title, fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-			widget.NewLabel(subtitle),
-		)
+		titleLabel := widget.NewLabelWithStyle(title, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+		titleLabel.Wrapping = fyne.TextWrapOff
+		titleLabel.Truncation = fyne.TextTruncateEllipsis
+		subtitleLabel := widget.NewLabel(subtitle)
+		subtitleLabel.Wrapping = fyne.TextWrapOff
+		subtitleLabel.Truncation = fyne.TextTruncateEllipsis
+		textContainer := container.NewVBox(titleLabel, subtitleLabel)
 
 		itemContent := container.New(layout.NewBorderLayout(nil, nil, thumbArea, nil),
 			thumbArea,
@@ -2082,11 +2094,15 @@ func (l *Launcher) showAddModDialog(onAdd func([]modmgr.ModVersion)) {
 			dialog.ShowError(err, l.state.Window)
 			return
 		}
-		fyne.Do(func() {
+		fyne.DoAndWait(func() {
 			contentBox.Objects = nil
 			for range modIDs {
 				contentBox.Add(buildItem("", lang.LocalizeKey("profile.loading_mod", "Loading mod details..."), "", nil))
 			}
+			endLabel := widget.NewLabel(lang.LocalizeKey("common.scroll_end_reached", "Reached the bottom."))
+			endLabel.Alignment = fyne.TextAlignCenter
+			endLabel.Importance = widget.LowImportance
+			contentBox.Add(container.NewCenter(endLabel))
 			contentBox.Refresh()
 		})
 
