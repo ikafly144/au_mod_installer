@@ -3,14 +3,20 @@
 package settings
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"image/color"
+	"io"
 	"log/slog"
+	"math"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 
 	"fyne.io/fyne/v2"
+	fyneapp "fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
@@ -32,6 +38,8 @@ import (
 type Settings struct {
 	state                   *uicommon.State
 	BranchSelect            *widget.Select
+	DisplayScaleSlider      *widget.Slider
+	DisplayScaleSelect      *widget.Select
 	ApiServerEntry          *widget.Entry
 	SaveConfigButton        *widget.Button
 	ImportProfileButton     *widget.Button
@@ -44,7 +52,17 @@ type Settings struct {
 	epicAccountLabel *widget.Label
 	epicLoginButton  *widget.Button
 	epicLogoutButton *widget.Button
+
+	displayScaleValues  map[string]float32
+	scaleControlSyncing bool
+	currentDisplayScale float32
 }
+
+const (
+	displayScaleMin  = float32(0.75)
+	displayScaleMax  = float32(2.0)
+	displayScaleStep = float32(0.05)
+)
 
 func NewSettings(state *uicommon.State) *Settings {
 	branchOptions := []string{
@@ -62,17 +80,34 @@ func NewSettings(state *uicommon.State) *Settings {
 	currentBranch := fyne.CurrentApp().Preferences().StringWithFallback("core.update_branch", "stable")
 	branchSelect.SetSelected(currentBranch)
 
+	currentScale := normalizedDisplayScale(fyne.CurrentApp().Settings().Scale())
+	displayScaleValues, displayScaleOptions := availableDisplayScales(currentScale)
+	displayScaleSelect := widget.NewSelect(displayScaleOptions, nil)
+	displayScaleSelect.PlaceHolder = lang.LocalizeKey("settings.display_scale_hint", "Adjust UI display scale")
+
+	displayScaleSlider := widget.NewSlider(float64(displayScaleMin), float64(displayScaleMax))
+	displayScaleSlider.Step = float64(displayScaleStep)
+	displayScaleSlider.SetValue(float64(clampDisplayScale(currentScale)))
+
 	apiServerEntry := widget.NewEntry()
 	apiServerEntry.PlaceHolder = "https://modofus.sabafly.net/api/v1"
 	apiServerEntry.SetText(fyne.CurrentApp().Preferences().String("api_server"))
 
 	s := &Settings{
-		state:            state,
-		BranchSelect:     branchSelect,
-		ApiServerEntry:   apiServerEntry,
-		uninstallButton:  widget.NewButtonWithIcon(lang.LocalizeKey("installation.uninstall", "Uninstall from Game Folder"), theme.DeleteIcon(), nil), // nil callback initially, set in init
-		epicAccountLabel: widget.NewLabel(""),
+		state:               state,
+		BranchSelect:        branchSelect,
+		DisplayScaleSlider:  displayScaleSlider,
+		DisplayScaleSelect:  displayScaleSelect,
+		ApiServerEntry:      apiServerEntry,
+		uninstallButton:     widget.NewButtonWithIcon(lang.LocalizeKey("installation.uninstall", "Uninstall from Game Folder"), theme.DeleteIcon(), nil), // nil callback initially, set in init
+		epicAccountLabel:    widget.NewLabel(""),
+		displayScaleValues:  displayScaleValues,
+		currentDisplayScale: clampDisplayScale(currentScale),
 	}
+	s.DisplayScaleSelect.OnChanged = s.onDisplayScaleChanged
+	s.DisplayScaleSlider.OnChanged = s.onDisplayScaleSliderChanged
+	s.DisplayScaleSlider.OnChangeEnded = s.onDisplayScaleSliderChangeEnded
+	s.setDisplayScaleControls(s.currentDisplayScale)
 
 	s.SaveConfigButton = widget.NewButtonWithIcon(lang.LocalizeKey("settings.save", "Save"), theme.DocumentSaveIcon(), s.saveConfig)
 
@@ -152,6 +187,20 @@ func (s *Settings) Tab() (*container.TabItem, error) {
 			lang.LocalizeKey("settings.update_channel", "Update Channel"),
 			"",
 			settingsEntry(lang.LocalizeKey("settings.select_update_channel", "Select Update Channel"), s.BranchSelect),
+		),
+		widget.NewCard(
+			lang.LocalizeKey("settings.display_scale", "Display Scale"),
+			"",
+			settingsEntry(
+				lang.LocalizeKey("settings.display_scale_hint", "Adjust UI display scale"),
+				container.NewBorder(
+					nil,
+					nil,
+					nil,
+					container.New(layout.NewGridWrapLayout(fyne.NewSize(110, s.DisplayScaleSelect.MinSize().Height)), s.DisplayScaleSelect),
+					s.DisplayScaleSlider,
+				),
+			),
 		),
 		widget.NewCard(
 			lang.LocalizeKey("settings.cache_management", "Cache Management"),
@@ -411,4 +460,164 @@ func (s *Settings) saveConfig() {
 func settingsEntry(title string, content fyne.CanvasObject) fyne.CanvasObject {
 	label := widget.NewLabelWithStyle(title, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	return container.New(layout.NewBorderLayout(nil, nil, label, nil), content, label)
+}
+
+func (s *Settings) onDisplayScaleChanged(selected string) {
+	if s.scaleControlSyncing {
+		return
+	}
+	scale, ok := s.displayScaleValues[selected]
+	if !ok {
+		return
+	}
+	s.applyDisplayScale(scale)
+}
+
+func (s *Settings) onDisplayScaleSliderChanged(value float64) {
+	if s.scaleControlSyncing {
+		return
+	}
+	scale := clampDisplayScale(float32(value))
+	s.scaleControlSyncing = true
+	s.DisplayScaleSelect.SetSelected(nearestDisplayScaleLabel(scale, s.displayScaleValues))
+	s.scaleControlSyncing = false
+}
+
+func (s *Settings) onDisplayScaleSliderChangeEnded(value float64) {
+	if s.scaleControlSyncing {
+		return
+	}
+	s.applyDisplayScale(float32(value))
+}
+
+func (s *Settings) applyDisplayScale(scale float32) {
+	scale = clampDisplayScale(scale)
+	currentScale := s.currentDisplayScale
+	if almostEqualScale(scale, currentScale) {
+		return
+	}
+
+	if err := saveDisplayScale(scale); err != nil {
+		dialog.ShowError(err, s.state.Window)
+		s.setDisplayScaleControls(currentScale)
+		return
+	}
+
+	s.currentDisplayScale = scale
+	s.setDisplayScaleControls(scale)
+}
+
+func (s *Settings) setDisplayScaleControls(scale float32) {
+	scale = clampDisplayScale(scale)
+	s.scaleControlSyncing = true
+	defer func() {
+		s.scaleControlSyncing = false
+	}()
+	s.DisplayScaleSlider.SetValue(float64(scale))
+	s.DisplayScaleSelect.SetSelected(nearestDisplayScaleLabel(scale, s.displayScaleValues))
+}
+
+func availableDisplayScales(currentScale float32) (map[string]float32, []string) {
+	presets := []float32{}
+	for v := displayScaleMin; v <= displayScaleMax+displayScaleStep/2; v += displayScaleStep {
+		presets = append(presets, clampDisplayScale(v))
+	}
+	hasCurrent := false
+	for _, preset := range presets {
+		if almostEqualScale(preset, currentScale) {
+			hasCurrent = true
+			break
+		}
+	}
+	if !hasCurrent {
+		presets = append(presets, currentScale)
+	}
+	sort.Slice(presets, func(i, j int) bool {
+		return presets[i] < presets[j]
+	})
+
+	values := map[string]float32{}
+	options := make([]string, 0, len(presets))
+	for _, preset := range presets {
+		label := displayScaleLabel(preset)
+		if _, exists := values[label]; exists {
+			continue
+		}
+		values[label] = preset
+		options = append(options, label)
+	}
+	return values, options
+}
+
+func displayScaleLabel(scale float32) string {
+	return fmt.Sprintf("%.0f%%", scale*100)
+}
+
+func nearestDisplayScaleLabel(scale float32, options map[string]float32) string {
+	nearest := ""
+	nearestDiff := float32(math.MaxFloat32)
+	for label, option := range options {
+		diff := float32(math.Abs(float64(option - scale)))
+		if diff < nearestDiff {
+			nearestDiff = diff
+			nearest = label
+		}
+	}
+	return nearest
+}
+
+func normalizedDisplayScale(scale float32) float32 {
+	if scale <= 0 {
+		return 1
+	}
+	return scale
+}
+
+func clampDisplayScale(scale float32) float32 {
+	if scale < displayScaleMin {
+		scale = displayScaleMin
+	}
+	if scale > displayScaleMax {
+		scale = displayScaleMax
+	}
+	return float32(math.Round(float64(scale)/float64(displayScaleStep)) * float64(displayScaleStep))
+}
+
+func almostEqualScale(a, b float32) bool {
+	return math.Abs(float64(a-b)) < 0.0001
+}
+
+func saveDisplayScale(scale float32) error {
+	var schema fyneapp.SettingsSchema
+	path := schema.StoragePath()
+	if err := loadDisplaySettings(path, &schema); err != nil {
+		return err
+	}
+	schema.Scale = scale
+	data, err := json.Marshal(&schema)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		return err
+	}
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		return err
+	}
+	return nil
+}
+
+func loadDisplaySettings(path string, schema *fyneapp.SettingsSchema) error {
+	file, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	defer file.Close()
+	if err := json.NewDecoder(file).Decode(schema); err != nil && !errors.Is(err, io.EOF) {
+		return err
+	}
+	return nil
 }

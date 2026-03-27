@@ -716,5 +716,5 @@ func (l *modListItemLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
 	thumbMin := objects[0].MinSize()
 	bodyMin := objects[1].MinSize()
 	height := max(thumbMin.Height, max(bodyMin.Height, l.minThumbSize))
-	return fyne.NewSize(height+l.spacing+bodyMin.Width, height)
+	return fyne.NewSize(height+l.spacing, height)
 }

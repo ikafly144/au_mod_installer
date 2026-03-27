@@ -80,18 +80,28 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 		}
 	})
 	w.SetContent(canvas)
-	w.CenterOnScreen()
-	w.Resize(fyne.NewSize(440, 720))
-	w.SetFixedSize(true)
+	w.SetFixedSize(false)
 	w.Show()
 	if _, err := state.EnableNativeCustomWindowFrame(); err != nil {
 		slog.Warn("Failed to enable native custom window frame", "error", err)
 	}
+	onClosed := func() {
+		uicommon.SaveMainWindowSize(w)
+	}
 	if cleanup, err := state.EnableNativeTextDrop(); err != nil {
 		slog.Warn("Failed to enable native OLE text drop", "error", err)
 	} else {
-		w.SetOnClosed(cleanup)
+		onClosed = func() {
+			uicommon.SaveMainWindowSize(w)
+			cleanup()
+		}
 	}
+	w.SetOnClosed(onClosed)
+	fyne.Do(func() {
+		if uicommon.RestoreMainWindowSize(w) {
+			w.CenterOnScreen()
+		}
+	})
 	fyne.CurrentApp().Run()
 	return nil
 }

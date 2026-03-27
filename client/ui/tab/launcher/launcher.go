@@ -776,7 +776,7 @@ func (l *launcherListItemLayout) MinSize(objects []fyne.CanvasObject) fyne.Size 
 
 	thumbSide := max(l.minThumbSize, max(thumbMinSize.Width, thumbMinSize.Height))
 	height := max(thumbSide, max(menuMinSize.Height, bodyMinSize.Height))
-	width := thumbSide + l.spacing + bodyMinSize.Width + l.spacing + menuMinSize.Width
+	width := thumbSide + l.spacing + l.spacing + menuMinSize.Width
 	return fyne.NewSize(width, height)
 }
 
@@ -791,7 +791,6 @@ func (l *Launcher) setupProfileGrid() {
 type launcherProfileGridLayout struct {
 	cardSize fyne.Size
 	spacing  float32
-	lastCols int
 }
 
 func (l *launcherProfileGridLayout) columnCount(width float32) int {
@@ -810,7 +809,6 @@ func (l *launcherProfileGridLayout) Layout(objects []fyne.CanvasObject, size fyn
 		return
 	}
 	cols := l.columnCount(size.Width)
-	l.lastCols = cols
 
 	gridWidth := float32(cols)*l.cardSize.Width + float32(cols-1)*l.spacing
 	offsetX := (size.Width - gridWidth) / 2
@@ -829,14 +827,15 @@ func (l *launcherProfileGridLayout) Layout(objects []fyne.CanvasObject, size fyn
 }
 
 func (l *launcherProfileGridLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
-	if len(objects) == 0 {
+	if l.cardSize.Width <= 0 || l.cardSize.Height <= 0 {
 		return fyne.NewSize(0, 0)
 	}
-	cols := max(l.lastCols, 1)
-	rows := (len(objects) + cols - 1) / cols
-	width := float32(cols)*l.cardSize.Width + float32(cols-1)*l.spacing
+	if len(objects) == 0 {
+		return fyne.NewSize(l.cardSize.Width, 0)
+	}
+	rows := len(objects)
 	height := float32(rows)*l.cardSize.Height + float32(max(rows-1, 0))*l.spacing
-	return fyne.NewSize(width, height)
+	return fyne.NewSize(l.cardSize.Width, height)
 }
 
 func (l *Launcher) setupToolbar() {

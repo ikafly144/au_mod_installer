@@ -76,6 +76,8 @@
     "settings.server_url": "サーバーURL",
     "settings.advanced_settings": "高度な設定",
     "settings.update_channel": "アップデートチャンネル",
+    "settings.display_scale": "表示スケール",
+    "settings.display_scale_hint": "UIの表示スケールを調整",
     "settings.epic_games_account": "Epic Gamesアカウント",
     "settings.epic_login": "ログイン",
     "settings.epic_logout": "ログアウト",
