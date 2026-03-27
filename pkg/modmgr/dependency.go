@@ -46,7 +46,7 @@ func ResolveDependencies(initialMods []ModVersion, provider VersionProvider) (ma
 
 			var depVersion *ModVersion
 			var err error
-			if dep.VersionID == "" {
+			if dep.VersionID == "" || dep.VersionID == "any" || dep.VersionID == "latest" {
 				depVersion, err = provider.GetLatestModVersion(dep.ModID)
 			} else {
 				depVersion, err = provider.GetModVersion(dep.ModID, dep.VersionID)
