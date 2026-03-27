@@ -103,7 +103,7 @@ func main() {
 			})
 		}
 
-		outJson, _ := json.MarshalIndent(output, "", "  ")
+		outJson, _ := json.Marshal(output)
 		fmt.Println(string(outJson))
 		return
 	}
@@ -185,6 +185,6 @@ func main() {
 		out.Dependencies = append(out.Dependencies, fmt.Sprintf("%s:%s:%s", dep.ModID, dep.VersionID, dtype))
 	}
 
-	outJson, _ := json.MarshalIndent(out, "", "  ")
+	outJson, _ := json.Marshal(out)
 	fmt.Println(string(outJson))
 }

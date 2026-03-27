@@ -55,7 +55,7 @@ func (m *EpicSessionManager) Save(session *EpicSession) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	data, err := json.MarshalIndent(session, "", "  ")
+	data, err := json.Marshal(session)
 	if err != nil {
 		return fmt.Errorf("failed to marshal epic session: %w", err)
 	}

@@ -274,7 +274,7 @@ func run(ctx context.Context) error {
 		return err
 	}
 
-	data, err := json.MarshalIndent(rule, "", "    ")
+	data, err := json.Marshal(rule)
 	if err != nil {
 		return err
 	}

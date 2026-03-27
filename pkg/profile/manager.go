@@ -54,7 +54,7 @@ func (m *Manager) load() error {
 
 // save writes the profiles to disk. It assumes the caller holds the lock.
 func (m *Manager) save() error {
-	data, err := json.MarshalIndent(m.profiles, "", "  ")
+	data, err := json.Marshal(m.profiles)
 	if err != nil {
 		return fmt.Errorf("failed to marshal profiles: %w", err)
 	}

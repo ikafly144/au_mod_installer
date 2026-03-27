@@ -40,7 +40,7 @@ func GetProfileMetadata(profileDir string) (*ProfileMetadata, error) {
 
 func saveProfileMetadata(profileDir string, meta *ProfileMetadata) error {
 	path := getProfileMetadataPath(profileDir)
-	data, err := json.MarshalIndent(meta, "", "  ")
+	data, err := json.Marshal(meta)
 	if err != nil {
 		return err
 	}

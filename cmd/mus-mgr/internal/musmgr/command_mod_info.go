@@ -36,7 +36,7 @@ func (f *commandFactory) newModInfoCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			b, err := json.MarshalIndent(mod, "", "  ")
+			b, err := json.Marshal(mod)
 			if err != nil {
 				return err
 			}
