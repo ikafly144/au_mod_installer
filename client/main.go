@@ -189,7 +189,7 @@ func realMain(sharedURI string, sharedArchive string) error {
 		slog.Info("No updates available")
 	}
 
-	w := a.NewWindow(lang.LocalizeKey("app.name", "Mod of Us"))
+	w := a.NewWindow(lang.LocalizeKey("app.name", "Mod of Us") + " " + version)
 
 	var client rest.Client
 	if localMode != "" {

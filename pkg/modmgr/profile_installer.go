@@ -3,11 +3,13 @@ package modmgr
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 
 	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
+	"github.com/ikafly144/au_mod_installer/pkg/progress"
 )
 
 type ProfileMetadata struct {
@@ -63,7 +65,7 @@ func modVersionsEqual(a, b []ModVersion) bool {
 }
 
 // PrepareProfileDirectory installs mods from cache to the profile directory and generates doorstop_config.ini.
-func PrepareProfileDirectory(profileDir string, cacheDir string, modVersions []ModVersion, binaryType aumgr.BinaryType, gameVersion string, force bool) error {
+func PrepareProfileDirectory(profileDir string, cacheDir string, modVersions []ModVersion, binaryType aumgr.BinaryType, gameVersion string, force bool, progressListener progress.Progress) error {
 	if err := os.MkdirAll(profileDir, 0755); err != nil {
 		return fmt.Errorf("failed to create profile directory: %w", err)
 	}
@@ -76,6 +78,11 @@ func PrepareProfileDirectory(profileDir string, cacheDir string, modVersions []M
 	shouldInstall := force || meta == nil || !modVersionsEqual(meta.ModVersions, modVersions) || meta.GameVersion != gameVersion || meta.BinaryType != binaryType
 
 	if shouldInstall {
+		if progressListener != nil {
+			progressListener.SetValue(0)
+			progressListener.Start()
+			defer progressListener.Done()
+		}
 		// Clear BepInEx folder
 		bepInExDir := filepath.Join(profileDir, "BepInEx")
 		if _, err := os.Stat(bepInExDir); err == nil {
@@ -92,6 +99,27 @@ func PrepareProfileDirectory(profileDir string, cacheDir string, modVersions []M
 		}
 
 		// Install mods
+		copyFilesCount := 0
+		for _, mod := range modVersions {
+			hashStr, err := hashModVersion(mod)
+			if err != nil {
+				return fmt.Errorf("failed to hash mod version: %w", err)
+			}
+			modCacheDir := filepath.Join(cacheDir, string(binaryType), mod.ModID, hashStr)
+			if err := filepath.WalkDir(modCacheDir, func(_ string, d fs.DirEntry, err error) error {
+				if err != nil {
+					return err
+				}
+				if d.IsDir() {
+					return nil
+				}
+				copyFilesCount++
+				return nil
+			}); err != nil {
+				return fmt.Errorf("failed to enumerate mod files for %s: %w", mod.ModID, err)
+			}
+		}
+		completedCopies := 0
 		for _, mod := range modVersions {
 			hashStr, err := hashModVersion(mod)
 			if err != nil {
@@ -115,14 +143,47 @@ func PrepareProfileDirectory(profileDir string, cacheDir string, modVersions []M
 				if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
 					return err
 				}
-
-				srcData, err := os.ReadFile(path)
+				srcFile, err := os.Open(path)
 				if err != nil {
 					return err
 				}
-				if err := os.WriteFile(destPath, srcData, 0644); err != nil {
+				srcInfo, err := srcFile.Stat()
+				if err != nil {
+					_ = srcFile.Close()
 					return err
 				}
+				destFile, err := os.OpenFile(destPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+				if err != nil {
+					_ = srcFile.Close()
+					return err
+				}
+				writer := io.Writer(destFile)
+				if progressListener != nil && copyFilesCount > 0 {
+					scale := 1.0 / float64(copyFilesCount)
+					start := float64(completedCopies) * scale
+					pw := progress.NewProgressWriter(start, scale, srcInfo.Size(), progressListener, destFile)
+					writer = pw
+					if _, err := io.Copy(writer, srcFile); err != nil {
+						_ = destFile.Close()
+						_ = srcFile.Close()
+						return err
+					}
+					pw.Complete()
+				} else {
+					if _, err := io.Copy(writer, srcFile); err != nil {
+						_ = destFile.Close()
+						_ = srcFile.Close()
+						return err
+					}
+				}
+				if err := destFile.Close(); err != nil {
+					_ = srcFile.Close()
+					return err
+				}
+				if err := srcFile.Close(); err != nil {
+					return err
+				}
+				completedCopies++
 
 				return nil
 			}); err != nil {

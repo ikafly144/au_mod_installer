@@ -9,6 +9,7 @@ import (
 
 	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
+	"github.com/ikafly144/au_mod_installer/pkg/progress"
 )
 
 // ResolveProfileDependencies resolves all required dependencies for the given profile.
@@ -81,12 +82,12 @@ func (a *App) PrepareLaunch(gamePath string, profileID uuid.UUID) (string, func(
 	}
 
 	if needSync {
-		if err := a.SyncProfile(profileID, binaryType, gameVersion); err != nil {
+		if err := a.SyncProfile(profileID, binaryType, gameVersion, nil); err != nil {
 			return "", nil, fmt.Errorf("failed to sync profile: %w", err)
 		}
 	}
 
-	if err := modmgr.PrepareProfileDirectory(profileDir, cacheDir, resolvedVersions, binaryType, gameVersion, false); err != nil {
+	if err := modmgr.PrepareProfileDirectory(profileDir, cacheDir, resolvedVersions, binaryType, gameVersion, false, nil); err != nil {
 		return "", nil, err
 	}
 
@@ -97,7 +98,7 @@ func (a *App) PrepareLaunch(gamePath string, profileID uuid.UUID) (string, func(
 }
 
 // SyncProfile forces a re-sync of the profile directory by clearing it and re-installing mods.
-func (a *App) SyncProfile(profileID uuid.UUID, binaryType aumgr.BinaryType, gameVersion string) error {
+func (a *App) SyncProfile(profileID uuid.UUID, binaryType aumgr.BinaryType, gameVersion string, progressListener progress.Progress) error {
 	profile, found := a.ProfileManager.Get(profileID)
 	if !found {
 		return fmt.Errorf("profile not found: %s", profileID)
@@ -111,7 +112,7 @@ func (a *App) SyncProfile(profileID uuid.UUID, binaryType aumgr.BinaryType, game
 	cacheDir := filepath.Join(a.ConfigDir, "mods")
 	profileDir := filepath.Join(a.ConfigDir, "profiles", profileID.String())
 
-	return modmgr.PrepareProfileDirectory(profileDir, cacheDir, resolvedVersions, binaryType, gameVersion, true)
+	return modmgr.PrepareProfileDirectory(profileDir, cacheDir, resolvedVersions, binaryType, gameVersion, true, progressListener)
 }
 
 // ExecuteLaunch launches the game and blocks until it exits.

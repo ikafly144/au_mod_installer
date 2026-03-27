@@ -129,7 +129,7 @@ func SaveInstallationInfo(gameRoot *os.Root, installation *ModInstallation) erro
 	return nil
 }
 
-func DownloadMods(cacheDir string, modVersions []ModVersion, binaryType aumgr.BinaryType, progress progress.Progress, force bool) error {
+func DownloadMods(cacheDir string, modVersions []ModVersion, binaryType aumgr.BinaryType, progressListener progress.Progress, force bool) error {
 	if err := os.MkdirAll(cacheDir, 0755); err != nil {
 		return fmt.Errorf("failed to create cache directory: %w", err)
 	}
@@ -141,11 +141,14 @@ func DownloadMods(cacheDir string, modVersions []ModVersion, binaryType aumgr.Bi
 		}
 		return count
 	}()
+	if totalDownloadCount == 0 {
+		return nil
+	}
 
-	if progress != nil {
-		progress.SetValue(0.0)
-		progress.Start()
-		defer progress.Done()
+	if progressListener != nil {
+		progressListener.SetValue(0.0)
+		progressListener.Start()
+		defer progressListener.Done()
 	}
 
 	hClient := http.DefaultClient
@@ -158,8 +161,8 @@ func DownloadMods(cacheDir string, modVersions []ModVersion, binaryType aumgr.Bi
 		if _, err := os.Stat(modCacheDir); err == nil {
 			if !force {
 				slog.Info("Mod already cached", "modId", modVersions[i].ModID, "versionId", modVersions[i].ID)
-				if progress != nil {
-					progress.SetValue(progress.GetValue() + (float64(modVersions[i].CompatibleFilesCount(binaryType)) / float64(totalDownloadCount)))
+				if progressListener != nil {
+					progressListener.SetValue(progressListener.GetValue() + (float64(modVersions[i].CompatibleFilesCount(binaryType)) / float64(totalDownloadCount)))
 				}
 				continue
 			}
@@ -213,7 +216,7 @@ func DownloadMods(cacheDir string, modVersions []ModVersion, binaryType aumgr.Bi
 
 			switch file.ContentType {
 			case model.ContentTypeArchive:
-				_, err := extractZip(body, contentLength, modCacheRoot, progress, totalDownloadCount)
+				_, err := extractZip(body, contentLength, modCacheRoot, progressListener, totalDownloadCount)
 				if err != nil {
 					return err
 				}
@@ -264,19 +267,14 @@ func DownloadMods(cacheDir string, modVersions []ModVersion, binaryType aumgr.Bi
 				}
 				defer destFile.Close()
 				startVal := 0.0
-				if progress != nil {
-					startVal = progress.GetValue()
+				if progressListener != nil {
+					startVal = progressListener.GetValue()
 				}
-				buf := &ProgressWrapper{
-					start:    startVal,
-					goal:     uint64(contentLength),
-					scale:    (1.0 / float64(totalDownloadCount)),
-					progress: progress,
-					buf:      destFile,
-				}
+				buf := progress.NewProgressWriter(startVal, (1.0 / float64(totalDownloadCount)), contentLength, progressListener, destFile)
 				if _, err := io.Copy(buf, body); err != nil {
 					return err
 				}
+				buf.Complete()
 			default:
 				return fmt.Errorf("unknown file type: %s", file.ContentType)
 			}
@@ -565,56 +563,16 @@ func removeEmptyDirs(root *os.Root, dir string) error {
 	return nil
 }
 
-type ProgressWrapper struct {
-	start    float64
-	goal     uint64
-	scale    float64
-	progress progress.Progress
-	bytes    int
-	buf      io.Writer
-}
-
-func (pw *ProgressWrapper) Write(data []byte) (n int, err error) {
-	if pw.buf != nil {
-		n, err = pw.buf.Write(data)
-	}
-	pw.bytes += n
-	if pw.scale > 0 && pw.progress != nil {
-		pw.progress.SetValue(float64(pw.bytes)/float64(pw.goal)*pw.scale + pw.start)
-	}
-	return
-}
-
-type ProgressWriter struct {
-	start    float64
-	scale    float64
-	goal     uint64
-	progress progress.Progress
-	buf      *bytes.Buffer
-}
-
-func (pw *ProgressWriter) Write(data []byte) (n int, err error) {
-	if pw.buf != nil {
-		n, err = pw.buf.Write(data)
-	}
-	if pw.goal > 0 && pw.progress != nil {
-		pw.progress.SetValue(float64(pw.buf.Len())/float64(pw.goal)*pw.scale + pw.start)
-	}
-	return
-}
-
-func extractZip(reader io.Reader, contentLength int64, destRoot *os.Root, progress progress.Progress, n int) ([]string, error) {
+func extractZip(reader io.Reader, contentLength int64, destRoot *os.Root, progressListener progress.Progress, n int) ([]string, error) {
 	startVal := 0.0
-	if progress != nil {
-		startVal = progress.GetValue()
+	if progressListener != nil {
+		startVal = progressListener.GetValue()
 	}
-	buf := &ProgressWriter{
-		start:    startVal,
-		scale:    (1.0 / float64(n)) * 0.9,
-		goal:     uint64(contentLength),
-		progress: progress,
-		buf:      new(bytes.Buffer),
-	}
+	perFileScale := 1.0 / float64(n)
+	downloadScale := perFileScale * 0.9
+	extractScale := perFileScale - downloadScale
+	zipBuffer := new(bytes.Buffer)
+	buf := progress.NewProgressWriter(startVal, downloadScale, contentLength, progressListener, zipBuffer)
 	var written int64
 	if contentLength <= 0 {
 		w, err := io.Copy(buf, reader)
@@ -629,34 +587,56 @@ func extractZip(reader io.Reader, contentLength int64, destRoot *os.Root, progre
 		}
 		written = w
 	}
-	zipReader, err := zip.NewReader(bytes.NewReader(buf.buf.Bytes()), written)
+	buf.Complete()
+	zipReader, err := zip.NewReader(bytes.NewReader(zipBuffer.Bytes()), written)
 	if err != nil {
 		return nil, err
 	}
-	filesCount := len(zipReader.File)
-	i := 0
-	start := startVal
-	var extractErr error
+	var files []*zip.File
+	var totalExtractBytes uint64
 	var extractFiles []string
 	for _, f := range zipReader.File {
 		if f.FileInfo().IsDir() {
 			continue
 		}
+		files = append(files, f)
 		extractFiles = append(extractFiles, f.Name)
-		if err := extractFile(f, destRoot); err != nil {
+		totalExtractBytes += f.UncompressedSize64
+	}
+	if len(files) == 0 {
+		if progressListener != nil {
+			progressListener.SetValue(startVal + perFileScale)
+		}
+		return extractFiles, nil
+	}
+	extractStart := startVal + downloadScale
+	writtenExtractBytes := uint64(0)
+	var extractErr error
+	for _, f := range files {
+		fileScale := 0.0
+		if totalExtractBytes > 0 {
+			fileScale = (float64(f.UncompressedSize64) / float64(totalExtractBytes)) * extractScale
+		}
+		fileStart := extractStart
+		if totalExtractBytes > 0 {
+			fileStart += (float64(writtenExtractBytes) / float64(totalExtractBytes)) * extractScale
+		}
+		pw := progress.NewProgressWriter(fileStart, fileScale, int64(f.UncompressedSize64), progressListener, nil)
+		if err := extractFile(f, destRoot, pw); err != nil {
 			slog.Warn("Failed to extract file from zip", "file", f.Name, "error", err)
 			extractErr = err
 			break
 		}
-		i++
-		if progress != nil {
-			progress.SetValue(float64(i)/float64(filesCount)*buf.scale*0.2 + start)
-		}
+		pw.Complete()
+		writtenExtractBytes += f.UncompressedSize64
+	}
+	if extractErr == nil && progressListener != nil {
+		progressListener.SetValue(startVal + perFileScale)
 	}
 	return extractFiles, extractErr
 }
 
-func extractFile(f *zip.File, destRoot *os.Root) error {
+func extractFile(f *zip.File, destRoot *os.Root, progressWriter *progress.ProgressWriter) error {
 	rc, err := f.Open()
 	if err != nil {
 		return err
@@ -675,7 +655,12 @@ func extractFile(f *zip.File, destRoot *os.Root) error {
 	}
 	defer destFile.Close()
 
-	if _, err := io.Copy(destFile, rc); err != nil {
+	writer := io.Writer(destFile)
+	if progressWriter != nil {
+		progressWriter.SetWriter(destFile)
+		writer = progressWriter
+	}
+	if _, err := io.Copy(writer, rc); err != nil {
 		return err
 	}
 	return nil

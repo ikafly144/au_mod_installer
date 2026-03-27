@@ -455,11 +455,14 @@ func (l *Launcher) importProfileFromArchiveURL(archiveURL string) {
 	}
 
 	var loadingDialog dialog.Dialog
+	var loadingProgress *progress.FyneProgress
 	fyne.DoAndWait(func() {
-		progress := widget.NewProgressBarInfinite()
+		bar := widget.NewProgressBar()
+		bar.SetValue(0)
+		loadingProgress = progress.NewFyneProgress(bar)
 		content := container.NewVBox(
 			widget.NewLabel(lang.LocalizeKey("profile.import_url_loading", "アーカイブをダウンロードしています...")),
-			progress,
+			bar,
 		)
 		loadingDialog = dialog.NewCustomWithoutButtons(
 			lang.LocalizeKey("profile.import_title", "Import Profile"),
@@ -471,7 +474,7 @@ func (l *Launcher) importProfileFromArchiveURL(archiveURL string) {
 	})
 
 	go func() {
-		path, err := l.downloadArchiveURLToTempFile(archiveURL)
+		path, err := l.downloadArchiveURLToTempFile(archiveURL, loadingProgress)
 		fyne.Do(func() {
 			if loadingDialog != nil {
 				loadingDialog.Hide()
@@ -490,7 +493,7 @@ func (l *Launcher) importProfileFromArchiveURL(archiveURL string) {
 	}()
 }
 
-func (l *Launcher) downloadArchiveURLToTempFile(archiveURL string) (string, error) {
+func (l *Launcher) downloadArchiveURLToTempFile(archiveURL string, progressListener progress.Progress) (string, error) {
 	parsedURL, err := neturl.Parse(archiveURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse archive URL: %w", err)
@@ -518,13 +521,20 @@ func (l *Launcher) downloadArchiveURLToTempFile(archiveURL string) (string, erro
 	if resp.ContentLength > profileArchiveDownloadMaxBytes {
 		return "", fmt.Errorf("archive is too large: %d bytes (max %d)", resp.ContentLength, profileArchiveDownloadMaxBytes)
 	}
+	if progressListener != nil {
+		progressListener.SetValue(0)
+		progressListener.Start()
+		defer progressListener.Done()
+	}
 
 	tempFile, err := os.CreateTemp("", "mod-of-us-profile-url-*.aupack")
 	if err != nil {
 		return "", fmt.Errorf("failed to create temp archive file: %w", err)
 	}
 	tempPath := tempFile.Name()
-	written, copyErr := io.Copy(tempFile, io.LimitReader(resp.Body, profileArchiveDownloadMaxBytes+1))
+	buf := progress.NewProgressWriter(0, 1, resp.ContentLength, progressListener, tempFile)
+	written, copyErr := io.Copy(buf, io.LimitReader(resp.Body, profileArchiveDownloadMaxBytes+1))
+	buf.Complete()
 	closeErr := tempFile.Close()
 	if copyErr != nil {
 		_ = os.Remove(tempPath)
@@ -1214,13 +1224,15 @@ func (l *Launcher) syncProfile(prof profile.Profile) {
 		}
 		cacheDir := filepath.Join(configDir, "au_mod_installer", "mods")
 
-		if err := modmgr.DownloadMods(cacheDir, resolvedVersions, binaryType, syncProgress, false); err != nil {
+		downloadProgress := progress.NewPhaseProgress(syncProgress, 0.0, 0.5)
+		if err := modmgr.DownloadMods(cacheDir, resolvedVersions, binaryType, downloadProgress, false); err != nil {
 			syncErr = err
 			return
 		}
 
 		// Sync profile directory
-		if err := l.state.Core.SyncProfile(prof.ID, binaryType, gameVersion); err != nil {
+		copyProgress := progress.NewPhaseProgress(syncProgress, 0.5, 0.5)
+		if err := l.state.Core.SyncProfile(prof.ID, binaryType, gameVersion, copyProgress); err != nil {
 			syncErr = err
 			return
 		}
