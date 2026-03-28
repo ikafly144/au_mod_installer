@@ -3,6 +3,7 @@
 package settings
 
 import (
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,9 +11,12 @@ import (
 	"io"
 	"log/slog"
 	"math"
+	"net/url"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"sort"
+	"strings"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -56,13 +60,48 @@ type Settings struct {
 	displayScaleValues  map[string]float32
 	scaleControlSyncing bool
 	currentDisplayScale float32
+
+	thirdPartyLicenses       []thirdPartyLicense
+	thirdPartyLicenseLoadErr error
+	projectLicense           projectLicense
 }
 
 const (
 	displayScaleMin  = float32(0.75)
 	displayScaleMax  = float32(2.0)
 	displayScaleStep = float32(0.05)
+
+	projectLicenseURL = "https://github.com/ikafly144/au_mod_installer/blob/master/LICENSE"
 )
+
+var projectModulePath = func() string {
+	buildInfo, ok := debug.ReadBuildInfo()
+	if !ok {
+		return ""
+	}
+	return buildInfo.Main.Path
+}()
+
+//go:embed licenses.json
+var thirdPartyLicensesJSON []byte
+
+type licensesDocument struct {
+	Project    projectLicense      `json:"project"`
+	ThirdParty []thirdPartyLicense `json:"third_party"`
+}
+
+type projectLicense struct {
+	LicenseURL  string `json:"license_url"`
+	LicenseName string `json:"license_name"`
+	LicenseText string `json:"license_text"`
+}
+
+type thirdPartyLicense struct {
+	Name        string `json:"name"`
+	LicenseURL  string `json:"license_url"`
+	LicenseName string `json:"license_name"`
+	LicenseText string `json:"license_text"`
+}
 
 func NewSettings(state *uicommon.State) *Settings {
 	branchOptions := []string{
@@ -93,16 +132,31 @@ func NewSettings(state *uicommon.State) *Settings {
 	apiServerEntry.PlaceHolder = "https://modofus.sabafly.net/api/v1"
 	apiServerEntry.SetText(fyne.CurrentApp().Preferences().String("api_server"))
 
+	thirdPartyLicenses, thirdPartyLicenseLoadErr := loadThirdPartyLicenses()
+	if thirdPartyLicenseLoadErr != nil {
+		slog.Warn("Failed to load third-party licenses", "error", thirdPartyLicenseLoadErr)
+	}
+	projectLicense, projectLicenseErr := loadProjectLicense()
+	if projectLicenseErr != nil {
+		slog.Warn("Failed to load project license", "error", projectLicenseErr)
+	}
+	if projectLicense.LicenseURL == "" {
+		projectLicense.LicenseURL = projectLicenseURL
+	}
+
 	s := &Settings{
-		state:               state,
-		BranchSelect:        branchSelect,
-		DisplayScaleSlider:  displayScaleSlider,
-		DisplayScaleSelect:  displayScaleSelect,
-		ApiServerEntry:      apiServerEntry,
-		uninstallButton:     widget.NewButtonWithIcon(lang.LocalizeKey("installation.uninstall", "Uninstall from Game Folder"), theme.DeleteIcon(), nil), // nil callback initially, set in init
-		epicAccountLabel:    widget.NewLabel(""),
-		displayScaleValues:  displayScaleValues,
-		currentDisplayScale: clampDisplayScale(currentScale),
+		state:                    state,
+		BranchSelect:             branchSelect,
+		DisplayScaleSlider:       displayScaleSlider,
+		DisplayScaleSelect:       displayScaleSelect,
+		ApiServerEntry:           apiServerEntry,
+		uninstallButton:          widget.NewButtonWithIcon(lang.LocalizeKey("installation.uninstall", "Uninstall from Game Folder"), theme.DeleteIcon(), nil), // nil callback initially, set in init
+		epicAccountLabel:         widget.NewLabel(""),
+		displayScaleValues:       displayScaleValues,
+		currentDisplayScale:      clampDisplayScale(currentScale),
+		thirdPartyLicenses:       thirdPartyLicenses,
+		thirdPartyLicenseLoadErr: thirdPartyLicenseLoadErr,
+		projectLicense:           projectLicense,
 	}
 	s.DisplayScaleSelect.OnChanged = s.onDisplayScaleChanged
 	s.DisplayScaleSlider.OnChanged = s.onDisplayScaleSliderChanged
@@ -258,15 +312,19 @@ func (s *Settings) Tab() (*container.TabItem, error) {
 		),
 	))
 
+	openSourcePage := s.newOpenSourcePage()
+
 	pageTitles := []string{
 		lang.LocalizeKey("settings.page.general", "General"),
 		lang.LocalizeKey("settings.page.account", "Account"),
 		lang.LocalizeKey("settings.page.advanced", "Advanced"),
+		lang.LocalizeKey("settings.page.opensource", "Open Source Licenses"),
 	}
 	pageContents := []fyne.CanvasObject{
 		basicPage,
 		accountPage,
 		advancedPage,
+		openSourcePage,
 	}
 
 	pageTitle := widget.NewLabelWithStyle(pageTitles[0], fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
@@ -455,6 +513,148 @@ func (s *Settings) saveConfig() {
 		fyne.CurrentApp().Preferences().SetString("api_server", server)
 	}
 	dialog.ShowInformation(lang.LocalizeKey("common.success", "Success"), lang.LocalizeKey("settings.saved", "Settings saved successfully. Please restart the application."), s.state.Window)
+}
+
+func (s *Settings) newOpenSourcePage() fyne.CanvasObject {
+	pageStack := container.NewStack()
+
+	showListPage := func() {}
+	showDetailPage := func(title, licenseText, licenseURL string) {}
+
+	showDetailPage = func(title, licenseText, licenseURL string) {
+		licenseText = strings.TrimSpace(licenseText)
+		if licenseText == "" {
+			licenseText = lang.LocalizeKey("settings.opensource.load_failed", "Couldn't load license information. Please restart the app and try again.")
+		}
+		titleLabel := widget.NewLabelWithStyle(title, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+		titleLabel.Wrapping = fyne.TextWrapWord
+
+		backButton := widget.NewButtonWithIcon(
+			lang.LocalizeKey("common.back", "Back"),
+			theme.NavigateBackIcon(),
+			showListPage,
+		)
+		header := container.NewVBox(
+			container.NewHBox(backButton),
+			titleLabel,
+		)
+		if u, err := url.Parse(licenseURL); err == nil {
+			header.Add(widget.NewHyperlink(
+				lang.LocalizeKey("settings.opensource.open_dependency_license", "Open official license page"),
+				u,
+			))
+		}
+
+		licenseBody := widget.NewRichText(
+			&widget.TextSegment{Text: strings.TrimSpace(licenseText)},
+		)
+		licenseBody.Wrapping = fyne.TextWrapWord
+		licenseCard := widget.NewCard("", "", licenseBody)
+
+		detail := container.NewBorder(
+			header,
+			nil,
+			nil,
+			nil,
+			container.NewVScroll(licenseCard),
+		)
+		pageStack.Objects = []fyne.CanvasObject{detail}
+		pageStack.Refresh()
+	}
+
+	showListPage = func() {
+		licenseList := container.NewVBox()
+
+		switch {
+		case s.thirdPartyLicenseLoadErr != nil:
+			licenseList.Add(widget.NewLabel(lang.LocalizeKey("settings.opensource.load_failed", "Couldn't load license information. Please restart the app and try again.")))
+			errLabel := widget.NewLabel(s.thirdPartyLicenseLoadErr.Error())
+			errLabel.Wrapping = fyne.TextWrapWord
+			licenseList.Add(errLabel)
+		case len(s.thirdPartyLicenses) == 0:
+			licenseList.Add(widget.NewLabel(lang.LocalizeKey("settings.opensource.no_license_data", "License information is not generated yet.")))
+		default:
+			for _, dependency := range s.thirdPartyLicenses {
+				dep := dependency
+				licenseList.Add(widget.NewButton(
+					lang.LocalizeKey("settings.opensource.package_button", "{{.Name}} ({{.License}})", map[string]any{
+						"Name":    dep.Name,
+						"License": dep.LicenseName,
+					}),
+					func() {
+						showDetailPage(
+							lang.LocalizeKey("settings.opensource.package_title", "{{.Name}}", map[string]any{"Name": dep.Name}),
+							dep.LicenseText,
+							dep.LicenseURL,
+						)
+					},
+				))
+			}
+		}
+
+		listPage := container.NewVScroll(container.NewVBox(
+			widget.NewButton(
+				lang.LocalizeKey("settings.opensource.project_license", "Project License"),
+				func() {
+					showDetailPage(
+						lang.LocalizeKey("settings.opensource.project_license", "Project License"),
+						s.projectLicense.LicenseText,
+						s.projectLicense.LicenseURL,
+					)
+				},
+			),
+			widget.NewCard(
+				lang.LocalizeKey("settings.opensource.dependencies", "Third-party dependencies"),
+				"",
+				container.NewVBox(
+					licenseList,
+				),
+			),
+		))
+		pageStack.Objects = []fyne.CanvasObject{listPage}
+		pageStack.Refresh()
+	}
+
+	showListPage()
+	return pageStack
+}
+
+func loadThirdPartyLicenses() ([]thirdPartyLicense, error) {
+	var doc licensesDocument
+	if err := json.Unmarshal(thirdPartyLicensesJSON, &doc); err != nil {
+		return nil, err
+	}
+	licenses := doc.ThirdParty
+	filtered := make([]thirdPartyLicense, 0, len(licenses))
+	for _, license := range licenses {
+		license.Name = strings.TrimSpace(license.Name)
+		license.LicenseURL = strings.TrimSpace(strings.ReplaceAll(license.LicenseURL, "\\", "/"))
+		license.LicenseName = strings.TrimSpace(license.LicenseName)
+		license.LicenseText = strings.TrimSpace(license.LicenseText)
+		if license.Name == "" || license.LicenseURL == "" || license.LicenseName == "" || license.LicenseText == "" {
+			continue
+		}
+		if license.Name == projectModulePath || strings.HasPrefix(license.Name, projectModulePath+"/") {
+			continue
+		}
+		filtered = append(filtered, license)
+	}
+	sort.Slice(filtered, func(i, j int) bool {
+		return filtered[i].Name < filtered[j].Name
+	})
+	return filtered, nil
+}
+
+func loadProjectLicense() (projectLicense, error) {
+	var doc licensesDocument
+	if err := json.Unmarshal(thirdPartyLicensesJSON, &doc); err != nil {
+		return projectLicense{}, err
+	}
+	project := doc.Project
+	project.LicenseText = strings.TrimSpace(project.LicenseText)
+	project.LicenseURL = strings.TrimSpace(strings.ReplaceAll(project.LicenseURL, "\\", "/"))
+	project.LicenseName = strings.TrimSpace(project.LicenseName)
+	return project, nil
 }
 
 func settingsEntry(title string, content fyne.CanvasObject) fyne.CanvasObject {
