@@ -29,10 +29,16 @@ type FileRule struct {
 	TargetPlatform string `json:"target_platform"`
 }
 
+type Feature struct {
+	Name  string `json:"name"`
+	Value any    `json:"value"`
+}
+
 type Rule struct {
 	ModID        string       `json:"mod_id"`
 	GithubRepo   string       `json:"github_repo"`
 	Dependencies []Dependency `json:"dependencies"`
+	Features     []Feature    `json:"features,omitempty"`
 	Files        []FileRule   `json:"files"`
 }
 
@@ -252,10 +258,96 @@ func run(ctx context.Context) error {
 		dependencies = append(dependencies, dep)
 	}
 
+	var features []Feature
+	for {
+		addFeature := false
+		promptFeature := &survey.Confirm{
+			Message: "Add a feature?",
+			Default: false,
+		}
+		if err := survey.AskOne(promptFeature, &addFeature); err != nil {
+			return err
+		}
+		if !addFeature {
+			break
+		}
+
+		var feature Feature
+		promptName := &survey.Input{
+			Message: "Feature Name:",
+			Default: "direct_join",
+		}
+		if err := survey.AskOne(promptName, &feature.Name); err != nil {
+			return err
+		}
+		feature.Name = strings.TrimSpace(feature.Name)
+		if feature.Name == "" {
+			return fmt.Errorf("feature name cannot be empty")
+		}
+
+		var valueType string
+		promptValueType := &survey.Select{
+			Message: "Feature Value Type:",
+			Options: []string{"bool", "string", "number"},
+			Default: "bool",
+		}
+		if err := survey.AskOne(promptValueType, &valueType); err != nil {
+			return err
+		}
+
+		switch valueType {
+		case "bool":
+			var b bool
+			promptBool := &survey.Confirm{
+				Message: "Feature Value:",
+				Default: true,
+			}
+			if err := survey.AskOne(promptBool, &b); err != nil {
+				return err
+			}
+			feature.Value = b
+		case "string":
+			var s string
+			promptString := &survey.Input{
+				Message: "Feature Value:",
+			}
+			if err := survey.AskOne(promptString, &s); err != nil {
+				return err
+			}
+			feature.Value = s
+		case "number":
+			var raw string
+			promptNumber := &survey.Input{
+				Message: "Feature Value (number):",
+				Default: "1",
+			}
+			if err := survey.AskOne(promptNumber, &raw); err != nil {
+				return err
+			}
+			raw = strings.TrimSpace(raw)
+			if strings.Contains(raw, ".") {
+				var f float64
+				if _, err := fmt.Sscanf(raw, "%f", &f); err != nil {
+					return fmt.Errorf("invalid number value: %s", raw)
+				}
+				feature.Value = f
+			} else {
+				var i int64
+				if _, err := fmt.Sscanf(raw, "%d", &i); err != nil {
+					return fmt.Errorf("invalid number value: %s", raw)
+				}
+				feature.Value = i
+			}
+		}
+
+		features = append(features, feature)
+	}
+
 	rule := Rule{
 		ModID:        modID,
 		GithubRepo:   repoInput,
 		Dependencies: dependencies,
+		Features:     features,
 		Files:        fileRules,
 	}
 

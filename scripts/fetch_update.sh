@@ -277,6 +277,15 @@ process_rule() {
             fi
         done < /tmp/mus-mgr-deps.tmp
         rm /tmp/mus-mgr-deps.tmp
+
+        # Add features
+        echo "$output" | jq -r '.features[]? // empty' > /tmp/mus-mgr-features.tmp
+        while IFS= read -r feature; do
+            if [ -n "$feature" ] && [ "$feature" != "null" ]; then
+                args+=("--feature" "$feature")
+            fi
+        done < /tmp/mus-mgr-features.tmp
+        rm /tmp/mus-mgr-features.tmp
         
         # Execute
         if ./bin/mus-mgr version add "${args[@]}"; then

@@ -26,10 +26,16 @@ type FileRule struct {
 	TargetPlatform string `json:"target_platform"`
 }
 
+type Feature struct {
+	Name  string `json:"name"`
+	Value any    `json:"value"`
+}
+
 type Rule struct {
 	ModID        string       `json:"mod_id"`
 	GithubRepo   string       `json:"github_repo"`
 	Dependencies []Dependency `json:"dependencies"`
+	Features     []Feature    `json:"features,omitempty"`
 	Files        []FileRule   `json:"files"`
 }
 
@@ -38,6 +44,7 @@ type Output struct {
 	VersionID    string   `json:"version_id"`
 	Files        []string `json:"files"`
 	Dependencies []string `json:"dependencies"`
+	Features     []string `json:"features,omitempty"`
 }
 
 func main() {
@@ -183,6 +190,18 @@ func main() {
 			os.Exit(1)
 		}
 		out.Dependencies = append(out.Dependencies, fmt.Sprintf("%s:%s:%s", dep.ModID, dep.VersionID, dtype))
+	}
+	for _, feature := range rule.Features {
+		name := strings.TrimSpace(feature.Name)
+		if name == "" {
+			fmt.Fprintln(os.Stderr, "Error: feature name cannot be empty.")
+			os.Exit(1)
+		}
+		value := feature.Value
+		if value == nil {
+			value = true
+		}
+		out.Features = append(out.Features, fmt.Sprintf("%s=%v", name, value))
 	}
 
 	outJson, _ := json.Marshal(out)

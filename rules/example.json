@@ -8,6 +8,12 @@
             "dependency_type": "required"
         }
     ],
+    "features": [
+        {
+            "name": "direct_join",
+            "value": true
+        }
+    ],
     "files": [
         {
             "from": "https://example.com/file",
