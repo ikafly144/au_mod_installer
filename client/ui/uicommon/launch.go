@@ -14,14 +14,14 @@ import (
 	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
 )
 
-func (s *State) Launch(path string) {
+func (s *State) Launch(path string, directJoinEnabled bool) {
 	s.launchLock.Lock()
 	defer s.launchLock.Unlock()
 
 	if s.Core.DetectLauncherType(path) == aumgr.LauncherEpicGames {
 		if _, err := s.Core.EpicSessionManager.GetValidSession(s.Core.EpicApi); err != nil {
 			s.ShowEpicLoginWindow(func() {
-				go s.Launch(path)
+				go s.Launch(path, directJoinEnabled)
 			}, nil)
 			return
 		}
@@ -70,7 +70,7 @@ func (s *State) Launch(path string) {
 	startedAt := time.Now()
 	joinInfo := s.TakePendingJoinInfo()
 	if err := s.Core.ExecuteLaunch(path, profileDir, joinInfo, func(pid int) error {
-		if err := profileLock.SetGamePID(pid); err != nil {
+		if err := profileLock.SetGamePID(pid, startedAt, directJoinEnabled); err != nil {
 			return err
 		}
 		if s.OnGameStarted != nil {
@@ -88,7 +88,7 @@ func (s *State) Launch(path string) {
 	slog.Info("Launched Among Us successfully")
 	finishedAt := time.Now()
 	if activeProfileID != uuid.Nil {
-		if err := s.updateProfileLaunchMetrics(activeProfileID, startedAt, finishedAt); err != nil {
+		if err := s.UpdateProfileLaunchMetrics(activeProfileID, startedAt, finishedAt); err != nil {
 			s.SetError(err)
 		}
 	}
@@ -96,10 +96,13 @@ func (s *State) Launch(path string) {
 	_ = s.CanInstall.Set(true)
 }
 
-func (s *State) updateProfileLaunchMetrics(profileID uuid.UUID, startedAt, finishedAt time.Time) error {
+func (s *State) UpdateProfileLaunchMetrics(profileID uuid.UUID, startedAt, finishedAt time.Time) error {
 	prof, found := s.ProfileManager.Get(profileID)
 	if !found {
 		return nil
+	}
+	if startedAt.IsZero() {
+		startedAt = finishedAt
 	}
 
 	if finishedAt.After(startedAt) {

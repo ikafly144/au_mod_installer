@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -23,9 +24,11 @@ const (
 )
 
 type profileLaunchLockState struct {
-	State      string `json:"state"`
-	StarterPID int    `json:"starter_pid,omitempty"`
-	GamePID    int    `json:"game_pid,omitempty"`
+	State             string `json:"state"`
+	StarterPID        int    `json:"starter_pid,omitempty"`
+	GamePID           int    `json:"game_pid,omitempty"`
+	DirectJoinEnabled bool   `json:"direct_join_enabled,omitempty"`
+	StartedAtUnixNano int64  `json:"started_at_unix_nano,omitempty"`
 }
 
 type ProfileLaunchLock struct {
@@ -63,12 +66,15 @@ func (a *App) AcquireProfileLaunchLock(profileID uuid.UUID) (*ProfileLaunchLock,
 	return nil, fmt.Errorf("%w: %s", ErrProfileLaunchBusy, profileID.String())
 }
 
-func (l *ProfileLaunchLock) SetGamePID(gamePID int) error {
+func (l *ProfileLaunchLock) SetGamePID(gamePID int, startedAt time.Time, directJoinEnabled bool) error {
 	if l == nil || l.path == "" || l.profileID == uuid.Nil {
 		return nil
 	}
 	if gamePID <= 0 {
 		return fmt.Errorf("invalid game process id: %d", gamePID)
+	}
+	if startedAt.IsZero() {
+		startedAt = time.Now()
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -76,9 +82,11 @@ func (l *ProfileLaunchLock) SetGamePID(gamePID int) error {
 		return fmt.Errorf("profile lock already released")
 	}
 	state := profileLaunchLockState{
-		State:      profileLockStateRunning,
-		StarterPID: os.Getpid(),
-		GamePID:    gamePID,
+		State:             profileLockStateRunning,
+		StarterPID:        os.Getpid(),
+		GamePID:           gamePID,
+		DirectJoinEnabled: directJoinEnabled,
+		StartedAtUnixNano: startedAt.UnixNano(),
 	}
 	if err := writeProfileLockState(l.path, state); err != nil {
 		return fmt.Errorf("failed to update profile lock with game pid: %w", err)
@@ -199,8 +207,10 @@ func reconcileProfileLock(lockPath string) (bool, error) {
 }
 
 type RunningProfileInfo struct {
-	ProfileID uuid.UUID
-	GamePID   int
+	ProfileID          uuid.UUID
+	GamePID            int
+	DirectJoinEnabled  bool
+	PlayStartedAt      time.Time
 }
 
 // LoadRunningProfilesFromLocks scans the profile lock directory and returns information
@@ -243,9 +253,15 @@ func (a *App) LoadRunningProfilesFromLocks() ([]RunningProfileInfo, error) {
 		}
 
 		if state.State == profileLockStateRunning && state.GamePID > 0 {
+			playStartedAt := time.Time{}
+			if state.StartedAtUnixNano > 0 {
+				playStartedAt = time.Unix(0, state.StartedAtUnixNano)
+			}
 			runningProfiles = append(runningProfiles, RunningProfileInfo{
-				ProfileID: profileID,
-				GamePID:   state.GamePID,
+				ProfileID:         profileID,
+				GamePID:           state.GamePID,
+				DirectJoinEnabled: state.DirectJoinEnabled,
+				PlayStartedAt:     playStartedAt,
 			})
 		}
 	}

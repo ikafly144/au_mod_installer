@@ -85,6 +85,7 @@ type Launcher struct {
 	launchingProfile   bool
 	runningDirectJoin  bool
 	runningGamePID     int
+	runningStartedAt   time.Time
 	lobbyPollStop      func()
 	lobbyInfo          *core.IPCLobbyInfo
 
@@ -118,6 +119,7 @@ const (
 	profileArchiveDownloadTimeout  = 30 * time.Second
 	profileArchiveDownloadMaxBytes = int64(64 << 20)
 	lobbyPollInterval              = 2 * time.Second
+	restoredProcessWatchInterval   = 2 * time.Second
 )
 
 type sharedRoomLinkCache struct {
@@ -216,11 +218,31 @@ func (l *Launcher) restoreRunningProfiles() {
 		return
 	}
 
+	restored := false
 	for _, info := range runningProfiles {
-		slog.Info("Restoring running profile from lock file", "profile_id", info.ProfileID, "game_pid", info.GamePID)
+		if restored {
+			slog.Warn("Skipping extra running profile lock because launcher supports one active profile", "profile_id", info.ProfileID, "game_pid", info.GamePID)
+			continue
+		}
+		prof, ok := l.state.Core.ProfileManager.Get(info.ProfileID)
+		if !ok {
+			slog.Warn("Skipping running profile lock because profile was not found", "profile_id", info.ProfileID, "game_pid", info.GamePID)
+			continue
+		}
+		directJoinEnabled := info.DirectJoinEnabled
+		if !directJoinEnabled && hasDirectJoinFeature(prof.Versions()) {
+			directJoinEnabled = true
+		}
+		slog.Info("Restoring running profile from lock file", "profile_id", info.ProfileID, "game_pid", info.GamePID, "direct_join", directJoinEnabled, "play_started_at", info.PlayStartedAt)
+		l.setRunningDirectJoin(directJoinEnabled)
+		l.setRunningPlayStartedAt(info.PlayStartedAt)
+		l.setRunningProfile(info.ProfileID)
+		restored = true
 		if l.state.OnGameStarted != nil {
 			l.state.OnGameStarted(info.ProfileID, info.GamePID)
 		}
+		l.watchRestoredRunningProfile(info.ProfileID, info.GamePID, info.PlayStartedAt)
+		fyne.Do(l.checkLaunchState)
 	}
 }
 
@@ -246,6 +268,12 @@ func (l *Launcher) isDirectJoinEnabledForRunningProfile() bool {
 func (l *Launcher) setRunningDirectJoin(enabled bool) {
 	l.runningProfileMu.Lock()
 	l.runningDirectJoin = enabled
+	l.runningProfileMu.Unlock()
+}
+
+func (l *Launcher) setRunningPlayStartedAt(startedAt time.Time) {
+	l.runningProfileMu.Lock()
+	l.runningStartedAt = startedAt
 	l.runningProfileMu.Unlock()
 }
 
@@ -277,11 +305,51 @@ func (l *Launcher) onGameExited(profileID uuid.UUID) {
 	l.runningProfileMu.Lock()
 	l.runningGamePID = 0
 	l.runningDirectJoin = false
+	l.runningStartedAt = time.Time{}
 	l.runningProfileMu.Unlock()
 	l.invalidateCachedRoomShareAsync()
 	fyne.Do(func() {
 		l.refreshRoomLinkUI(nil, false)
 	})
+}
+
+func (l *Launcher) isCurrentRunningProcess(profileID uuid.UUID, pid int) bool {
+	l.runningProfileMu.Lock()
+	defer l.runningProfileMu.Unlock()
+	return l.runningProfileID == profileID && l.runningGamePID == pid
+}
+
+func (l *Launcher) watchRestoredRunningProfile(profileID uuid.UUID, pid int, startedAt time.Time) {
+	if profileID == uuid.Nil || pid <= 0 {
+		return
+	}
+	go func() {
+		ticker := time.NewTicker(restoredProcessWatchInterval)
+		defer ticker.Stop()
+		for range ticker.C {
+			if !l.isCurrentRunningProcess(profileID, pid) {
+				return
+			}
+			running, err := aumgr.IsProcessRunning(pid)
+			if err != nil {
+				slog.Debug("Failed to check restored game process state", "profile_id", profileID, "pid", pid, "error", err)
+				continue
+			}
+			if running {
+				continue
+			}
+			if !l.isCurrentRunningProcess(profileID, pid) {
+				return
+			}
+			l.onGameExited(profileID)
+			l.clearRunningProfile(profileID)
+			fyne.Do(l.checkLaunchState)
+			if err := l.state.UpdateProfileLaunchMetrics(profileID, startedAt, time.Now()); err != nil {
+				l.state.SetError(err)
+			}
+			return
+		}
+	}()
 }
 
 func (l *Launcher) startLobbyPolling(pid int) {
@@ -1604,9 +1672,10 @@ func (l *Launcher) runLaunch() {
 		fyne.DoAndWait(l.checkLaunchState)
 
 		// Proceed to Launch
-		l.state.Launch(path)
+		l.state.Launch(path, hasDirectJoinFeature(resolvedVersions))
 		l.stopLobbyPolling()
 		l.setRunningDirectJoin(false)
+		l.setRunningPlayStartedAt(time.Time{})
 		l.clearRunningProfile(targetProfile.ID)
 		fyne.DoAndWait(l.checkLaunchState)
 	}()
