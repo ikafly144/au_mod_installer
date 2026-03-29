@@ -45,6 +45,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err := ensureGoLicenses(); err != nil {
+		fmt.Fprintln(os.Stderr, "failed to ensure go-licenses:", err)
+		os.Exit(1)
+	}
+
 	modulePath, err := currentModulePath()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "failed to resolve current module path:", err)
@@ -194,6 +199,22 @@ func currentModuleDir() (string, error) {
 		return "", fmt.Errorf("empty module directory")
 	}
 	return moduleDir, nil
+}
+
+func ensureGoLicenses() error {
+	if _, err := exec.LookPath("go-licenses"); err == nil {
+		return nil
+	}
+
+	fmt.Fprintln(os.Stderr, "go-licenses not found, installing...")
+	cmd := exec.Command("go", "install", "github.com/google/go-licenses@latest")
+	cmd.Stdout = os.Stderr
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to install go-licenses: %w", err)
+	}
+	fmt.Fprintln(os.Stderr, "go-licenses installed successfully")
+	return nil
 }
 
 func findLicenseFile(baseDir string, packageName string) (string, error) {
