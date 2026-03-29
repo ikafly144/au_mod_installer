@@ -1606,10 +1606,6 @@ func (l *Launcher) newLaunchProgressDialog() (*dialog.CustomDialog, *progress.Fy
 }
 
 func (l *Launcher) checkLaunchState() {
-	l.shareRoomButton.Disable()
-	l.copyRoomLinkButton.Disable()
-	l.unpublishRoomButton.Disable()
-	l.roomLinkContainer.Hide()
 	runningProfileID, launching := l.currentBusyProfile()
 	if runningProfileID != uuid.Nil && launching {
 		l.launchButton.SetText(lang.LocalizeKey("launcher.launch.preparing", "Preparing launch..."))
