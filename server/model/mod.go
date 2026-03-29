@@ -87,6 +87,7 @@ type ModVersionDetails struct {
 
 	Files        []ModVersionFile `gorm:"foreignKey:VersionID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"files,omitempty"`
 	Dependencies DependencyArray  `gorm:"type:json" json:"dependencies,omitempty"`
+	Features     Features         `gorm:"type:json" json:"features,omitempty"`
 
 	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`
@@ -173,3 +174,28 @@ const (
 	DependencyTypeConflict DependencyType = "conflict"
 	DependencyTypeEmbedded DependencyType = "embedded"
 )
+
+type Features map[string]any
+
+func (f Features) Value() (driver.Value, error) {
+	if f == nil {
+		return "{}", nil
+	}
+	return json.Marshal(f)
+}
+
+func (f *Features) Scan(value any) error {
+	if value == nil {
+		*f = nil
+		return nil
+	}
+	b, ok := value.([]byte)
+	if !ok {
+		s, ok := value.(string)
+		if !ok {
+			return errors.New("type assertion to []byte or string failed")
+		}
+		b = []byte(s)
+	}
+	return json.Unmarshal(b, f)
+}

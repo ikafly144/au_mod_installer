@@ -12,6 +12,12 @@ import (
 	"github.com/ikafly144/au_mod_installer/pkg/progress"
 )
 
+type LaunchJoinInfo struct {
+	LobbyCode  string
+	ServerIP   string
+	ServerPort uint16
+}
+
 // ResolveProfileDependencies resolves all required dependencies for the given profile.
 func (a *App) ResolveProfileDependencies(profileID uuid.UUID) ([]modmgr.ModVersion, error) {
 	profile, found := a.ProfileManager.Get(profileID)
@@ -116,7 +122,7 @@ func (a *App) SyncProfile(profileID uuid.UUID, binaryType aumgr.BinaryType, game
 }
 
 // ExecuteLaunch launches the game and blocks until it exits.
-func (a *App) ExecuteLaunch(gamePath string, dllDir string, onStarted func(pid int) error) error {
+func (a *App) ExecuteLaunch(gamePath string, dllDir string, joinInfo *LaunchJoinInfo, onStarted func(pid int) error) error {
 	launcherType := aumgr.DetectLauncherType(gamePath)
 	var exchangeCode string
 	if launcherType == aumgr.LauncherEpicGames {
@@ -128,5 +134,13 @@ func (a *App) ExecuteLaunch(gamePath string, dllDir string, onStarted func(pid i
 			}
 		}
 	}
-	return aumgr.LaunchAmongUs(launcherType, gamePath, dllDir, exchangeCode, onStarted)
+	var lobbyCode string
+	var serverIP string
+	var serverPort uint16
+	if joinInfo != nil {
+		lobbyCode = joinInfo.LobbyCode
+		serverIP = joinInfo.ServerIP
+		serverPort = joinInfo.ServerPort
+	}
+	return aumgr.LaunchAmongUs(launcherType, gamePath, dllDir, exchangeCode, lobbyCode, serverIP, serverPort, onStarted)
 }

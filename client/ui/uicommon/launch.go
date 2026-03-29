@@ -68,10 +68,31 @@ func (s *State) Launch(path string) {
 	}()
 
 	startedAt := time.Now()
-	if err := s.Core.ExecuteLaunch(path, profileDir, profileLock.SetGamePID); err != nil {
+	joinInfo := s.TakePendingJoinInfo()
+	if err := s.Core.ExecuteLaunch(path, profileDir, joinInfo, func(pid int) error {
+		if err := profileLock.SetGamePID(pid); err != nil {
+			return err
+		}
+		if s.OnGameStarted != nil {
+			s.OnGameStarted(activeProfileID, pid)
+		}
+		if joinInfo != nil {
+			joinRequest := *joinInfo
+			go func() {
+				time.Sleep(2 * time.Second)
+				if err := s.Core.SendLobbyJoinByPID(pid, joinRequest); err != nil {
+					slog.Warn("Failed to send lobby join via IPC", "error", err)
+				}
+			}()
+		}
+		return nil
+	}); err != nil {
 		s.ShowErrorDialog(errors.New(lang.LocalizeKey("launch.error.launch_failed", "Failed to launch Among Us: ") + err.Error()))
 		slog.Warn("Failed to launch Among Us", "error", err)
 		return
+	}
+	if s.OnGameExited != nil {
+		s.OnGameExited(activeProfileID)
 	}
 	slog.Info("Launched Among Us successfully")
 	finishedAt := time.Now()

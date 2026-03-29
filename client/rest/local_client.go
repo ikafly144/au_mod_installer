@@ -57,6 +57,10 @@ func (f *FileClient) LoadData() error {
 
 var _ Client = (*FileClient)(nil)
 
+func (f *FileClient) ServerBaseURL() string {
+	return ""
+}
+
 func (f *FileClient) GetHealthStatus() (*rest.HealthStatus, error) {
 	return &rest.HealthStatus{
 		Status: "OK",
@@ -127,4 +131,16 @@ func (f *FileClient) CheckForUpdates(installedVersions map[string]string) (map[s
 
 func (f *FileClient) GetModThumbnail(modID string) ([]byte, error) {
 	return nil, fmt.Errorf("not implemented")
+}
+
+func (f *FileClient) ShareGame(aupack []byte, room rest.RoomInfo) (*rest.ShareGameResponse, error) {
+	return nil, fmt.Errorf("local mode: share game not available")
+}
+
+func (f *FileClient) DeleteSharedGame(sessionID, hostKey string) error {
+	return fmt.Errorf("local mode: delete shared game not available")
+}
+
+func (f *FileClient) GetJoinGameDownload(sessionID string) (*rest.JoinGameDownloadResponse, error) {
+	return nil, fmt.Errorf("local mode: join game download not available")
 }

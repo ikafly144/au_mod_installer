@@ -21,6 +21,10 @@ func (c *OfflineClient) GetHealthStatus() (*rest.HealthStatus, error) {
 	}, nil
 }
 
+func (c *OfflineClient) ServerBaseURL() string {
+	return ""
+}
+
 func (c *OfflineClient) GetModIDs(limit int, after string, before string) ([]string, error) {
 	return nil, errors.New("offline mode: mod IDs not available")
 }
@@ -47,4 +51,16 @@ func (c *OfflineClient) CheckForUpdates(installedVersions map[string]string) (ma
 
 func (c *OfflineClient) GetModThumbnail(modID string) ([]byte, error) {
 	return nil, errors.New("offline mode: thumbnail not available")
+}
+
+func (c *OfflineClient) ShareGame(aupack []byte, room rest.RoomInfo) (*rest.ShareGameResponse, error) {
+	return nil, errors.New("offline mode: share game not available")
+}
+
+func (c *OfflineClient) DeleteSharedGame(sessionID, hostKey string) error {
+	return errors.New("offline mode: delete shared game not available")
+}
+
+func (c *OfflineClient) GetJoinGameDownload(sessionID string) (*rest.JoinGameDownloadResponse, error) {
+	return nil, errors.New("offline mode: join game download not available")
 }

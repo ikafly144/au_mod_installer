@@ -61,6 +61,30 @@ func parseFileFlag(val string) *parsedFile {
 	return pf
 }
 
+func parseFeatures(raw []string) map[string]any {
+	features := make(map[string]any)
+	for _, item := range raw {
+		kv := strings.SplitN(item, "=", 2)
+		if len(kv) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(kv[0])
+		if key == "" {
+			continue
+		}
+		value := strings.ToLower(strings.TrimSpace(kv[1]))
+		switch value {
+		case "1", "true", "yes", "on":
+			features[key] = true
+		case "0", "false", "no", "off":
+			features[key] = false
+		default:
+			features[key] = strings.TrimSpace(kv[1])
+		}
+	}
+	return features
+}
+
 func nextVersionID(existingIDs []string) string {
 	highest := ""
 	for _, id := range existingIDs {

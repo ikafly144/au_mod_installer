@@ -12,6 +12,7 @@ import (
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/lang"
 	"fyne.io/fyne/v2/widget"
+	"github.com/google/uuid"
 
 	"github.com/ikafly144/au_mod_installer/client/core"
 	"github.com/ikafly144/au_mod_installer/client/rest"
@@ -97,6 +98,7 @@ type State struct {
 	CanLaunch        binding.Bool
 	CanInstall       binding.Bool
 	launchLock       sync.Mutex
+	joinInfoLock     sync.Mutex
 	dialogLock       sync.Mutex
 	activeDialog     dialog.Dialog
 
@@ -115,6 +117,10 @@ type State struct {
 	OnSharedURIReceived     func(uri string)
 	OnSharedArchiveReceived func(path string)
 	OnDroppedURIs           func([]fyne.URI)
+	OnGameStarted           func(profileID uuid.UUID, pid int)
+	OnGameExited            func(profileID uuid.UUID)
+
+	pendingJoinInfo *core.LaunchJoinInfo
 }
 
 func (s *State) ModInstallDir() string {
@@ -285,4 +291,26 @@ func (i *State) RefreshModInstallation() {
 	if err := i.CanLaunch.Set(canLaunch); err != nil {
 		slog.Warn("Failed to set launchable", "error", err)
 	}
+}
+
+func (s *State) SetPendingJoinInfo(joinInfo *core.LaunchJoinInfo) {
+	s.joinInfoLock.Lock()
+	defer s.joinInfoLock.Unlock()
+	if joinInfo == nil {
+		s.pendingJoinInfo = nil
+		return
+	}
+	cp := *joinInfo
+	s.pendingJoinInfo = &cp
+}
+
+func (s *State) TakePendingJoinInfo() *core.LaunchJoinInfo {
+	s.joinInfoLock.Lock()
+	defer s.joinInfoLock.Unlock()
+	if s.pendingJoinInfo == nil {
+		return nil
+	}
+	cp := *s.pendingJoinInfo
+	s.pendingJoinInfo = nil
+	return &cp
 }

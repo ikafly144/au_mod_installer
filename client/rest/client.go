@@ -37,6 +37,10 @@ func NewClient(baseURL string, configs ...config) *clientImpl {
 	return client
 }
 
+func (c *clientImpl) ServerBaseURL() string {
+	return c.BaseURL
+}
+
 func (c *clientImpl) do(endpoint *rest.CompiledEndpoint, rqBody any, rsBody any, tries int) error {
 	var (
 		rawRequestBody []byte

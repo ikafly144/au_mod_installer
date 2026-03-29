@@ -19,6 +19,7 @@ func (f *commandFactory) newVersionAddCommand() *cli.Command {
 			&cli.StringFlag{Name: "version-id", Usage: "Version ID (default: auto-incremented SemVer)"},
 			&cli.StringSliceFlag{Name: "file", Usage: "Files to add. Multiple flags supported. Format: path=...,type=...,url=...,extract_path=...,target_platform=... or direct URL/Path"},
 			&cli.StringSliceFlag{Name: "dependency", Usage: "Dependencies to add. Multiple flags supported. Format: mod_id:version_id:type (type is optional, default: required)"},
+			&cli.StringSliceFlag{Name: "feature", Usage: "Features to set. Format: name=true|false (e.g. direct_join=true)"},
 			&cli.BoolFlag{Name: "set-latest", Usage: "Set this version as the latest version for the mod"},
 		},
 		ShellComplete: cli.DefaultCompleteWithFlags,
@@ -50,6 +51,7 @@ func (f *commandFactory) newVersionAddCommand() *cli.Command {
 				ID:           versionID,
 				ModID:        &modID,
 				Dependencies: parseDependencies(cmd.StringSlice("dependency")),
+				Features:     parseFeatures(cmd.StringSlice("feature")),
 			}
 
 			for _, fileFlag := range cmd.StringSlice("file") {

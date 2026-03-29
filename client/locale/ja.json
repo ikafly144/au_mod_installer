@@ -221,5 +221,11 @@
     "launcher.launch.waiting_for_game": "ゲームの起動を待っています...",
     "launcher.sync.title": "プロファイル同期中",
     "launcher.sync.in_progress": "プロファイルを同期しています。しばらくお待ちください...",
-    "launcher.sync.success": "プロファイルの再同期とMod再ダウンロードが完了しました。"
+    "launcher.sync.success": "プロファイルの再同期とMod再ダウンロードが完了しました。",
+    "launcher.room_link.title": "部屋リンク",
+    "launcher.room_link.create": "部屋リンクを作成",
+    "launcher.room_link.copy": "リンクをコピー",
+    "launcher.room_link.copied": "部屋リンクをコピーしました。",
+    "launcher.room_link.no_room": "部屋情報を取得できません。部屋に参加してから再試行してください。",
+    "launcher.room_link.server_unavailable": "このモードでは部屋リンクを生成できません。"
 }

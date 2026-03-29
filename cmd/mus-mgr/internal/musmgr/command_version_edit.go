@@ -26,6 +26,7 @@ func (f *commandFactory) newVersionEditCommand() *cli.Command {
 		},
 		Flags: []cli.Flag{
 			&cli.StringSliceFlag{Name: "dependency", Usage: "Replace dependencies. Format: mod_id:version_id:type"},
+			&cli.StringSliceFlag{Name: "feature", Usage: "Replace features. Format: name=true|false"},
 			&cli.BoolFlag{Name: "set-latest", Usage: "Set this version as latest on the mod"},
 			&cli.BoolFlag{Name: "clear-latest-version", Usage: "Clear latest version on the mod"},
 		},
@@ -52,6 +53,15 @@ func (f *commandFactory) newVersionEditCommand() *cli.Command {
 			if cmd.IsSet("dependency") {
 				updates := map[string]any{
 					"dependencies": model.DependencyArray(parseDependencies(cmd.StringSlice("dependency"))),
+				}
+				if err := repo.UpdateModVersionFields(modID, versionID, updates); err != nil {
+					return err
+				}
+				changed = true
+			}
+			if cmd.IsSet("feature") {
+				updates := map[string]any{
+					"features": model.Features(parseFeatures(cmd.StringSlice("feature"))),
 				}
 				if err := repo.UpdateModVersionFields(modID, versionID, updates); err != nil {
 					return err

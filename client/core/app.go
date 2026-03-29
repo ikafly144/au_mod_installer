@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -157,4 +158,38 @@ func (a *App) ExportProfile(prof profile.Profile) (string, error) {
 
 func (a *App) ExportProfileArchive(prof profile.Profile, iconPNG []byte) ([]byte, error) {
 	return profile.EncodeSharedArchive(prof.MakeShared(), iconPNG)
+}
+
+type JoinGameLink struct {
+	SessionID  string
+	ServerBase string
+	Error      string
+}
+
+func (a *App) ParseJoinGameURI(uri string) (*JoinGameLink, error) {
+	parsed, err := url.Parse(uri)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse join game URI: %w", err)
+	}
+	if !strings.EqualFold(parsed.Scheme, "mod-of-us") || !strings.EqualFold(parsed.Host, "join_game") {
+		return nil, fmt.Errorf("invalid join game URI")
+	}
+	path := strings.TrimPrefix(parsed.Path, "/")
+	if !strings.HasPrefix(path, "v1/") {
+		return nil, fmt.Errorf("unsupported join game URI version")
+	}
+	sessionID := strings.TrimPrefix(path, "v1/")
+	values := parsed.Query()
+	serverBase := strings.TrimSpace(values.Get("server"))
+	if serverBase == "" {
+		return nil, fmt.Errorf("join game URI missing server")
+	}
+	if parsedServer, err := url.Parse(serverBase); err != nil || parsedServer.Scheme == "" || parsedServer.Host == "" {
+		return nil, fmt.Errorf("invalid join game URI server")
+	}
+	return &JoinGameLink{
+		SessionID:  sessionID,
+		ServerBase: serverBase,
+		Error:      strings.TrimSpace(values.Get("error")),
+	}, nil
 }

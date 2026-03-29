@@ -75,3 +75,33 @@ func (c *clientImpl) CheckForUpdates(installedVersions map[string]string) (map[s
 	}
 	return updates, nil
 }
+
+func (c *clientImpl) ShareGame(aupack []byte, room rest.RoomInfo) (*rest.ShareGameResponse, error) {
+	var rs rest.ShareGameResponse
+	err := c.do(rest.EndpointShareGame.Compile(nil), rest.ShareGameRequest{
+		Aupack: aupack,
+		Room:   room,
+	}, &rs, 1)
+	if err != nil {
+		return nil, err
+	}
+	return &rs, nil
+}
+
+func (c *clientImpl) DeleteSharedGame(sessionID, hostKey string) error {
+	values := make(url.Values)
+	values.Set("session_id", sessionID)
+	values.Set("host_key", hostKey)
+	return c.do(rest.EndpointDeleteShareGame.Compile(values), nil, nil, 1)
+}
+
+func (c *clientImpl) GetJoinGameDownload(sessionID string) (*rest.JoinGameDownloadResponse, error) {
+	values := make(url.Values)
+	values.Set("session_id", sessionID)
+	values.Set("download", "1")
+	var rs rest.JoinGameDownloadResponse
+	if err := c.do(rest.EndpointJoinGame.Compile(values), nil, &rs, 1); err != nil {
+		return nil, err
+	}
+	return &rs, nil
+}

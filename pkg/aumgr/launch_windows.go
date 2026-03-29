@@ -8,22 +8,23 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 
 	"golang.org/x/sys/windows"
 )
 
-func LaunchAmongUs(launcherType LauncherType, amongUsDir string, dllDir string, exchangeCode string, onStarted func(pid int) error) error {
+func LaunchAmongUs(launcherType LauncherType, amongUsDir string, dllDir string, exchangeCode string, lobbyCode string, serverIP string, serverPort uint16, onStarted func(pid int) error) error {
 	switch launcherType {
 	case LauncherSteam:
-		return launchSteam(amongUsDir, dllDir, onStarted)
+		return launchSteam(amongUsDir, dllDir, lobbyCode, serverIP, serverPort, onStarted)
 	case LauncherEpicGames:
-		return launchEpicGames(amongUsDir, dllDir, exchangeCode, onStarted)
+		return launchEpicGames(amongUsDir, dllDir, exchangeCode, lobbyCode, serverIP, serverPort, onStarted)
 	default:
-		return launchDefault(amongUsDir, dllDir, onStarted)
+		return launchDefault(amongUsDir, dllDir, lobbyCode, serverIP, serverPort, onStarted)
 	}
 }
 
-func launchDefault(amongUsDir string, dllDir string, onStarted func(pid int) error, args ...string) error {
+func launchDefault(amongUsDir string, dllDir string, lobbyCode string, serverIP string, serverPort uint16, onStarted func(pid int) error, args ...string) error {
 	exePath := filepath.Join(amongUsDir, "Among Us.exe")
 	if _, err := os.Stat(exePath); os.IsNotExist(err) {
 		return fmt.Errorf("among Us executable not found: %s", exePath)
@@ -49,6 +50,12 @@ func launchDefault(amongUsDir string, dllDir string, onStarted func(pid int) err
 			"--doorstop-clr-corlib-dir", corlibDir,
 			"--doorstop-clr-runtime-coreclr-path", coreClrPath,
 		)
+	}
+	if lobbyCode != "" {
+		finalArgs = append(finalArgs, "--lobby-code", lobbyCode)
+	}
+	if serverIP != "" && serverPort > 0 {
+		finalArgs = append(finalArgs, "--server-ip", serverIP, "--server-port", strconv.FormatUint(uint64(serverPort), 10))
 	}
 
 	cmd := exec.Command(exePath, finalArgs...)
@@ -83,7 +90,7 @@ func launchDefault(amongUsDir string, dllDir string, onStarted func(pid int) err
 	return nil
 }
 
-func launchSteam(amongUsDir string, dllDir string, onStarted func(pid int) error) error {
+func launchSteam(amongUsDir string, dllDir string, lobbyCode string, serverIP string, serverPort uint16, onStarted func(pid int) error) error {
 	steamRunning, err := isSteamRunning()
 	if err != nil {
 		return fmt.Errorf("failed to check Steam process: %w", err)
@@ -93,7 +100,7 @@ func launchSteam(amongUsDir string, dllDir string, onStarted func(pid int) error
 	}
 
 	// Directly launch the executable to support SetDllDirectory
-	return launchDefault(amongUsDir, dllDir, onStarted)
+	return launchDefault(amongUsDir, dllDir, lobbyCode, serverIP, serverPort, onStarted)
 }
 
 func isSteamRunning() (bool, error) {
@@ -104,12 +111,12 @@ func isSteamRunning() (bool, error) {
 	return findProcessByName(processes, "steam.exe") != nil, nil
 }
 
-func launchEpicGames(amongUsDir string, dllDir string, exchangeCode string, onStarted func(pid int) error) error {
+func launchEpicGames(amongUsDir string, dllDir string, exchangeCode string, lobbyCode string, serverIP string, serverPort uint16, onStarted func(pid int) error) error {
 	args := []string{}
 	if exchangeCode != "" {
 		args = append(args, "-AUTH_PASSWORD="+exchangeCode)
 		args = append(args, "-AUTH_TYPE=exchangecode")
 		args = append(args, "-AUTH_LOGIN=unused")
 	}
-	return launchDefault(amongUsDir, dllDir, onStarted, args...)
+	return launchDefault(amongUsDir, dllDir, lobbyCode, serverIP, serverPort, onStarted, args...)
 }

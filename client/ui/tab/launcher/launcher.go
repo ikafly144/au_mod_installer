@@ -33,7 +33,10 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/ikafly144/au_mod_installer/client/core"
+	clientrest "github.com/ikafly144/au_mod_installer/client/rest"
 	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
+	commonrest "github.com/ikafly144/au_mod_installer/common/rest"
 	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 	"github.com/ikafly144/au_mod_installer/pkg/profile"
@@ -46,6 +49,11 @@ import (
 type Launcher struct {
 	state               *uicommon.State
 	launchButton        *widget.Button
+	shareRoomButton     *widget.Button
+	copyRoomLinkButton  *widget.Button
+	roomLinkEntry       *widget.Entry
+	roomLinkLabel       *widget.Label
+	roomLinkContainer   *fyne.Container
 	greetingContent     *widget.Label
 	createProfileButton *widget.Button
 	importProfileButton *widget.Button
@@ -74,6 +82,14 @@ type Launcher struct {
 	runningProfileID   uuid.UUID
 	launchingProfileID uuid.UUID
 	launchingProfile   bool
+	runningDirectJoin  bool
+	runningGamePID     int
+	lobbyPollStop      func()
+	lobbyInfo          *core.IPCLobbyInfo
+
+	roomShareMu         sync.Mutex
+	roomShareGenerating bool
+	roomShareCache      sharedRoomLinkCache
 }
 
 var _ uicommon.Tab = (*Launcher)(nil)
@@ -100,7 +116,16 @@ const (
 
 	profileArchiveDownloadTimeout  = 30 * time.Second
 	profileArchiveDownloadMaxBytes = int64(64 << 20)
+	lobbyPollInterval              = 2 * time.Second
 )
+
+type sharedRoomLinkCache struct {
+	RoomKey   string
+	URL       string
+	SessionID string
+	HostKey   string
+	ExpiresAt time.Time
+}
 
 func NewLauncherTab(s *uicommon.State) uicommon.Tab {
 	var l Launcher
@@ -112,6 +137,10 @@ func NewLauncherTab(s *uicommon.State) uicommon.Tab {
 	l = Launcher{
 		state:                  s,
 		launchButton:           widget.NewButtonWithIcon(lang.LocalizeKey("launcher.launch", "Launch"), theme.MediaPlayIcon(), l.runLaunch),
+		shareRoomButton:        widget.NewButtonWithIcon(lang.LocalizeKey("launcher.room_link.create", "部屋リンクを作成"), theme.MailForwardIcon(), l.shareCurrentRoom),
+		copyRoomLinkButton:     widget.NewButtonWithIcon(lang.LocalizeKey("launcher.room_link.copy", "リンクをコピー"), theme.ContentCopyIcon(), l.copyRoomLinkToClipboard),
+		roomLinkEntry:          widget.NewEntry(),
+		roomLinkLabel:          widget.NewLabel(lang.LocalizeKey("launcher.room_link.title", "部屋リンク")),
 		createProfileButton:    widget.NewButtonWithIcon(lang.LocalizeKey("profile.create", "Create Profile"), theme.ContentAddIcon(), l.createProfile),
 		importProfileButton:    widget.NewButtonWithIcon(lang.LocalizeKey("profile.import", "Import"), theme.ContentPasteIcon(), l.showImportDialog),
 		greetingContent:        widget.NewLabelWithStyle(fmt.Sprintf("バージョン：%s (%s)", s.Version, revision), fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
@@ -123,6 +152,10 @@ func NewLauncherTab(s *uicommon.State) uicommon.Tab {
 		modThumbnailLoading:    map[string]bool{},
 	}
 	l.createProfileButton.Importance = widget.HighImportance
+	l.shareRoomButton.Importance = widget.MediumImportance
+	l.copyRoomLinkButton.Importance = widget.LowImportance
+	l.roomLinkEntry.Disable()
+	l.roomLinkEntry.Wrapping = fyne.TextWrapWord
 
 	l.init()
 
@@ -130,6 +163,32 @@ func NewLauncherTab(s *uicommon.State) uicommon.Tab {
 }
 
 func (l *Launcher) init() {
+	l.state.OnSharedURIReceived = func(uri string) {
+		l.state.SharedURI = uri
+		fyne.Do(l.checkSharedURI)
+	}
+	l.state.OnSharedArchiveReceived = func(path string) {
+		l.state.SharedArchive = path
+		fyne.Do(l.checkSharedArchive)
+	}
+	l.state.OnDroppedURIs = func(uris []fyne.URI) {
+		l.handleDroppedURIs(uris)
+	}
+	l.state.OnGameStarted = func(profileID uuid.UUID, pid int) {
+		l.onGameStarted(profileID, pid)
+	}
+	l.state.OnGameExited = func(profileID uuid.UUID) {
+		l.onGameExited(profileID)
+	}
+	l.setupRoomLinkUI()
+	l.roomLinkEntry.OnChanged = func(value string) {
+		l.copyRoomLinkButton.SetText(lang.LocalizeKey("launcher.room_link.copy", "リンクをコピー"))
+		if strings.TrimSpace(value) == "" {
+			l.copyRoomLinkButton.Disable()
+			return
+		}
+		l.copyRoomLinkButton.Enable()
+	}
 	if l.canLaunchListener == nil {
 		l.canLaunchListener = binding.NewDataListener(l.checkLaunchState)
 		l.state.CanLaunch.AddListener(l.canLaunchListener)
@@ -144,18 +203,266 @@ func (l *Launcher) init() {
 	l.checkLaunchState()
 	l.checkSharedURI()
 	l.checkSharedArchive()
+}
 
-	l.state.OnSharedURIReceived = func(uri string) {
-		l.state.SharedURI = uri
-		fyne.Do(l.checkSharedURI)
+func (l *Launcher) setupRoomLinkUI() {
+	l.roomLinkEntry.SetPlaceHolder("https://...")
+	l.copyRoomLinkButton.Disable()
+	l.roomLinkContainer = container.NewVBox(
+		widget.NewSeparator(),
+		l.roomLinkLabel,
+		l.roomLinkEntry,
+		container.NewHBox(l.shareRoomButton, l.copyRoomLinkButton),
+	)
+	l.roomLinkContainer.Hide()
+}
+
+func (l *Launcher) isDirectJoinEnabledForRunningProfile() bool {
+	l.runningProfileMu.Lock()
+	defer l.runningProfileMu.Unlock()
+	return l.runningDirectJoin
+}
+
+func (l *Launcher) setRunningDirectJoin(enabled bool) {
+	l.runningProfileMu.Lock()
+	l.runningDirectJoin = enabled
+	l.runningProfileMu.Unlock()
+}
+
+func hasDirectJoinFeature(versions []modmgr.ModVersion) bool {
+	for _, v := range versions {
+		if v.HasFeature(modmgr.FeatureDirectJoin) {
+			return true
+		}
 	}
-	l.state.OnSharedArchiveReceived = func(path string) {
-		l.state.SharedArchive = path
-		fyne.Do(l.checkSharedArchive)
+	return false
+}
+
+func (l *Launcher) onGameStarted(profileID uuid.UUID, pid int) {
+	l.runningProfileMu.Lock()
+	l.runningGamePID = pid
+	directJoin := l.runningDirectJoin
+	l.runningProfileMu.Unlock()
+	if !directJoin || pid <= 0 || !l.state.Core.IsLobbyInfoAvailable() {
+		fyne.Do(func() {
+			l.refreshRoomLinkUI(nil, false)
+		})
+		return
 	}
-	l.state.OnDroppedURIs = func(uris []fyne.URI) {
-		l.handleDroppedURIs(uris)
+	l.startLobbyPolling(pid)
+}
+
+func (l *Launcher) onGameExited(profileID uuid.UUID) {
+	l.stopLobbyPolling()
+	l.runningProfileMu.Lock()
+	l.runningGamePID = 0
+	l.runningDirectJoin = false
+	l.runningProfileMu.Unlock()
+	l.invalidateCachedRoomShareAsync()
+	fyne.Do(func() {
+		l.refreshRoomLinkUI(nil, false)
+	})
+}
+
+func (l *Launcher) startLobbyPolling(pid int) {
+	l.stopLobbyPolling()
+	stop := l.state.Core.StartLobbyInfoPolling(pid, lobbyPollInterval, func(info *core.IPCLobbyInfo) {
+		fyne.Do(func() {
+			l.refreshRoomLinkUI(info, true)
+		})
+	}, func(err error) {
+		slog.Debug("Lobby polling failed", "error", err)
+	})
+	l.runningProfileMu.Lock()
+	l.lobbyPollStop = stop
+	l.runningProfileMu.Unlock()
+}
+
+func (l *Launcher) stopLobbyPolling() {
+	l.runningProfileMu.Lock()
+	stop := l.lobbyPollStop
+	l.lobbyPollStop = nil
+	l.runningProfileMu.Unlock()
+	if stop != nil {
+		stop()
 	}
+}
+
+func (l *Launcher) currentRoomInfo(info *core.IPCLobbyInfo) (commonrest.RoomInfo, bool) {
+	if info == nil {
+		return commonrest.RoomInfo{}, false
+	}
+	if !info.IsConnected {
+		return commonrest.RoomInfo{}, false
+	}
+	if strings.TrimSpace(info.LobbyCode) == "" {
+		return commonrest.RoomInfo{}, false
+	}
+	room := commonrest.RoomInfo{
+		LobbyCode: strings.TrimSpace(info.LobbyCode),
+		ServerIP:  strings.TrimSpace(info.ServerIP),
+	}
+	if info.ServerPort > 0 && info.ServerPort <= 65535 {
+		room.ServerPort = uint16(info.ServerPort)
+	}
+	return room, true
+}
+
+func roomKeyForCache(room commonrest.RoomInfo, profileID uuid.UUID) string {
+	return strings.ToUpper(strings.TrimSpace(room.LobbyCode)) + "|" + strings.TrimSpace(room.ServerIP) + "|" + fmt.Sprint(room.ServerPort) + "|" + profileID.String()
+}
+
+func (l *Launcher) refreshRoomLinkUI(info *core.IPCLobbyInfo, running bool) {
+	l.lobbyInfo = info
+	if !running || !l.isDirectJoinEnabledForRunningProfile() {
+		l.roomLinkContainer.Hide()
+		l.roomLinkEntry.SetText("")
+		l.copyRoomLinkButton.Disable()
+		l.shareRoomButton.Disable()
+		return
+	}
+	room, ok := l.currentRoomInfo(info)
+	if !ok {
+		l.roomLinkContainer.Hide()
+		l.roomLinkEntry.SetText("")
+		l.copyRoomLinkButton.Disable()
+		l.shareRoomButton.Disable()
+		l.invalidateCachedRoomShareAsync()
+		return
+	}
+	l.roomLinkContainer.Show()
+	l.shareRoomButton.Enable()
+	key := roomKeyForCache(room, l.selectedProfileID)
+	l.roomShareMu.Lock()
+	cache := l.roomShareCache
+	l.roomShareMu.Unlock()
+	if cache.RoomKey != key {
+		l.roomLinkEntry.SetText("")
+		l.copyRoomLinkButton.Disable()
+		if cache.SessionID != "" {
+			l.invalidateCachedRoomShareAsync()
+		}
+		return
+	}
+	if cache.URL != "" && cache.ExpiresAt.After(time.Now()) {
+		l.roomLinkEntry.SetText(cache.URL)
+		l.copyRoomLinkButton.Enable()
+	} else {
+		l.copyRoomLinkButton.Disable()
+	}
+}
+
+func (l *Launcher) invalidateCachedRoomShareAsync() {
+	l.roomShareMu.Lock()
+	cache := l.roomShareCache
+	l.roomShareCache = sharedRoomLinkCache{}
+	l.roomShareMu.Unlock()
+	if cache.SessionID == "" || cache.HostKey == "" {
+		return
+	}
+	go func() {
+		if err := l.state.Rest.DeleteSharedGame(cache.SessionID, cache.HostKey); err != nil {
+			slog.Debug("Failed to invalidate shared room link", "error", err, "session_id", cache.SessionID)
+		}
+	}()
+}
+
+func (l *Launcher) copyRoomLinkToClipboard() {
+	link := strings.TrimSpace(l.roomLinkEntry.Text)
+	if link == "" {
+		return
+	}
+	fyne.CurrentApp().Clipboard().SetContent(link)
+	l.state.ShowInfoDialog(
+		lang.LocalizeKey("common.success", "Success"),
+		lang.LocalizeKey("launcher.room_link.copied", "部屋リンクをコピーしました。"),
+	)
+}
+
+func (l *Launcher) currentSelectedProfile() (profile.Profile, bool) {
+	for _, prof := range l.profiles {
+		if prof.ID == l.selectedProfileID {
+			return prof, true
+		}
+	}
+	return profile.Profile{}, false
+}
+
+func (l *Launcher) shareCurrentRoom() {
+	l.roomShareMu.Lock()
+	if l.roomShareGenerating {
+		l.roomShareMu.Unlock()
+		return
+	}
+	l.roomShareGenerating = true
+	l.roomShareMu.Unlock()
+	defer func() {
+		l.roomShareMu.Lock()
+		l.roomShareGenerating = false
+		l.roomShareMu.Unlock()
+	}()
+
+	prof, ok := l.currentSelectedProfile()
+	if !ok {
+		l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("launcher.error.no_profile", "Please select a profile to launch.")))
+		return
+	}
+	room, ok := l.currentRoomInfo(l.lobbyInfo)
+	if !ok {
+		l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("launcher.room_link.no_room", "部屋情報を取得できません。部屋に参加してから再試行してください。")))
+		return
+	}
+	roomKey := roomKeyForCache(room, prof.ID)
+
+	l.roomShareMu.Lock()
+	cache := l.roomShareCache
+	l.roomShareMu.Unlock()
+	if cache.RoomKey == roomKey && cache.URL != "" && cache.ExpiresAt.After(time.Now()) {
+		fyne.Do(func() {
+			l.roomLinkEntry.SetText(cache.URL)
+			l.copyRoomLinkButton.Enable()
+		})
+		l.copyRoomLinkToClipboard()
+		return
+	}
+
+	iconPNG, err := l.state.ProfileManager.LoadIconPNG(prof.ID)
+	if err != nil {
+		l.state.ShowErrorDialog(err)
+		return
+	}
+	base := strings.TrimSpace(l.state.Rest.ServerBaseURL())
+	if base == "" {
+		l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("launcher.room_link.server_unavailable", "このモードでは部屋リンクを生成できません。")))
+		return
+	}
+	aupack, err := l.state.Core.ExportProfileArchive(prof, iconPNG)
+	if err != nil {
+		l.state.ShowErrorDialog(err)
+		return
+	}
+	rs, err := l.state.Rest.ShareGame(aupack, room)
+	if err != nil {
+		l.state.ShowErrorDialog(err)
+		return
+	}
+	if strings.HasPrefix(rs.URL, "/") {
+		rs.URL = strings.TrimRight(base, "/") + rs.URL
+	}
+	l.roomShareMu.Lock()
+	l.roomShareCache = sharedRoomLinkCache{
+		RoomKey:   roomKey,
+		URL:       rs.URL,
+		SessionID: rs.SessionID,
+		HostKey:   rs.HostKey,
+		ExpiresAt: rs.ExpiresAt,
+	}
+	l.roomShareMu.Unlock()
+	fyne.Do(func() {
+		l.roomLinkEntry.SetText(rs.URL)
+		l.copyRoomLinkButton.Enable()
+	})
+	l.copyRoomLinkToClipboard()
 }
 
 func (l *Launcher) shareProfile(prof profile.Profile) {
@@ -432,6 +739,9 @@ func (l *Launcher) checkSharedURI() {
 		case strings.EqualFold(parsed.Scheme, "http"), strings.EqualFold(parsed.Scheme, "https"):
 			l.importProfileFromArchiveURL(parsed.String())
 			return
+		case strings.EqualFold(parsed.Scheme, "mod-of-us") && strings.EqualFold(parsed.Host, "join_game"):
+			l.handleJoinGameURI(sharedURI)
+			return
 		}
 	}
 
@@ -442,6 +752,58 @@ func (l *Launcher) checkSharedURI() {
 	}
 
 	l.confirmAndImportProfile(prof, nil)
+}
+
+func (l *Launcher) handleJoinGameURI(sharedURI string) {
+	joinURI, err := l.state.Core.ParseJoinGameURI(sharedURI)
+	if err != nil {
+		dialog.ShowError(err, l.state.Window)
+		return
+	}
+	if joinURI.Error != "" {
+		l.state.ShowErrorDialog(errors.New(joinURI.Error))
+		return
+	}
+
+	client := clientrest.NewClient(joinURI.ServerBase)
+	rs, err := client.GetJoinGameDownload(joinURI.SessionID)
+	if err != nil {
+		dialog.ShowError(err, l.state.Window)
+		return
+	}
+
+	tmpFile, err := os.CreateTemp("", "mod-of-us-join-*.aupack")
+	if err != nil {
+		dialog.ShowError(err, l.state.Window)
+		return
+	}
+	defer os.Remove(tmpFile.Name())
+	if _, err := tmpFile.Write(rs.Aupack); err != nil {
+		_ = tmpFile.Close()
+		dialog.ShowError(err, l.state.Window)
+		return
+	}
+	stat, err := tmpFile.Stat()
+	if err != nil {
+		_ = tmpFile.Close()
+		dialog.ShowError(err, l.state.Window)
+		return
+	}
+	shared, iconPNG, err := l.state.Core.HandleSharedProfileArchive(tmpFile, stat.Size())
+	_ = tmpFile.Close()
+	if err != nil {
+		dialog.ShowError(err, l.state.Window)
+		return
+	}
+	joinInfo := &core.LaunchJoinInfo{
+		LobbyCode:  rs.Room.LobbyCode,
+		ServerIP:   rs.Room.ServerIP,
+		ServerPort: rs.Room.ServerPort,
+	}
+	if err := l.importProfileWithJoinInfo(shared, iconPNG, joinInfo); err != nil {
+		dialog.ShowError(err, l.state.Window)
+		return
+	}
 }
 
 func (l *Launcher) checkSharedArchive() {
@@ -612,6 +974,51 @@ func (l *Launcher) importProfile(shared *profile.SharedProfile, iconPNG []byte) 
 		}
 	}
 	l.refreshProfiles()
+}
+
+func (l *Launcher) importProfileWithJoinInfo(shared *profile.SharedProfile, iconPNG []byte, joinInfo *core.LaunchJoinInfo) error {
+	prof := profile.Profile{
+		ID:          shared.ID,
+		Name:        shared.Name,
+		Author:      shared.Author,
+		Description: shared.Description,
+		UpdatedAt:   time.Now(),
+	}
+
+	if p, ok := l.state.ProfileManager.Get(shared.ID); ok {
+		prof.PlayDurationNS = p.PlayDurationNS
+		prof.LastLaunchedAt = p.LastLaunchedAt
+	}
+
+	for modID, versionID := range shared.ModVersions {
+		info, err := l.state.Rest.GetModVersion(modID, versionID)
+		if err != nil {
+			return fmt.Errorf("failed to fetch mod version info for %s:%s: %w", modID, versionID, err)
+		}
+		prof.AddModVersion(*info)
+	}
+
+	if err := l.state.ProfileManager.Add(prof); err != nil {
+		return err
+	}
+	if len(iconPNG) > 0 {
+		if err := l.state.ProfileManager.SaveIconPNG(prof.ID, iconPNG); err != nil {
+			return err
+		}
+	}
+
+	l.refreshProfiles()
+	for i, p := range l.profiles {
+		if p.ID == prof.ID {
+			l.profileList.Select(i)
+			break
+		}
+	}
+	if joinInfo != nil {
+		l.state.SetPendingJoinInfo(joinInfo)
+		l.runLaunch()
+	}
+	return nil
 }
 
 func (l *Launcher) setupProfileList() {
@@ -997,6 +1404,7 @@ func (l *Launcher) Tab() (*container.TabItem, error) {
 
 	footer := container.NewVBox(
 		l.launchButton,
+		l.roomLinkContainer,
 		l.state.ErrorText,
 	)
 	l.profileViews = container.NewStack(l.profileList, l.profileGridScroll)
@@ -1046,6 +1454,7 @@ func (l *Launcher) runLaunch() {
 		l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("error.game_already_running", "Already running.")))
 		return
 	}
+	l.setRunningDirectJoin(false)
 
 	launchDialog, launchProgress := l.newLaunchProgressDialog()
 	l.setLaunchingProfile(targetProfile.ID, true)
@@ -1106,12 +1515,15 @@ func (l *Launcher) runLaunch() {
 			launchDialog.Hide()
 			progressShown = false
 		})
+		l.setRunningDirectJoin(hasDirectJoinFeature(resolvedVersions))
 		l.setLaunchingProfile(targetProfile.ID, false)
 		l.setRunningProfile(targetProfile.ID)
 		fyne.DoAndWait(l.checkLaunchState)
 
 		// Proceed to Launch
 		l.state.Launch(path)
+		l.stopLobbyPolling()
+		l.setRunningDirectJoin(false)
 		l.clearRunningProfile(targetProfile.ID)
 		fyne.DoAndWait(l.checkLaunchState)
 	}()
@@ -1127,6 +1539,9 @@ func (l *Launcher) newLaunchProgressDialog() (*dialog.CustomDialog, *progress.Fy
 }
 
 func (l *Launcher) checkLaunchState() {
+	l.shareRoomButton.Disable()
+	l.copyRoomLinkButton.Disable()
+	l.roomLinkContainer.Hide()
 	runningProfileID, launching := l.currentBusyProfile()
 	if runningProfileID != uuid.Nil && launching {
 		l.launchButton.SetText(lang.LocalizeKey("launcher.launch.preparing", "Preparing launch..."))

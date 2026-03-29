@@ -23,6 +23,8 @@ const (
 	ModTypeModPack ModType = "modpack"
 )
 
+const FeatureDirectJoin = "direct_join"
+
 func (mt ModType) IsVisible() bool {
 	switch mt {
 	case ModTypeMod, ModTypeModPack:
@@ -88,5 +90,23 @@ func (m ModVersion) Downloads(binaryType aumgr.BinaryType) iter.Seq[model.ModVer
 				slog.Info("Skipping incompatible file", "file", file, "binaryType", binaryType)
 			}
 		}
+	}
+}
+
+func (m ModVersion) HasFeature(feature string) bool {
+	if m.Features == nil {
+		return false
+	}
+	value, ok := m.Features[feature]
+	if !ok {
+		return false
+	}
+	switch v := value.(type) {
+	case bool:
+		return v
+	case string:
+		return v != "" && v != "false" && v != "0"
+	default:
+		return true
 	}
 }

@@ -6,6 +6,7 @@ import (
 )
 
 type Client interface {
+	ServerBaseURL() string
 	GetHealthStatus() (*rest.HealthStatus, error)
 	GetModIDs(limit int, after string, before string) ([]string, error)
 	GetMod(modID string) (*modmgr.Mod, error)
@@ -14,4 +15,7 @@ type Client interface {
 	GetLatestModVersion(modID string) (*modmgr.ModVersion, error)
 	GetModThumbnail(modID string) ([]byte, error)
 	CheckForUpdates(installedVersions map[string]string) (map[string]*modmgr.ModVersion, error)
+	ShareGame(aupack []byte, room rest.RoomInfo) (*rest.ShareGameResponse, error)
+	DeleteSharedGame(sessionID, hostKey string) error
+	GetJoinGameDownload(sessionID string) (*rest.JoinGameDownloadResponse, error)
 }

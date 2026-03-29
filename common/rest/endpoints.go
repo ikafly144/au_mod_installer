@@ -10,9 +10,12 @@ var (
 	EndpointHealth              = NewEndpoint("GET", "/health")
 	EndpointGetModList          = NewEndpoint("GET", "/mods")
 	EndpointGetModDetail        = NewEndpoint("GET", "/mod/:mod_id")
-	EndpointGetModThumbnail     = NewEndpoint("GET", "/mod/:mod_id/thumbnail") // Future plan
+	EndpointGetModThumbnail     = NewEndpoint("GET", "/mod/:mod_id/thumbnail")
 	EndpointGetModVersionList   = NewEndpoint("GET", "/mod/:mod_id/versions")
 	EndpointGetModVersionDetail = NewEndpoint("GET", "/mod/:mod_id/version/:version_id")
+	EndpointShareGame           = NewEndpoint("POST", "/share_game")
+	EndpointDeleteShareGame     = NewEndpoint("DELETE", "/share_game")
+	EndpointJoinGame            = NewEndpoint("GET", "/join_game")
 )
 
 func NewEndpoint(method, path string) *Endpoint {
