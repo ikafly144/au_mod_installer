@@ -2,6 +2,10 @@
 set -e
 
 # register_mod.sh - Register a new mod from a rule file using mus-mgr
+#
+# This script registers a mod (not a version) in the database.
+# It works with both GitHub Release and GitHub Actions based rules.
+# For version registration, use fetch_update.sh instead.
 
 DB_URL="${DATABASE_URL:-}"
 RULE_FILE=""

@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"runtime"
 	"strings"
 
@@ -25,6 +26,9 @@ var (
 
 func CheckForUpdates(ctx context.Context, branch Branch, currentVersion string) (releaseTag string, err error) {
 	client := github.NewClient(http.DefaultClient)
+	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
+		client = client.WithAuthToken(token)
+	}
 	opt := &github.ListOptions{
 		PerPage: 10,
 		Page:    1,
@@ -64,6 +68,10 @@ func CheckForUpdates(ctx context.Context, branch Branch, currentVersion string) 
 
 func Update(ctx context.Context, tag string) error {
 	client := github.NewClient(http.DefaultClient)
+	token := os.Getenv("GITHUB_TOKEN")
+	if token != "" {
+		client = client.WithAuthToken(token)
+	}
 	release, _, err := client.Repositories.GetReleaseByTag(ctx, repoOwner, repoName, tag)
 	if err != nil {
 		return err
@@ -79,7 +87,14 @@ func Update(ctx context.Context, tag string) error {
 			break
 		}
 		if asset.GetName() == "checksums.txt" {
-			resp, err := http.Get(asset.GetBrowserDownloadURL())
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, asset.GetBrowserDownloadURL(), nil)
+			if err != nil {
+				return err
+			}
+			if token != "" {
+				req.Header.Set("Authorization", "Bearer "+token)
+			}
+			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
 				return err
 			}
@@ -102,7 +117,14 @@ func Update(ctx context.Context, tag string) error {
 		}
 	}
 	if binaryAsset != nil {
-		resp, err := http.Get(binaryAsset.GetBrowserDownloadURL())
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, binaryAsset.GetBrowserDownloadURL(), nil)
+		if err != nil {
+			return err
+		}
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			return err
 		}
