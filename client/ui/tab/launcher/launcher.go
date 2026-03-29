@@ -206,6 +206,22 @@ func (l *Launcher) init() {
 	l.checkLaunchState()
 	l.checkSharedURI()
 	l.checkSharedArchive()
+	l.restoreRunningProfiles()
+}
+
+func (l *Launcher) restoreRunningProfiles() {
+	runningProfiles, err := l.state.Core.LoadRunningProfilesFromLocks()
+	if err != nil {
+		slog.Warn("Failed to load running profiles from lock files", "error", err)
+		return
+	}
+
+	for _, info := range runningProfiles {
+		slog.Info("Restoring running profile from lock file", "profile_id", info.ProfileID, "game_pid", info.GamePID)
+		if l.state.OnGameStarted != nil {
+			l.state.OnGameStarted(info.ProfileID, info.GamePID)
+		}
+	}
 }
 
 func (l *Launcher) setupRoomLinkUI() {

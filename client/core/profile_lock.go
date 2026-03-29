@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/google/uuid"
@@ -195,4 +196,59 @@ func reconcileProfileLock(lockPath string) (bool, error) {
 		}
 		return false, nil
 	}
+}
+
+type RunningProfileInfo struct {
+	ProfileID uuid.UUID
+	GamePID   int
+}
+
+// LoadRunningProfilesFromLocks scans the profile lock directory and returns information
+// about profiles that are currently running (have valid lock files with active processes).
+func (a *App) LoadRunningProfilesFromLocks() ([]RunningProfileInfo, error) {
+	lockDir := filepath.Join(a.ConfigDir, "profile_locks")
+	if err := os.MkdirAll(lockDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create profile lock directory: %w", err)
+	}
+
+	entries, err := os.ReadDir(lockDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read profile lock directory: %w", err)
+	}
+
+	var runningProfiles []RunningProfileInfo
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".lock" {
+			continue
+		}
+
+		lockPath := filepath.Join(lockDir, entry.Name())
+		busy, err := reconcileProfileLock(lockPath)
+		if err != nil {
+			continue
+		}
+		if !busy {
+			continue
+		}
+
+		state, err := readProfileLockState(lockPath)
+		if err != nil {
+			continue
+		}
+
+		profileIDStr := strings.TrimSuffix(entry.Name(), ".lock")
+		profileID, err := uuid.Parse(profileIDStr)
+		if err != nil {
+			continue
+		}
+
+		if state.State == profileLockStateRunning && state.GamePID > 0 {
+			runningProfiles = append(runningProfiles, RunningProfileInfo{
+				ProfileID: profileID,
+				GamePID:   state.GamePID,
+			})
+		}
+	}
+
+	return runningProfiles, nil
 }

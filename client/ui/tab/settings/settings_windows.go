@@ -520,9 +520,8 @@ func (s *Settings) newOpenSourcePage() fyne.CanvasObject {
 	pageStack := container.NewStack()
 
 	showListPage := func() {}
-	var showDetailPage func(title, licenseText, licenseURL string)
 
-	showDetailPage = func(title, licenseText, licenseURL string) {
+	showDetailPage := func(title, licenseText, licenseURL string) {
 		licenseText = strings.TrimSpace(licenseText)
 		if licenseText == "" {
 			licenseText = lang.LocalizeKey("settings.opensource.load_failed", "Couldn't load license information. Please restart the app and try again.")
