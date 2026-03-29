@@ -39,7 +39,7 @@ func (f *commandFactory) newVersionInfoCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			b, err := json.MarshalIndent(modVersion, "", "  ")
+			b, err := json.Marshal(modVersion)
 			if err != nil {
 				return err
 			}

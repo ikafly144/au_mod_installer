@@ -3,7 +3,6 @@ package modmgr
 import (
 	"archive/zip"
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,7 +19,6 @@ import (
 
 	"github.com/ikafly144/au_mod_installer/common/rest/model"
 	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
-	"github.com/ikafly144/au_mod_installer/pkg/ghactions"
 	"github.com/ikafly144/au_mod_installer/pkg/progress"
 )
 
@@ -187,25 +185,7 @@ func DownloadMods(cacheDir string, modVersions []ModVersion, binaryType aumgr.Bi
 		slog.Info("Downloading mod", "modId", modVersions[i].ModID, "versionId", modVersions[i].ID)
 		for file := range modVersions[i].Downloads(binaryType) {
 			var response *http.Response
-			var resolvedBody io.ReadCloser
-			var resolvedContentLength int64
-			var resolvedURL string
-			var resolvedFilename string
 			for _, uri := range file.Downloads {
-				if ghactions.IsArtifactURL(uri) {
-					token := os.Getenv("GITHUB_TOKEN")
-					filename, content, err := ghactions.ResolveArtifactURL(context.Background(), uri, token)
-					if err != nil {
-						slog.Error("Failed to resolve actions artifact url", "url", uri, "error", err)
-						continue
-					}
-					resolvedFilename = filename
-					resolvedContentLength = int64(len(content))
-					resolvedBody = io.NopCloser(bytes.NewReader(content))
-					resolvedURL = uri
-					break
-				}
-
 				req, err := http.NewRequest(http.MethodGet, uri, nil)
 				if err != nil {
 					slog.Error("Failed to create HTTP request for mod file", "url", uri, "error", err)
@@ -224,24 +204,15 @@ func DownloadMods(cacheDir string, modVersions []ModVersion, binaryType aumgr.Bi
 				response = resp
 				break
 			}
-			if response == nil && resolvedBody == nil {
+			if response == nil {
 				return fmt.Errorf("failed to download mod file from all sources: %s@%s (%s)", modVersions[i].ModID, modVersions[i].ID, file.ID)
 			}
-			var contentLength int64
-			var bodyReader io.ReadCloser
-			if resolvedBody != nil {
-				contentLength = resolvedContentLength
-				bodyReader = resolvedBody
-				slog.Info("Resolved actions artifact file", "url", resolvedURL, "filename", resolvedFilename, "contentLength", contentLength)
-			} else {
-				contentLength = response.ContentLength
-				bodyReader = response.Body
-				slog.Info("Downloading mod file", "url", response.Request.URL, "contentLength", contentLength)
-			}
+			contentLength := response.ContentLength
+			slog.Info("Downloading mod file", "url", response.Request.URL, "contentLength", contentLength)
 
 			hashChecker := checkDownloadedFileHash(&file)
 
-			body := io.TeeReader(bodyReader, hashChecker)
+			body := io.TeeReader(response.Body, hashChecker)
 
 			switch file.ContentType {
 			case model.ContentTypeArchive:
@@ -274,19 +245,13 @@ func DownloadMods(cacheDir string, modVersions []ModVersion, binaryType aumgr.Bi
 					// Invalid or missing path, use filename from header if available
 					if filename != "" {
 						path = filepath.Join(filepath.Base(path), filename)
-					} else if resolvedFilename != "" {
-						path = filepath.Join(filepath.Base(path), resolvedFilename)
 					} else {
 						return fmt.Errorf("file path is empty for normal file type")
 					}
 				}
 				if file.ContentType == model.ContentTypePluginDll {
 					if filename == "" {
-						if resolvedFilename != "" {
-							filename = resolvedFilename
-						} else {
-							return fmt.Errorf("failed to determine plugin filename for URL: %v", file.Downloads)
-						}
+						return fmt.Errorf("failed to determine plugin filename for URL: %v", file.Downloads)
 					}
 					// For plugin files, use a fixed naming scheme
 					path = filepath.Join("BepInEx", "plugins", filename)
@@ -318,10 +283,6 @@ func DownloadMods(cacheDir string, modVersions []ModVersion, binaryType aumgr.Bi
 				return fmt.Errorf("downloaded file hash mismatch: %w", err)
 			} else {
 				slog.Info("File hash verified", "hash", computedHash)
-			}
-
-			if resolvedBody != nil {
-				_ = resolvedBody.Close()
 			}
 		}
 	}

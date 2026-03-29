@@ -13,11 +13,6 @@ BUILD=true
 INTERACTIVE=false
 BUILD_SOURCE="module"
 BUILD_VERSION="latest"
-SOURCE_TYPE="release"
-WORKFLOW_ID=""
-BRANCH=""
-SOURCE_TYPE_SET=false
-VERSION_TEMPLATE=""
 
 usage() {
     echo "Usage: $0 [command] [options]"
@@ -28,19 +23,15 @@ usage() {
     echo "  list       List configured rules"
     echo ""
     echo "Options:"
-    echo "  --rule <file>       Target a specific rule file"
-    echo "  --db <url>          Database connection string (or set DATABASE_URL)"
-    echo "  --dry-run           Show what would happen without making changes"
-    echo "  --no-build          Skip building tools (if already built)"
-    echo "  --build-source <s>  Set build source: 'local' or 'module' (default: module)"
-    echo "  --build-version <v> Set build version for module source (default: latest)"
-    echo "  --interactive       Enable interactive selection of releases"
-    echo "  --source <type>     Source type: 'release' or 'actions' (default: release)"
-    echo "  --workflow <id>     Workflow ID or filename for actions source"
-    echo "  --branch <name>     Branch name for actions source"
-    echo "  --version-template <tpl> Actions version template override"
-    echo "  --verbose           Enable verbose output"
-    echo "  --help              Show this help message"
+    echo "  --rule <file>   Target a specific rule file"
+    echo "  --db <url>      Database connection string (or set DATABASE_URL)"
+    echo "  --dry-run       Show what would happen without making changes"
+    echo "  --no-build      Skip building tools (if already built)"
+    echo "  --build-source <source> Set build source: 'local' or 'module' (default: module)"
+    echo "  --build-version <ver> Set build version for module source (default: latest)"
+    echo "  --interactive   Enable interactive selection of releases"
+    echo "  --verbose       Enable verbose output"
+    echo "  --help          Show this help message"
     exit 1
 }
 
@@ -96,23 +87,6 @@ while [[ $# -gt 0 ]]; do
         --interactive)
             INTERACTIVE=true
             shift
-            ;;
-        --source)
-            SOURCE_TYPE="$2"
-            SOURCE_TYPE_SET=true
-            shift 2
-            ;;
-        --workflow)
-            WORKFLOW_ID="$2"
-            shift 2
-            ;;
-        --branch)
-            BRANCH="$2"
-            shift 2
-            ;;
-        --version-template)
-            VERSION_TEMPLATE="$2"
-            shift 2
             ;;
         --verbose)
             VERBOSE=true
@@ -184,63 +158,12 @@ process_rule() {
 
     log "Processing $rule_file..."
 
-    # Read settings from rule file if not provided via command line
-    local rule_source_type="$SOURCE_TYPE"
-    local rule_workflow_id="$WORKFLOW_ID"
-    local rule_branch="$BRANCH"
-
-    # Read first actions file rule (if present) for fallback settings.
-    # Priority: CLI options > rule file > defaults.
-    local actions_rule_json=""
-    actions_rule_json=$(jq -c '.files[]? | select(.source == "actions")' "$rule_file" 2>/dev/null | head -1)
-
-    if [ -n "$actions_rule_json" ]; then
-        # Auto-switch to actions only when source was not explicitly provided.
-        if [ "$SOURCE_TYPE_SET" = false ] && [ "$SOURCE_TYPE" = "release" ]; then
-            rule_source_type="actions"
-            debug "Detected actions source in rule file"
-        fi
-
-        if [ "$rule_source_type" = "actions" ]; then
-            if [ -z "$rule_workflow_id" ]; then
-                rule_workflow_id=$(echo "$actions_rule_json" | jq -r '.workflow_id // empty')
-                if [ -n "$rule_workflow_id" ]; then
-                    debug "Using workflow_id from rule: $rule_workflow_id"
-                fi
-            fi
-
-            if [ -z "$rule_branch" ]; then
-                rule_branch=$(echo "$actions_rule_json" | jq -r '.branch // empty')
-                if [ -n "$rule_branch" ]; then
-                    debug "Using branch from rule: $rule_branch"
-                fi
-            fi
-        fi
-    fi
-
-    # Build base fetch arguments
-    local fetch_base_args=(-rule "$rule_file")
-    
-    # Add source type and related flags
-    if [ "$rule_source_type" = "actions" ]; then
-        fetch_base_args+=(-source "actions")
-        if [ -n "$rule_workflow_id" ]; then
-            fetch_base_args+=(-workflow "$rule_workflow_id")
-        fi
-        if [ -n "$rule_branch" ]; then
-            fetch_base_args+=(-branch "$rule_branch")
-        fi
-        if [ -n "$VERSION_TEMPLATE" ]; then
-            fetch_base_args+=(-version-template "$VERSION_TEMPLATE")
-        fi
-    fi
-
-    # Interactive Release Selection (only for release mode, not for actions)
+    # Interactive Release Selection (only for update/check modes when specific rule is targeted or interactive mode)
     local target_tag=""
-    if [ "$INTERACTIVE" = true ] && [ "$rule_source_type" = "release" ]; then
+    if [ "$INTERACTIVE" = true ]; then
         log "Fetching available releases..."
         local releases_json
-        if ! releases_json=$(./bin/fetch-gh-release "${fetch_base_args[@]}" -list); then
+        if ! releases_json=$(./bin/fetch-gh-release -rule "$rule_file" -list); then
              log "Error: Failed to fetch releases list"
              return
         fi
@@ -278,21 +201,16 @@ process_rule() {
         fi
     fi
 
-    # 1. Fetch release/actions info
-    if [ "$rule_source_type" = "actions" ]; then
-        debug "Fetching actions artifact info for $rule_file..."
-    else
-        debug "Fetching release info for $rule_file (tag: ${target_tag:-latest})..."
-    fi
-    
+    # 1. Fetch release info
+    debug "Fetching release info for $rule_file (tag: ${target_tag:-latest})..."
     local output
-    local fetch_args=("${fetch_base_args[@]}")
-    if [ -n "$target_tag" ] && [ "$rule_source_type" = "release" ]; then
+    local fetch_args=(-rule "$rule_file")
+    if [ -n "$target_tag" ]; then
         fetch_args+=(-tag "$target_tag")
     fi
     
     if ! output=$(./bin/fetch-gh-release "${fetch_args[@]}"); then
-        log "Error: Failed to fetch source info for $rule_file"
+        log "Error: Failed to fetch release info for $rule_file"
         return
     fi
     

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -170,11 +171,21 @@ func fileMetadataFromParsedFile(pf *parsedFile) (filename string, size int64, ha
 			filename = "downloaded_file"
 		}
 
-		// Keep registration flow metadata-only. Download/resolve happens on client install path.
-		// This avoids requiring runtime credentials (e.g. GITHUB_TOKEN) during version registration.
-		size = 0
-		emptyHash := hex.EncodeToString(hasher.Sum(nil))
-		return filename, size, emptyHash, nil
+		fmt.Printf("Downloading %s to compute size and hash...\n", dlURL)
+		resp, getErr := http.Get(dlURL)
+		if getErr != nil {
+			return "", 0, "", fmt.Errorf("failed to download url %s: %w", dlURL, getErr)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != 200 {
+			return "", 0, "", fmt.Errorf("failed to download url %s: status %d", dlURL, resp.StatusCode)
+		}
+
+		var copyErr error
+		size, copyErr = io.Copy(hasher, resp.Body)
+		if copyErr != nil {
+			return "", 0, "", fmt.Errorf("failed to read from url %s: %w", dlURL, copyErr)
+		}
 	} else {
 		return "", 0, "", fmt.Errorf("invalid file specifier: neither path nor url provided")
 	}
