@@ -34,6 +34,8 @@ type LicensesDocument struct {
 func main() {
 	target := flag.String("target", "", "Go package/module path to analyze")
 	output := flag.String("output", "", "Output JSON path")
+	goos := flag.String("goos", "", "GOOS value for go-licenses (optional)")
+	cgoEnabled := flag.Bool("cgo", false, "Whether to enable CGO for go-licenses (optional)")
 	flag.Parse()
 
 	if strings.TrimSpace(*target) == "" {
@@ -61,7 +63,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	reportOutput, err := runCmd("go-licenses", "report", *target)
+	env := []string{
+		fmt.Sprintf("GOOS=%s", *goos),
+	}
+	if *cgoEnabled {
+		env = append(env, "CGO_ENABLED=1")
+	}
+
+	reportOutput, err := runCmd(env, "go-licenses", "report", *target)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "failed to generate go-licenses report:", err)
 		os.Exit(1)
@@ -81,7 +90,7 @@ func main() {
 	defer os.RemoveAll(tempRoot)
 
 	savePath := filepath.Join(tempRoot, "licenses")
-	if _, err := runCmd("go-licenses", "save", *target, "--save_path", savePath); err != nil {
+	if _, err := runCmd(env, "go-licenses", "save", *target, "--save_path", savePath); err != nil {
 		fmt.Fprintln(os.Stderr, "failed to collect license texts:", err)
 		os.Exit(1)
 	}
@@ -161,8 +170,9 @@ func parseReportCSV(content string) ([][]string, error) {
 	return reader.ReadAll()
 }
 
-func runCmd(name string, args ...string) (string, error) {
+func runCmd(env []string, name string, args ...string) (string, error) {
 	cmd := exec.Command(name, args...)
+	cmd.Env = append(os.Environ(), env...)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -178,7 +188,7 @@ func runCmd(name string, args ...string) (string, error) {
 }
 
 func currentModulePath() (string, error) {
-	output, err := runCmd("go", "list", "-m", "-f", "{{.Path}}")
+	output, err := runCmd(nil, "go", "list", "-m", "-f", "{{.Path}}")
 	if err != nil {
 		return "", err
 	}
@@ -190,7 +200,7 @@ func currentModulePath() (string, error) {
 }
 
 func currentModuleDir() (string, error) {
-	output, err := runCmd("go", "list", "-m", "-f", "{{.Dir}}")
+	output, err := runCmd(nil, "go", "list", "-m", "-f", "{{.Dir}}")
 	if err != nil {
 		return "", err
 	}
