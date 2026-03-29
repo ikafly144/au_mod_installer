@@ -283,7 +283,7 @@ a.btn{display:inline-block;padding:10px 14px;background:#2d7ef7;color:#fff;text-
 <p>自動で開かない場合は上のボタンを押してください。</p>
 </div>
 <script>
-(()=>{const link="` + html.EscapeString(deepLink) + `";
+(()=>{const link="` + deepLink + `";
 try{window.location.href=link;}catch(e){}
 })();
 </script>
