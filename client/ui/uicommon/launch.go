@@ -76,15 +76,6 @@ func (s *State) Launch(path string) {
 		if s.OnGameStarted != nil {
 			s.OnGameStarted(activeProfileID, pid)
 		}
-		if joinInfo != nil {
-			joinRequest := *joinInfo
-			go func() {
-				time.Sleep(2 * time.Second)
-				if err := s.Core.SendLobbyJoinByPID(pid, joinRequest); err != nil {
-					slog.Warn("Failed to send lobby join via IPC", "error", err)
-				}
-			}()
-		}
 		return nil
 	}); err != nil {
 		s.ShowErrorDialog(errors.New(lang.LocalizeKey("launch.error.launch_failed", "Failed to launch Among Us: ") + err.Error()))

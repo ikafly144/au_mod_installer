@@ -51,6 +51,7 @@ type Launcher struct {
 	launchButton        *widget.Button
 	shareRoomButton     *widget.Button
 	copyRoomLinkButton  *widget.Button
+	unpublishRoomButton *widget.Button
 	roomLinkEntry       *widget.Entry
 	roomLinkLabel       *widget.Label
 	roomLinkContainer   *fyne.Container
@@ -139,6 +140,7 @@ func NewLauncherTab(s *uicommon.State) uicommon.Tab {
 		launchButton:           widget.NewButtonWithIcon(lang.LocalizeKey("launcher.launch", "Launch"), theme.MediaPlayIcon(), l.runLaunch),
 		shareRoomButton:        widget.NewButtonWithIcon(lang.LocalizeKey("launcher.room_link.create", "部屋リンクを作成"), theme.MailForwardIcon(), l.shareCurrentRoom),
 		copyRoomLinkButton:     widget.NewButtonWithIcon(lang.LocalizeKey("launcher.room_link.copy", "リンクをコピー"), theme.ContentCopyIcon(), l.copyRoomLinkToClipboard),
+		unpublishRoomButton:    widget.NewButtonWithIcon(lang.LocalizeKey("launcher.room_link.unpublish", "公開停止"), theme.MediaStopIcon(), l.unpublishCurrentRoom),
 		roomLinkEntry:          widget.NewEntry(),
 		roomLinkLabel:          widget.NewLabel(lang.LocalizeKey("launcher.room_link.title", "部屋リンク")),
 		createProfileButton:    widget.NewButtonWithIcon(lang.LocalizeKey("profile.create", "Create Profile"), theme.ContentAddIcon(), l.createProfile),
@@ -154,6 +156,7 @@ func NewLauncherTab(s *uicommon.State) uicommon.Tab {
 	l.createProfileButton.Importance = widget.HighImportance
 	l.shareRoomButton.Importance = widget.MediumImportance
 	l.copyRoomLinkButton.Importance = widget.LowImportance
+	l.unpublishRoomButton.Importance = widget.LowImportance
 	l.roomLinkEntry.Disable()
 	l.roomLinkEntry.Wrapping = fyne.TextWrapWord
 
@@ -208,11 +211,12 @@ func (l *Launcher) init() {
 func (l *Launcher) setupRoomLinkUI() {
 	l.roomLinkEntry.SetPlaceHolder("https://...")
 	l.copyRoomLinkButton.Disable()
+	l.unpublishRoomButton.Disable()
 	l.roomLinkContainer = container.NewVBox(
 		widget.NewSeparator(),
 		l.roomLinkLabel,
 		l.roomLinkEntry,
-		container.NewHBox(l.shareRoomButton, l.copyRoomLinkButton),
+		container.NewHBox(l.shareRoomButton, l.copyRoomLinkButton, l.unpublishRoomButton),
 	)
 	l.roomLinkContainer.Hide()
 }
@@ -312,6 +316,33 @@ func roomKeyForCache(room commonrest.RoomInfo, profileID uuid.UUID) string {
 	return strings.ToUpper(strings.TrimSpace(room.LobbyCode)) + "|" + strings.TrimSpace(room.ServerIP) + "|" + fmt.Sprint(room.ServerPort) + "|" + profileID.String()
 }
 
+func (l *Launcher) currentRunningProfileAndPID() (uuid.UUID, int) {
+	l.runningProfileMu.Lock()
+	defer l.runningProfileMu.Unlock()
+	return l.runningProfileID, l.runningGamePID
+}
+
+func (l *Launcher) profileByID(profileID uuid.UUID) (profile.Profile, bool) {
+	for _, prof := range l.profiles {
+		if prof.ID == profileID {
+			return prof, true
+		}
+	}
+	return profile.Profile{}, false
+}
+
+func (l *Launcher) currentRunningProfile() (profile.Profile, int, bool) {
+	profileID, runningPID := l.currentRunningProfileAndPID()
+	if profileID == uuid.Nil {
+		return profile.Profile{}, 0, false
+	}
+	prof, ok := l.profileByID(profileID)
+	if !ok {
+		return profile.Profile{}, 0, false
+	}
+	return prof, runningPID, true
+}
+
 func (l *Launcher) refreshRoomLinkUI(info *core.IPCLobbyInfo, running bool) {
 	l.lobbyInfo = info
 	if !running || !l.isDirectJoinEnabledForRunningProfile() {
@@ -319,6 +350,7 @@ func (l *Launcher) refreshRoomLinkUI(info *core.IPCLobbyInfo, running bool) {
 		l.roomLinkEntry.SetText("")
 		l.copyRoomLinkButton.Disable()
 		l.shareRoomButton.Disable()
+		l.unpublishRoomButton.Disable()
 		return
 	}
 	room, ok := l.currentRoomInfo(info)
@@ -327,18 +359,21 @@ func (l *Launcher) refreshRoomLinkUI(info *core.IPCLobbyInfo, running bool) {
 		l.roomLinkEntry.SetText("")
 		l.copyRoomLinkButton.Disable()
 		l.shareRoomButton.Disable()
+		l.unpublishRoomButton.Disable()
 		l.invalidateCachedRoomShareAsync()
 		return
 	}
 	l.roomLinkContainer.Show()
 	l.shareRoomButton.Enable()
-	key := roomKeyForCache(room, l.selectedProfileID)
+	runningProfileID, _ := l.currentRunningProfileAndPID()
+	key := roomKeyForCache(room, runningProfileID)
 	l.roomShareMu.Lock()
 	cache := l.roomShareCache
 	l.roomShareMu.Unlock()
 	if cache.RoomKey != key {
 		l.roomLinkEntry.SetText("")
 		l.copyRoomLinkButton.Disable()
+		l.unpublishRoomButton.Disable()
 		if cache.SessionID != "" {
 			l.invalidateCachedRoomShareAsync()
 		}
@@ -347,8 +382,10 @@ func (l *Launcher) refreshRoomLinkUI(info *core.IPCLobbyInfo, running bool) {
 	if cache.URL != "" && cache.ExpiresAt.After(time.Now()) {
 		l.roomLinkEntry.SetText(cache.URL)
 		l.copyRoomLinkButton.Enable()
+		l.unpublishRoomButton.Enable()
 	} else {
 		l.copyRoomLinkButton.Disable()
+		l.unpublishRoomButton.Disable()
 	}
 }
 
@@ -379,13 +416,29 @@ func (l *Launcher) copyRoomLinkToClipboard() {
 	)
 }
 
-func (l *Launcher) currentSelectedProfile() (profile.Profile, bool) {
-	for _, prof := range l.profiles {
-		if prof.ID == l.selectedProfileID {
-			return prof, true
-		}
+func (l *Launcher) unpublishCurrentRoom() {
+	l.roomShareMu.Lock()
+	cache := l.roomShareCache
+	if cache.SessionID == "" || cache.HostKey == "" {
+		l.roomShareMu.Unlock()
+		return
 	}
-	return profile.Profile{}, false
+	l.roomShareCache = sharedRoomLinkCache{}
+	l.roomShareMu.Unlock()
+
+	if err := l.state.Rest.DeleteSharedGame(cache.SessionID, cache.HostKey); err != nil {
+		slog.Warn("Failed to unpublish room link", "error", err, "session_id", cache.SessionID)
+	}
+
+	fyne.Do(func() {
+		l.roomLinkEntry.SetText("")
+		l.copyRoomLinkButton.Disable()
+		l.unpublishRoomButton.Disable()
+	})
+	l.state.ShowInfoDialog(
+		lang.LocalizeKey("common.success", "Success"),
+		lang.LocalizeKey("launcher.room_link.unpublished", "部屋リンクの公開を停止しました。"),
+	)
 }
 
 func (l *Launcher) shareCurrentRoom() {
@@ -402,9 +455,9 @@ func (l *Launcher) shareCurrentRoom() {
 		l.roomShareMu.Unlock()
 	}()
 
-	prof, ok := l.currentSelectedProfile()
+	prof, _, ok := l.currentRunningProfile()
 	if !ok {
-		l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("launcher.error.no_profile", "Please select a profile to launch.")))
+		l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("launcher.room_link.no_running_profile", "起動中のプロファイルが見つかりません。")))
 		return
 	}
 	room, ok := l.currentRoomInfo(l.lobbyInfo)
@@ -421,6 +474,7 @@ func (l *Launcher) shareCurrentRoom() {
 		fyne.Do(func() {
 			l.roomLinkEntry.SetText(cache.URL)
 			l.copyRoomLinkButton.Enable()
+			l.unpublishRoomButton.Enable()
 		})
 		l.copyRoomLinkToClipboard()
 		return
@@ -461,6 +515,7 @@ func (l *Launcher) shareCurrentRoom() {
 	fyne.Do(func() {
 		l.roomLinkEntry.SetText(rs.URL)
 		l.copyRoomLinkButton.Enable()
+		l.unpublishRoomButton.Enable()
 	})
 	l.copyRoomLinkToClipboard()
 }
@@ -799,6 +854,18 @@ func (l *Launcher) handleJoinGameURI(sharedURI string) {
 		LobbyCode:  rs.Room.LobbyCode,
 		ServerIP:   rs.Room.ServerIP,
 		ServerPort: rs.Room.ServerPort,
+	}
+	runningProfileID, runningPID := l.currentRunningProfileAndPID()
+	if runningProfile, ok := l.state.Core.ProfileManager.Get(l.runningProfileID); ok && runningPID > 0 && runningProfileID == shared.ID && hasDirectJoinFeature(runningProfile.Versions()) {
+		if err := l.state.Core.SendLobbyJoinByPID(runningPID, *joinInfo); err != nil {
+			dialog.ShowError(err, l.state.Window)
+			return
+		}
+		l.state.ShowInfoDialog(
+			lang.LocalizeKey("common.success", "Success"),
+			lang.LocalizeKey("launcher.room_link.join_sent", "起動中のゲームに部屋参加リクエストを送信しました。"),
+		)
+		return
 	}
 	if err := l.importProfileWithJoinInfo(shared, iconPNG, joinInfo); err != nil {
 		dialog.ShowError(err, l.state.Window)
@@ -1541,6 +1608,7 @@ func (l *Launcher) newLaunchProgressDialog() (*dialog.CustomDialog, *progress.Fy
 func (l *Launcher) checkLaunchState() {
 	l.shareRoomButton.Disable()
 	l.copyRoomLinkButton.Disable()
+	l.unpublishRoomButton.Disable()
 	l.roomLinkContainer.Hide()
 	runningProfileID, launching := l.currentBusyProfile()
 	if runningProfileID != uuid.Nil && launching {

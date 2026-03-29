@@ -225,7 +225,11 @@
     "launcher.room_link.title": "部屋リンク",
     "launcher.room_link.create": "部屋リンクを作成",
     "launcher.room_link.copy": "リンクをコピー",
+    "launcher.room_link.unpublish": "公開停止",
     "launcher.room_link.copied": "部屋リンクをコピーしました。",
+    "launcher.room_link.unpublished": "部屋リンクの公開を停止しました。",
     "launcher.room_link.no_room": "部屋情報を取得できません。部屋に参加してから再試行してください。",
-    "launcher.room_link.server_unavailable": "このモードでは部屋リンクを生成できません。"
+    "launcher.room_link.server_unavailable": "このモードでは部屋リンクを生成できません。",
+    "launcher.room_link.no_running_profile": "起動中のプロファイルが見つかりません。",
+    "launcher.room_link.join_sent": "起動中のゲームに部屋参加リクエストを送信しました。"
 }
