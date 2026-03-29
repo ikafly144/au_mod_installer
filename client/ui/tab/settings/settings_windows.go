@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -519,7 +520,7 @@ func (s *Settings) newOpenSourcePage() fyne.CanvasObject {
 	pageStack := container.NewStack()
 
 	showListPage := func() {}
-	showDetailPage := func(title, licenseText, licenseURL string) {}
+	var showDetailPage func(title, licenseText, licenseURL string)
 
 	showDetailPage = func(title, licenseText, licenseURL string) {
 		licenseText = strings.TrimSpace(licenseText)
@@ -732,9 +733,7 @@ func availableDisplayScales(currentScale float32) (map[string]float32, []string)
 	if !hasCurrent {
 		presets = append(presets, currentScale)
 	}
-	sort.Slice(presets, func(i, j int) bool {
-		return presets[i] < presets[j]
-	})
+	slices.Sort(presets)
 
 	values := map[string]float32{}
 	options := make([]string, 0, len(presets))

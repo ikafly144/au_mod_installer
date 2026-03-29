@@ -45,7 +45,7 @@ func (a *App) AcquireProfileLaunchLock(profileID uuid.UUID) (*ProfileLaunchLock,
 	}
 
 	lockPath := filepath.Join(lockDir, profileID.String()+".lock")
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		if err := writeInitialProfileLock(lockPath); err == nil {
 			return &ProfileLaunchLock{path: lockPath, profileID: profileID}, nil
 		} else if !errors.Is(err, fs.ErrExist) {

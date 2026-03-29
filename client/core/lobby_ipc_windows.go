@@ -14,10 +14,10 @@ import (
 )
 
 type ipcResponse struct {
-	Success bool          `json:"Success"`
-	Action  string        `json:"Action"`
-	Message string        `json:"Message"`
-	Data    IPCLobbyInfo  `json:"Data"`
+	Success bool         `json:"Success"`
+	Action  string       `json:"Action"`
+	Message string       `json:"Message"`
+	Data    IPCLobbyInfo `json:"Data"`
 }
 
 func (a *App) GetLobbyInfoByPID(pid int) (*IPCLobbyInfo, error) {
