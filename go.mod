@@ -27,7 +27,6 @@ require (
 
 require (
 	aead.dev/minisign v0.3.0 // indirect
-	filippo.io/edwards25519 v1.2.0 // indirect
 	fyne.io/systray v1.12.0 // indirect
 	fyne.io/tools v1.7.0 // indirect
 	github.com/BurntSushi/toml v1.5.0 // indirect
@@ -53,7 +52,6 @@ require (
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/go-playground/validator/v10 v10.30.1 // indirect
-	github.com/go-sql-driver/mysql v1.9.3 // indirect
 	github.com/go-text/render v0.2.0 // indirect
 	github.com/go-text/typesetting v0.3.0 // indirect
 	github.com/goccy/go-json v0.10.6 // indirect
@@ -113,8 +111,6 @@ require (
 	golang.org/x/tools/go/vcs v0.1.0-deprecated // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	gorm.io/datatypes v1.2.7 // indirect
-	gorm.io/driver/mysql v1.6.0 // indirect
 )
 
 tool fyne.io/tools/cmd/fyne
