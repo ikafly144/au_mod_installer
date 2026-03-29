@@ -285,7 +285,6 @@ a.btn{display:inline-block;padding:10px 14px;background:#2d7ef7;color:#fff;text-
 <script>
 (()=>{const link="` + html.EscapeString(deepLink) + `";
 try{window.location.href=link;}catch(e){}
-setTimeout(()=>{try{window.close();}catch(e){}},1500);
 })();
 </script>
 </body>
