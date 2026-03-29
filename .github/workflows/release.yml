@@ -82,6 +82,8 @@ jobs:
           DISCORD_WEBHOOK_ID: ${{ secrets.DISCORD_WEBHOOK_ID }}
           DISCORD_WEBHOOK_TOKEN: ${{ secrets.DISCORD_WEBHOOK_TOKEN }}
           GORELEASER_PREVIOUS_TAG: ${{ steps.get_previous_stable.outputs.previous_stable }}
+          CGO_ENABLED: 1
+          GOOS: windows
       - name: Output Release Summary
         run: |
           echo "## Release Summary" >> $GITHUB_STEP_SUMMARY
