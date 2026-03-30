@@ -1,6 +1,8 @@
 package gorm
 
 import (
+	"errors"
+
 	"gorm.io/gorm"
 
 	"github.com/ikafly144/au_mod_installer/server/model"
@@ -32,15 +34,28 @@ func (r *GormRepository) CreateMod(details *model.ModDetails) (string, error) {
 func (r *GormRepository) GetModIds(after string, limit int) ([]string, string, error) {
 	var ids []string
 	var next string
-	result := r.db.Model(&model.ModDetails{}).
-		Scopes(func(db *gorm.DB) *gorm.DB {
-			db.Order("created_at DESC")
-			if after != "" {
-				db = db.Where("id > ?", after)
+
+	query := r.db.Model(&model.ModDetails{}).
+		Order("created_at DESC").
+		Order("id DESC")
+
+	if after != "" {
+		var cursor model.ModDetails
+		if err := r.db.Select("id", "created_at").First(&cursor, "id = ?", after).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return []string{}, "", nil
 			}
-			return db.Limit(limit)
-		}).
-		Pluck("ID", &ids)
+			return nil, "", err
+		}
+		query = query.Where(
+			"created_at < ? OR (created_at = ? AND id < ?)",
+			cursor.CreatedAt,
+			cursor.CreatedAt,
+			cursor.ID,
+		)
+	}
+
+	result := query.Limit(limit).Pluck("id", &ids)
 	if result.Error != nil {
 		return nil, "", result.Error
 	}

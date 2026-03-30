@@ -160,7 +160,7 @@ func NewLauncherTab(s *uicommon.State) uicommon.Tab {
 	l.copyRoomLinkButton.Importance = widget.LowImportance
 	l.unpublishRoomButton.Importance = widget.LowImportance
 	l.roomLinkEntry.Disable()
-	l.roomLinkEntry.Wrapping = fyne.TextWrapWord
+	// l.roomLinkEntry.Wrapping = fyne.TextWrapWord
 
 	l.init()
 
