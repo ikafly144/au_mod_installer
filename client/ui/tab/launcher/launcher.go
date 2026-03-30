@@ -1628,7 +1628,7 @@ func (l *Launcher) runLaunch() {
 				if progressShown {
 					launchDialog.Hide()
 				}
-				fyne.DoAndWait(l.checkLaunchState)
+				l.checkLaunchState()
 			})
 			if launchErr != nil {
 				l.state.SetError(launchErr)
