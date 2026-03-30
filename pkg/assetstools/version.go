@@ -199,7 +199,7 @@ func parseVersionCore(version string) ([3]int, bool) {
 }
 
 func compareVersionCore(a, b [3]int) int {
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if a[i] > b[i] {
 			return 1
 		}

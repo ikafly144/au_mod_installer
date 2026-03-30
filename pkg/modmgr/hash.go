@@ -51,8 +51,7 @@ func newHash(name string) hash.Hash {
 func newHashWriters(hashes map[string]string) HashCheckingWriter {
 	multi := make(map[string]HashCheckingWriter)
 	for hashType, hashStr := range hashes {
-		var hasher hash.Hash
-		hasher = newHash(hashType)
+		var hasher = newHash(hashType)
 		if hasher == nil {
 			continue
 		}

@@ -179,39 +179,34 @@ func DownloadMods(cacheDir string, modVersions []ModVersion, binaryType aumgr.Bi
 				}
 
 				// Check if all files exist in cache
-				allFilesExist := true
 				for file := range modVersions[i].Downloads(binaryType) {
 					cachedFilePath := filepath.Join(modCacheDir, file.ExtractPath)
 					if _, err := os.Stat(cachedFilePath); os.IsNotExist(err) {
-						allFilesExist = false
 						slog.Info("Cached mod file not found, need to re-download", "modId", modVersions[i].ModID, "versionId", modVersions[i].ID, "file", file.ExtractPath)
 						goto download
 					}
 				}
-				// If all files exist, Check the hash of one file
-				if allFilesExist {
-					for file := range modVersions[i].Downloads(binaryType) {
-						cachedFilePath := filepath.Join(modCacheDir, file.ExtractPath)
-						hashChecker := newHashWriters(file.Hashes)
-						hashFile, err := os.Open(cachedFilePath)
-						if err != nil {
-							slog.Error("Failed to open cached mod file for hashing", "modId", modVersions[i].ModID, "versionId", modVersions[i].ID, "file", file.ExtractPath, "error", err)
-							goto download
-						}
-						if _, err := io.Copy(io.Discard, io.TeeReader(hashFile, hashChecker)); err != nil {
-							slog.Error("Failed to hash cached mod file", "modId", modVersions[i].ModID, "versionId", modVersions[i].ID, "file", file.ExtractPath, "error", err)
-							hashFile.Close()
-							goto download
-						}
+				for file := range modVersions[i].Downloads(binaryType) {
+					cachedFilePath := filepath.Join(modCacheDir, file.ExtractPath)
+					hashChecker := newHashWriters(file.Hashes)
+					hashFile, err := os.Open(cachedFilePath)
+					if err != nil {
+						slog.Error("Failed to open cached mod file for hashing", "modId", modVersions[i].ModID, "versionId", modVersions[i].ID, "file", file.ExtractPath, "error", err)
+						goto download
+					}
+					if _, err := io.Copy(io.Discard, io.TeeReader(hashFile, hashChecker)); err != nil {
+						slog.Error("Failed to hash cached mod file", "modId", modVersions[i].ModID, "versionId", modVersions[i].ID, "file", file.ExtractPath, "error", err)
 						hashFile.Close()
+						goto download
 					}
-
-					slog.Info("Mod already cached", "modId", modVersions[i].ModID, "versionId", modVersions[i].ID)
-					if progressListener != nil {
-						progressListener.SetValue(progressListener.GetValue() + (float64(modVersions[i].CompatibleFilesCount(binaryType)) / float64(totalDownloadCount)))
-					}
-					continue
+					hashFile.Close()
 				}
+
+				slog.Info("Mod already cached", "modId", modVersions[i].ModID, "versionId", modVersions[i].ID)
+				if progressListener != nil {
+					progressListener.SetValue(progressListener.GetValue() + (float64(modVersions[i].CompatibleFilesCount(binaryType)) / float64(totalDownloadCount)))
+				}
+				continue
 			} else {
 				slog.Info("Force re-downloading mod, clearing cache", "modId", modVersions[i].ModID, "versionId", modVersions[i].ID)
 				if err := os.RemoveAll(modCacheDir); err != nil {

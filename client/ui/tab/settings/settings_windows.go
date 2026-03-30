@@ -444,6 +444,8 @@ func (s *Settings) importProfile() {
 	}
 	defer modInstallLocation.Close()
 
+	// TODO: remove legacy code
+	//nolint:staticcheck
 	installationInfo, err := modmgr.LoadInstallationInfo(modInstallLocation)
 	if err != nil {
 		dialog.ShowError(err, s.state.Window)

@@ -54,6 +54,8 @@ func (a *App) GetInstallationStatus(gamePath string, checkUpdates bool) *Install
 		return info
 	}
 
+	// TODO: remove legacy code
+	//nolint:staticcheck
 	installationInfo, err := modmgr.LoadInstallationInfo(modInstallLocation)
 	if err != nil {
 		info.Error = err
