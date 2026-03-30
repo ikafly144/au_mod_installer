@@ -30,6 +30,7 @@ func (f *commandFactory) newVersionEditCommand() *cli.Command {
 			&cli.BoolFlag{Name: "set-latest", Usage: "Set this version as latest on the mod"},
 			&cli.BoolFlag{Name: "clear-latest-version", Usage: "Clear latest version on the mod"},
 		},
+		DisableSliceFlagSeparator: true,
 		Action: func(ctx context.Context, cmd *cli.Command) error {
 			if err := requireDB(cmd); err != nil {
 				return err

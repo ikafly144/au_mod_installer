@@ -21,7 +21,8 @@ func (f *commandFactory) newModAddCommand() *cli.Command {
 			&cli.StringFlag{Name: "desc", Usage: "Mod description"},
 			&cli.StringFlag{Name: "thumbnail-url", Usage: "Mod thumbnail URL"},
 		},
-		ShellComplete: cli.DefaultCompleteWithFlags,
+		DisableSliceFlagSeparator: true,
+		ShellComplete:             cli.DefaultCompleteWithFlags,
 		Action: wrapAction(func(ctx context.Context, cmd *cli.Command) error {
 			if err := requireDB(cmd); err != nil {
 				return err

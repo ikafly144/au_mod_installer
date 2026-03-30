@@ -22,7 +22,8 @@ func (f *commandFactory) newVersionAddCommand() *cli.Command {
 			&cli.StringSliceFlag{Name: "feature", Usage: "Features to set. Format: name=true|false (e.g. direct_join=true)"},
 			&cli.BoolFlag{Name: "set-latest", Usage: "Set this version as the latest version for the mod"},
 		},
-		ShellComplete: cli.DefaultCompleteWithFlags,
+		DisableSliceFlagSeparator: true,
+		ShellComplete:             cli.DefaultCompleteWithFlags,
 		Action: wrapAction(func(ctx context.Context, cmd *cli.Command) error {
 			if err := requireDB(cmd); err != nil {
 				return err

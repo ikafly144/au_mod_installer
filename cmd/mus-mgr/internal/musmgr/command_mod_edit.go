@@ -27,6 +27,7 @@ func (f *commandFactory) newModEditCommand() *cli.Command {
 			&cli.StringFlag{Name: "latest-version-id", Usage: "Updated latest version ID"},
 			&cli.BoolFlag{Name: "clear-latest-version", Usage: "Clear latest version ID"},
 		},
+		DisableSliceFlagSeparator: true,
 		Action: wrapAction(func(ctx context.Context, cmd *cli.Command) error {
 			if err := requireDB(cmd); err != nil {
 				return err
