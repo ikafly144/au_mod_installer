@@ -207,10 +207,10 @@ func reconcileProfileLock(lockPath string) (bool, error) {
 }
 
 type RunningProfileInfo struct {
-	ProfileID          uuid.UUID
-	GamePID            int
-	DirectJoinEnabled  bool
-	PlayStartedAt      time.Time
+	ProfileID         uuid.UUID
+	GamePID           int
+	DirectJoinEnabled bool
+	PlayStartedAt     time.Time
 }
 
 // LoadRunningProfilesFromLocks scans the profile lock directory and returns information
