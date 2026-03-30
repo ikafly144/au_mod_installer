@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"net/url"
 	"os"
 	"regexp"
 	"strings"
@@ -193,7 +194,8 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Error: dependency %s does not specify dependency_type.\n", dep.ModID)
 			os.Exit(1)
 		}
-		out.Dependencies = append(out.Dependencies, fmt.Sprintf("%s:%s:%s", dep.ModID, dep.VersionID, dtype))
+		encodedVersionConstraint := url.PathEscape(dep.VersionID)
+		out.Dependencies = append(out.Dependencies, fmt.Sprintf("%s:%s:%s", dep.ModID, encodedVersionConstraint, dtype))
 	}
 	for _, feature := range rule.Features {
 		name := strings.TrimSpace(feature.Name)

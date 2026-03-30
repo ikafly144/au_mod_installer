@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -123,17 +124,23 @@ func nextVersionID(existingIDs []string) string {
 func parseDependencies(rawDeps []string) []model.ModVersionDependency {
 	var deps []model.ModVersionDependency
 	for _, d := range rawDeps {
-		parts := strings.Split(d, ":")
+		parts := strings.SplitN(d, ":", 3)
 		if len(parts) < 2 {
 			continue
 		}
 		depType := model.DependencyTypeRequired
+		versionConstraint := parts[1]
+		if decoded, err := url.PathUnescape(versionConstraint); err == nil {
+			versionConstraint = decoded
+		} else if decoded, err := url.QueryUnescape(versionConstraint); err == nil {
+			versionConstraint = decoded
+		}
 		if len(parts) > 2 {
 			depType = model.DependencyType(parts[2])
 		}
 		deps = append(deps, model.ModVersionDependency{
 			ModID:          parts[0],
-			VersionID:      parts[1],
+			VersionID:      versionConstraint,
 			DependencyType: depType,
 		})
 	}
