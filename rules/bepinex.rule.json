@@ -1,0 +1,17 @@
+{
+    "mod_id": "bepinex",
+    "github_repo": "ikafly144/bepinex-be",
+    "dependencies": null,
+    "files": [
+        {
+            "artifact": "BepInEx-Unity\\.IL2CPP-win-x64-.+\\.zip",
+            "content_type": "archive",
+            "target_platform": "x64"
+        },
+        {
+            "artifact": "BepInEx-Unity\\.IL2CPP-win-x86-.+\\.zip",
+            "content_type": "archive",
+            "target_platform": "x86"
+        }
+    ]
+}

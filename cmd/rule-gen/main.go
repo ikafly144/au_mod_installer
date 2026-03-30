@@ -12,6 +12,7 @@ import (
 	"github.com/google/go-github/v80/github"
 	"github.com/urfave/cli/v3"
 
+	"github.com/ikafly144/au_mod_installer/common/githubrelease"
 	"github.com/ikafly144/au_mod_installer/common/rest/model"
 )
 
@@ -77,8 +78,8 @@ func run(ctx context.Context) error {
 		client = client.WithAuthToken(token)
 	}
 
-	fmt.Printf("Fetching latest release for %s/%s...\n", owner, repo)
-	release, _, err := client.Repositories.GetLatestRelease(ctx, owner, repo)
+	fmt.Printf("Fetching latest release (including prereleases) for %s/%s...\n", owner, repo)
+	release, err := githubrelease.GetLatestReleaseIncludingPrereleases(ctx, client, owner, repo)
 	if err != nil {
 		return fmt.Errorf("failed to fetch release: %w", err)
 	}
@@ -169,8 +170,8 @@ func run(ctx context.Context) error {
 
 		promptPlatform := &survey.Select{
 			Message: "Target Platform:",
-			Options: []string{"any", "windows", "linux", "darwin"},
-			Default: "any",
+			Options: []string{string(model.TargetPlatformAny), string(model.TargetPlatformX64), string(model.TargetPlatformX86), string(model.TargetPlatformAArch64)},
+			Default: string(model.TargetPlatformAny),
 		}
 		if err := survey.AskOne(promptPlatform, &fRule.TargetPlatform); err != nil {
 			return err
@@ -366,7 +367,7 @@ func run(ctx context.Context) error {
 		return err
 	}
 
-	data, err := json.Marshal(rule)
+	data, err := json.MarshalIndent(rule, "", "  ")
 	if err != nil {
 		return err
 	}

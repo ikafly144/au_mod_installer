@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"github.com/google/go-github/v80/github"
+
+	"github.com/ikafly144/au_mod_installer/common/githubrelease"
 )
 
 type Dependency struct {
@@ -99,6 +101,7 @@ func main() {
 			TagName     string `json:"tag_name"`
 			Name        string `json:"name"`
 			PublishedAt string `json:"published_at"`
+			Prerelease  bool   `json:"prerelease"`
 		}
 
 		var output []ReleaseInfo
@@ -107,10 +110,11 @@ func main() {
 				TagName:     r.GetTagName(),
 				Name:        r.GetName(),
 				PublishedAt: r.GetPublishedAt().String(),
+				Prerelease:  r.GetPrerelease(),
 			})
 		}
 
-		outJson, _ := json.Marshal(output)
+		outJson, _ := json.MarshalIndent(output, "", "  ")
 		fmt.Println(string(outJson))
 		return
 	}
@@ -124,9 +128,9 @@ func main() {
 			os.Exit(1)
 		}
 	} else {
-		release, _, err = client.Repositories.GetLatestRelease(ctx, owner, repo)
+		release, err = githubrelease.GetLatestReleaseIncludingPrereleases(ctx, client, owner, repo)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to fetch latest release from %s: %v\n", rule.GithubRepo, err)
+			fmt.Fprintf(os.Stderr, "Failed to fetch latest release (including prereleases) from %s: %v\n", rule.GithubRepo, err)
 			os.Exit(1)
 		}
 	}
@@ -204,6 +208,6 @@ func main() {
 		out.Features = append(out.Features, fmt.Sprintf("%s=%v", name, value))
 	}
 
-	outJson, _ := json.Marshal(out)
+	outJson, _ := json.MarshalIndent(out, "", "  ")
 	fmt.Println(string(outJson))
 }
