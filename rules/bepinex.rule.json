@@ -12,6 +12,12 @@
             "artifact": "BepInEx-Unity\\.IL2CPP-win-x86-.+\\.zip",
             "content_type": "archive",
             "target_platform": "x86"
+        },
+        {
+            "from": "https://gist.githubusercontent.com/ikafly144/0a1df14f9d8ad14bd1c3d4bd7065c54d/raw/69b8204d4be4a90d60aef4b1ee56c3dca80e7026/BepInEx.cfg",
+            "content_type": "binary",
+            "extract_path": "BepInEx/config/BepInEx.cfg",
+            "target_platform": "any"
         }
     ]
 }
