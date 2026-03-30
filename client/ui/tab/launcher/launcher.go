@@ -1851,7 +1851,7 @@ func (l *Launcher) syncProfile(prof profile.Profile) {
 		cacheDir := filepath.Join(configDir, "au_mod_installer", "mods")
 
 		downloadProgress := progress.NewPhaseProgress(syncProgress, 0.0, 0.5)
-		if err := modmgr.DownloadMods(cacheDir, resolvedVersions, binaryType, downloadProgress, false); err != nil {
+		if err := modmgr.DownloadMods(cacheDir, resolvedVersions, binaryType, downloadProgress, true); err != nil {
 			syncErr = err
 			return
 		}
