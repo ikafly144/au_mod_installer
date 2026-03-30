@@ -136,7 +136,7 @@ func checkDependencyConstraint(resolvedDep ModVersion, dep model.ModVersionDepen
 }
 
 func isExactVersionConstraint(constraint string) bool {
-	return !strings.ContainsAny(constraint, "<>!=~*xX,^@,")
+	return !strings.ContainsAny(constraint, "<>!=~*xX,^@,") && !strings.EqualFold(constraint, "latest") && !strings.EqualFold(constraint, "any")
 }
 
 func bestMatchedVersionID(versionIDs []string, constraint string) (string, bool) {
