@@ -80,12 +80,10 @@ func (s *State) Launch(path string, directJoinEnabled bool) {
 	}); err != nil {
 		s.ShowErrorDialog(errors.New(lang.LocalizeKey("launch.error.launch_failed", "Failed to launch Among Us: ") + err.Error()))
 		slog.Warn("Failed to launch Among Us", "error", err)
-		return
 	}
 	if s.OnGameExited != nil {
 		s.OnGameExited(activeProfileID)
 	}
-	slog.Info("Launched Among Us successfully")
 	finishedAt := time.Now()
 	if activeProfileID != uuid.Nil {
 		if err := s.UpdateProfileLaunchMetrics(activeProfileID, startedAt, finishedAt); err != nil {
