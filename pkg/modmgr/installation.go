@@ -2,7 +2,6 @@ package modmgr
 
 import (
 	"archive/zip"
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -481,7 +480,7 @@ func removeEmptyDirs(root *os.Root, dir string) error {
 	return nil
 }
 
-func extractZip(reader io.Reader, contentLength int64, destRoot *os.Root, progressListener progress.Progress, n int) ([]string, error) {
+func extractZip(reader io.ReaderAt, contentLength int64, destRoot *os.Root, progressListener progress.Progress, n int) ([]string, error) {
 	startVal := 0.0
 	if progressListener != nil {
 		startVal = progressListener.GetValue()
@@ -489,24 +488,7 @@ func extractZip(reader io.Reader, contentLength int64, destRoot *os.Root, progre
 	perFileScale := 1.0 / float64(n)
 	downloadScale := perFileScale * 0.75
 	extractScale := perFileScale - downloadScale
-	zipBuffer := new(bytes.Buffer)
-	buf := progress.NewProgressWriter(startVal, downloadScale, contentLength, progressListener, zipBuffer)
-	var written int64
-	if contentLength <= 0 {
-		w, err := io.Copy(buf, reader)
-		if err != nil {
-			return nil, err
-		}
-		written = w
-	} else {
-		w, err := io.CopyN(buf, reader, contentLength)
-		if err != nil {
-			return nil, err
-		}
-		written = w
-	}
-	buf.Complete()
-	zipReader, err := zip.NewReader(bytes.NewReader(zipBuffer.Bytes()), written)
+	zipReader, err := zip.NewReader(reader, contentLength)
 	if err != nil {
 		return nil, err
 	}
