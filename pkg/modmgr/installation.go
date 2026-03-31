@@ -180,22 +180,24 @@ func DownloadMods(cacheDir string, modVersions []ModVersion, binaryType aumgr.Bi
 
 				// Check if all files exist in cache
 				for file := range modVersions[i].Downloads(binaryType) {
-					cachedFilePath := filepath.Join(modCacheDir, file.ExtractPath)
+					cachedFilePath := filepath.Join(modCacheDir, fileDestinationPath(file))
 					if _, err := os.Stat(cachedFilePath); os.IsNotExist(err) {
-						slog.Info("Cached mod file not found, need to re-download", "modId", modVersions[i].ModID, "versionId", modVersions[i].ID, "file", file.ExtractPath)
+						slog.Info("Cached mod file not found, need to re-download", "modId", modVersions[i].ModID, "versionId", modVersions[i].ID, "file", cachedFilePath)
 						goto download
 					}
-				}
-				for file := range modVersions[i].Downloads(binaryType) {
-					cachedFilePath := filepath.Join(modCacheDir, file.ExtractPath)
 					hashChecker := newHashWriters(file.Hashes)
 					hashFile, err := os.Open(cachedFilePath)
 					if err != nil {
-						slog.Error("Failed to open cached mod file for hashing", "modId", modVersions[i].ModID, "versionId", modVersions[i].ID, "file", file.ExtractPath, "error", err)
+						slog.Error("Failed to open cached mod file for hashing", "modId", modVersions[i].ModID, "versionId", modVersions[i].ID, "file", cachedFilePath, "error", err)
 						goto download
 					}
-					if _, err := io.Copy(io.Discard, io.TeeReader(hashFile, hashChecker)); err != nil {
-						slog.Error("Failed to hash cached mod file", "modId", modVersions[i].ModID, "versionId", modVersions[i].ID, "file", file.ExtractPath, "error", err)
+					if _, err := io.Copy(hashChecker, hashFile); err != nil {
+						slog.Error("Failed to hash cached mod file", "modId", modVersions[i].ModID, "versionId", modVersions[i].ID, "file", cachedFilePath, "error", err)
+						hashFile.Close()
+						goto download
+					}
+					if _, err := hashChecker.Sum(); err != nil {
+						slog.Warn("Cached mod file hash mismatch, will re-download", "modId", modVersions[i].ModID, "versionId", modVersions[i].ID, "file", cachedFilePath, "error", err)
 						hashFile.Close()
 						goto download
 					}
@@ -263,23 +265,7 @@ func DownloadMods(cacheDir string, modVersions []ModVersion, binaryType aumgr.Bi
 			case model.ContentTypeArchive:
 				fallthrough
 			case model.ContentTypeBinary, model.ContentTypePluginDll:
-				extractPath = file.ExtractPath
-				filename := file.Filename
-				if filepath.Dir(extractPath) == extractPath || extractPath == "" {
-					// Invalid or missing path, use filename from header if available
-					if filename != "" {
-						extractPath = filepath.Join(filepath.Base(extractPath), filename)
-					} else {
-						return fmt.Errorf("file path is empty")
-					}
-				}
-				if file.ContentType == model.ContentTypePluginDll {
-					if filename == "" {
-						return fmt.Errorf("failed to determine plugin filename for URL: %v", file.Downloads)
-					}
-					// For plugin files, use a fixed naming scheme
-					extractPath = filepath.Join("BepInEx", "plugins", filename)
-				}
+				extractPath = fileDestinationPath(file)
 				if extractPath == "" {
 					return fmt.Errorf("file path is empty")
 				}

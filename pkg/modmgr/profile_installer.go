@@ -14,6 +14,21 @@ import (
 	"github.com/ikafly144/au_mod_installer/pkg/progress"
 )
 
+func fileDestinationPath(file model.ModVersionFile) string {
+	path := file.ExtractPath
+	filename := filepath.Base(file.Filename)
+	if path == "" && file.ContentType == model.ContentTypePluginDll {
+		path = filepath.Join("BepInEx", "plugins", filepath.Base(file.Filename))
+	}
+	if path == "" {
+		path = filename
+	}
+	if filepath.Base(path) != filename {
+		path = filepath.Join(filepath.Dir(path), filename)
+	}
+	return path
+}
+
 type ProfileMetadata struct {
 	GameVersion string           `json:"game_version"`
 	BinaryType  aumgr.BinaryType `json:"binary_type"`
@@ -170,17 +185,7 @@ func PrepareProfileDirectory(profileDir string, cacheDir string, modVersions []M
 					continue
 				}
 
-				path := file.ExtractPath
-				filename := filepath.Base(file.Filename)
-				if path == "" && file.ContentType == model.ContentTypePluginDll {
-					path = filepath.Join("BepInEx", "plugins", filepath.Base(file.Filename))
-				}
-				if path == "" {
-					path = filename
-				}
-				if filepath.Base(path) != filename {
-					path = filepath.Join(filepath.Dir(path), filename)
-				}
+				path := fileDestinationPath(file)
 				if path == "" {
 					slog.Warn("File has no valid path, skipping", "modId", mod.ModID, "versionId", mod.ID, "file", file)
 					return fmt.Errorf("file has no valid path for mod %s version %s: %s", mod.ModID, mod.ID, file.Filename)
@@ -206,17 +211,11 @@ func PrepareProfileDirectory(profileDir string, cacheDir string, modVersions []M
 						_ = srcFile.Close()
 						return fmt.Errorf("failed to read zip file for hashing: %w", err)
 					}
-					computedHash, err := newHashChecker.Sum()
-					if err != nil {
+					if computedHash, err := newHashChecker.Sum(); err != nil {
 						_ = srcFile.Close()
 						return fmt.Errorf("failed to compute hash for zip file: %w", err)
-					}
-					for hashType, hashStr := range file.Hashes {
-						if computedHash[hashType] != hashStr {
-							slog.Warn("Zip file hash mismatch for cached file", "modId", mod.ModID, "versionId", mod.ID, "file", path, "hashType", hashType, "expectedHash", hashStr, "computedHash", computedHash[hashType])
-							return fmt.Errorf("zip file hash mismatch for %s: expected %s but got %s", path, hashStr, computedHash[hashType])
-						}
-						slog.Info("Zip file hash verified for cached file", "modId", mod.ModID, "versionId", mod.ID, "file", path, "hashType", hashType, "hash", hashStr)
+					} else {
+						slog.Info("Zip file hash verified for cached file", "modId", mod.ModID, "versionId", mod.ID, "file", path, "hashes", computedHash)
 					}
 
 					_, _ = srcFile.Seek(0, io.SeekStart)
