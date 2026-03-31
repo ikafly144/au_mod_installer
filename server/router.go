@@ -215,12 +215,12 @@ func router(srv *service.ModService, pathPrefix string, basePath string) http.Ha
 		serverBase := absoluteURL(ctx, combinePath(pathPrefix, basePath, ""))
 		_, err := srv.GetJoinGameMeta(sessionID)
 		if err != nil {
-			message := "この部屋リンクは無効です。時間切れの可能性があります。"
+			message := "この参加リンクは無効です。時間切れの可能性があります。"
 			switch err {
 			case service.ErrShareGameExpired:
-				message = "この部屋リンクは有効期限切れです。"
+				message = "この参加リンクは有効期限切れです。"
 			case service.ErrShareGameNotFound:
-				message = "この部屋リンクは見つかりません。"
+				message = "この参加リンクは見つかりません。"
 			}
 			deepLink := buildJoinGameDeepLink(serverBase, sessionID, message)
 			ctx.Header("Content-Type", "text/html; charset=utf-8")
@@ -289,9 +289,9 @@ func buildJoinGameDeepLink(serverBase, sessionID, errorMessage string) string {
 }
 
 func joinGameHTML(message, deepLink string, success bool) string {
-	status := "部屋リンクを開いています..."
+	status := "参加リンクを開いています..."
 	if !success {
-		status = "部屋リンクを開けませんでした。"
+		status = "参加リンクを開けませんでした。"
 	}
 	messageHTML := ""
 	if message != "" {
@@ -302,7 +302,7 @@ func joinGameHTML(message, deepLink string, success bool) string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Mod of Us 部屋リンク</title>
+<title>Mod of Us 参加リンク</title>
 <style>
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#111;color:#eee;padding:24px;line-height:1.5}
 .card{max-width:560px;margin:0 auto;background:#1b1b1b;border:1px solid #2f2f2f;border-radius:10px;padding:20px}
@@ -312,7 +312,7 @@ a.btn{display:inline-block;padding:10px 14px;background:#2d7ef7;color:#fff;text-
 </head>
 <body>
 <div class="card">
-<h1>Mod of Us 部屋リンク</h1>
+<h1>Mod of Us 参加リンク</h1>
 <p>` + html.EscapeString(status) + `</p>
 ` + messageHTML + `
 <p><a class="btn" href="` + html.EscapeString(deepLink) + `">ランチャーで開く</a></p>
