@@ -77,7 +77,7 @@ func (r *GormRepository) GetModDetails(modID string) (*model.ModDetails, error) 
 }
 
 func (r *GormRepository) CreateModVersion(modID string, details *model.ModVersionDetails) (string, error) {
-	details.ModID = &modID
+	details.ModID = modID
 	result := r.db.Create(details)
 	if result.Error != nil {
 		return "", result.Error

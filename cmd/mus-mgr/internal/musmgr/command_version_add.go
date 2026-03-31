@@ -50,7 +50,7 @@ func (f *commandFactory) newVersionAddCommand() *cli.Command {
 
 			ver := &model.ModVersionDetails{
 				ID:           versionID,
-				ModID:        &modID,
+				ModID:        modID,
 				Dependencies: parseDependencies(cmd.StringSlice("dependency")),
 				Features:     parseFeatures(cmd.StringSlice("feature")),
 			}
