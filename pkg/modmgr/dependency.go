@@ -20,6 +20,7 @@ type VersionProvider interface {
 // It returns a map of ModID to ModVersion containing all original mods and their required dependencies.
 func ResolveDependencies(initialMods []ModVersion, provider VersionProvider) (map[string]ModVersion, error) {
 	resolved := make(map[string]ModVersion)
+	failedRequired := make(map[string]error)
 	for _, m := range initialMods {
 		resolved[m.ModID] = m
 	}
@@ -32,7 +33,21 @@ func ResolveDependencies(initialMods []ModVersion, provider VersionProvider) (ma
 		queue = queue[1:]
 
 		for _, dep := range current.Dependencies {
-			if dep.DependencyType != ModDependencyTypeRequired {
+			depType, err := normalizeDependencyType(dep.DependencyType)
+			if err != nil {
+				return nil, fmt.Errorf("invalid dependency type for %s@%s -> %s: %w", current.ModID, current.ID, dep.ModID, err)
+			}
+
+			if depType != ModDependencyTypeRequired {
+				continue
+			}
+
+			embeddedProviders, err := collectEmbeddedProviders(resolved)
+			if err != nil {
+				return nil, err
+			}
+			if len(embeddedProviders[dep.ModID]) > 0 {
+				// This required dependency is satisfied by another resolved mod that embeds it.
 				continue
 			}
 
@@ -46,15 +61,86 @@ func ResolveDependencies(initialMods []ModVersion, provider VersionProvider) (ma
 
 			depVersion, err := resolveDependencyVersion(provider, dep)
 			if err != nil {
-				return nil, err
+				failedRequired[requiredFailureKey(current, dep)] = err
+				continue
 			}
 
+			delete(failedRequired, requiredFailureKey(current, dep))
 			resolved[dep.ModID] = *depVersion
 			queue = append(queue, *depVersion)
 		}
 	}
 
+	if err := validateResolvedDependencies(resolved, provider, failedRequired); err != nil {
+		return nil, err
+	}
+
 	return resolved, nil
+}
+
+func validateResolvedDependencies(resolved map[string]ModVersion, provider VersionProvider, failedRequired map[string]error) error {
+	embeddedProviders, err := collectEmbeddedProviders(resolved)
+	if err != nil {
+		return err
+	}
+
+	for _, current := range resolved {
+		for _, dep := range current.Dependencies {
+			depType, err := normalizeDependencyType(dep.DependencyType)
+			if err != nil {
+				return fmt.Errorf("invalid dependency type for %s@%s -> %s: %w", current.ModID, current.ID, dep.ModID, err)
+			}
+
+			resolvedDep, found := resolved[dep.ModID]
+			switch depType {
+			case ModDependencyTypeRequired:
+				if !found && len(embeddedProviders[dep.ModID]) == 0 {
+					if resolveErr, ok := failedRequired[requiredFailureKey(current, dep)]; ok {
+						return resolveErr
+					}
+					return fmt.Errorf("required dependency not resolved for mod %s: %s", current.ModID, dep.ModID)
+				}
+				if found {
+					if err := checkDependencyConstraint(resolvedDep, dep, provider); err != nil {
+						return err
+					}
+				}
+			case ModDependencyTypeOptional:
+				if found {
+					if err := checkOptionalDependencyConstraint(resolvedDep, dep, provider); err != nil {
+						return err
+					}
+				}
+			case ModDependencyTypeConflict:
+				if found {
+					if err := checkConflictDependencyConstraint(resolvedDep, dep, provider); err != nil {
+						return err
+					}
+				}
+			case ModDependencyTypeEmbedded:
+				// Embedded means the dependency is bundled by the current mod.
+				// It can coexist in resolved set (e.g. explicitly selected), so no error here.
+			}
+		}
+	}
+
+	return nil
+}
+
+func collectEmbeddedProviders(mods map[string]ModVersion) (map[string][]string, error) {
+	embeddedProviders := make(map[string][]string)
+	for _, current := range mods {
+		for _, dep := range current.Dependencies {
+			depType, err := normalizeDependencyType(dep.DependencyType)
+			if err != nil {
+				return nil, fmt.Errorf("invalid dependency type for %s@%s -> %s: %w", current.ModID, current.ID, dep.ModID, err)
+			}
+			if depType == ModDependencyTypeEmbedded {
+				embeddedProviders[dep.ModID] = append(embeddedProviders[dep.ModID], current.ModID)
+			}
+		}
+	}
+	return embeddedProviders, nil
 }
 
 func resolveDependencyVersion(provider VersionProvider, dep model.ModVersionDependency) (*ModVersion, error) {
@@ -103,36 +189,79 @@ func resolveDependencyVersion(provider VersionProvider, dep model.ModVersionDepe
 }
 
 func checkDependencyConstraint(resolvedDep ModVersion, dep model.ModVersionDependency, provider VersionProvider) error {
+	matched, requiredVersion, err := matchesDependencyConstraint(resolvedDep, dep, provider)
+	if err != nil {
+		return err
+	}
+	if !matched {
+		return fmt.Errorf("version conflict for mod %s: required %s but resolved %s", dep.ModID, requiredVersion, resolvedDep.ID)
+	}
+	return nil
+}
+
+func checkOptionalDependencyConstraint(resolvedDep ModVersion, dep model.ModVersionDependency, provider VersionProvider) error {
+	matched, requiredVersion, err := matchesDependencyConstraint(resolvedDep, dep, provider)
+	if err != nil {
+		return err
+	}
+	if !matched {
+		return fmt.Errorf("optional dependency version conflict for mod %s: optional %s but resolved %s", dep.ModID, requiredVersion, resolvedDep.ID)
+	}
+	return nil
+}
+
+func checkConflictDependencyConstraint(resolvedDep ModVersion, dep model.ModVersionDependency, provider VersionProvider) error {
+	matched, conflictVersion, err := matchesDependencyConstraint(resolvedDep, dep, provider)
+	if err != nil {
+		return err
+	}
+	if matched {
+		return fmt.Errorf("dependency conflict for mod %s: conflicted %s and resolved %s", dep.ModID, conflictVersion, resolvedDep.ID)
+	}
+	return nil
+}
+
+func matchesDependencyConstraint(resolvedDep ModVersion, dep model.ModVersionDependency, provider VersionProvider) (bool, string, error) {
 	constraint := strings.TrimSpace(dep.VersionID)
 	if constraint == "" || strings.EqualFold(constraint, "any") {
-		return nil
+		return true, "any", nil
 	}
 
 	if isExactVersionConstraint(constraint) {
-		if resolvedDep.ID != constraint {
-			return fmt.Errorf("version conflict for mod %s: required %s but resolved %s", dep.ModID, dep.VersionID, resolvedDep.ID)
-		}
-		return nil
+		return resolvedDep.ID == constraint, dep.VersionID, nil
 	}
 
 	if strings.EqualFold(constraint, "latest") {
 		latest, err := provider.GetLatestModVersion(dep.ModID)
 		if err != nil {
-			return fmt.Errorf("failed to fetch latest dependency %s: %w", dep.ModID, err)
+			return false, "", fmt.Errorf("failed to fetch latest dependency %s: %w", dep.ModID, err)
 		}
 		if latest == nil {
-			return fmt.Errorf("failed to fetch latest dependency %s: version not found", dep.ModID)
+			return false, "", fmt.Errorf("failed to fetch latest dependency %s: version not found", dep.ModID)
 		}
-		if resolvedDep.ID != latest.ID {
-			return fmt.Errorf("version conflict for mod %s: required latest (%s) but resolved %s", dep.ModID, latest.ID, resolvedDep.ID)
-		}
-		return nil
+		return resolvedDep.ID == latest.ID, fmt.Sprintf("latest (%s)", latest.ID), nil
 	}
 
-	if !version.NewConstrainGroupFromString(constraint).Match(resolvedDep.ID) {
-		return fmt.Errorf("version conflict for mod %s: required %s but resolved %s", dep.ModID, dep.VersionID, resolvedDep.ID)
+	return version.NewConstrainGroupFromString(constraint).Match(resolvedDep.ID), dep.VersionID, nil
+}
+
+func normalizeDependencyType(depType model.DependencyType) (ModDependencyType, error) {
+	switch strings.ToLower(strings.TrimSpace(string(depType))) {
+	case "", string(ModDependencyTypeRequired):
+		return ModDependencyTypeRequired, nil
+	case string(ModDependencyTypeOptional):
+		return ModDependencyTypeOptional, nil
+	case string(ModDependencyTypeConflict):
+		return ModDependencyTypeConflict, nil
+	case string(ModDependencyTypeEmbedded):
+		return ModDependencyTypeEmbedded, nil
+	default:
+		return "", fmt.Errorf("unknown dependency type %q", depType)
 	}
-	return nil
+}
+
+func requiredFailureKey(current ModVersion, dep model.ModVersionDependency) string {
+	return fmt.Sprintf("%s@%s->%s@%s", current.ModID, current.ID, dep.ModID, dep.VersionID)
 }
 
 func isExactVersionConstraint(constraint string) bool {

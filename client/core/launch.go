@@ -2,8 +2,10 @@ package core
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/google/uuid"
 
@@ -33,11 +35,11 @@ func (a *App) ResolveDependencies(initialMods []modmgr.ModVersion) ([]modmgr.Mod
 		return nil, err
 	}
 
-	result := make([]modmgr.ModVersion, 0, len(resolvedMap))
+	result := make(map[string]modmgr.ModVersion, len(resolvedMap))
 	for _, v := range resolvedMap {
-		result = append(result, v)
+		result[v.ID] = v
 	}
-	return result, nil
+	return slices.Collect(maps.Values(result)), nil
 }
 
 // PrepareLaunch prepares the game for launch by preparing the profile directory.
