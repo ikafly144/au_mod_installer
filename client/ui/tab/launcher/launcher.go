@@ -115,12 +115,16 @@ const (
 	launcherGridIconInset    = float32(2)
 	launcherGridMenuSize     = float32(22)
 	launcherGridMenuInset    = float32(4)
+	launcherRunningBadgeSize = float32(24)
+	launcherRunningBadgeGap  = float32(4)
 
 	profileArchiveDownloadTimeout  = 30 * time.Second
 	profileArchiveDownloadMaxBytes = int64(64 << 20)
 	lobbyPollInterval              = 2 * time.Second
 	restoredProcessWatchInterval   = 2 * time.Second
 )
+
+var launcherRunningProfileStrokeColor = color.NRGBA{R: 56, G: 170, B: 92, A: 255}
 
 type sharedRoomLinkCache struct {
 	RoomKey   string
@@ -264,6 +268,43 @@ func (l *Launcher) setupRoomLinkUI() {
 	l.roomLinkContainer.Hide()
 }
 
+func (l *Launcher) refreshProfileHighlights() {
+	l.profileList.Refresh()
+	l.refreshProfileGrid()
+}
+
+func (l *Launcher) newRunningProfileBadge() *fyne.Container {
+	bg := canvas.NewCircle(launcherRunningProfileStrokeColor)
+	bg.StrokeColor = theme.Color(theme.ColorNameBackground)
+	bg.StrokeWidth = 1
+	bg.Resize(fyne.NewSquareSize(launcherRunningBadgeSize))
+	bg.Move(fyne.NewPos(launcherRunningBadgeGap, launcherRunningBadgeGap))
+
+	icon := widget.NewIcon(theme.MediaPlayIcon())
+	iconSize := launcherRunningBadgeSize * 0.62
+	icon.Resize(fyne.NewSquareSize(iconSize))
+	icon.Move(fyne.NewPos(
+		launcherRunningBadgeGap+(launcherRunningBadgeSize-iconSize)/2,
+		launcherRunningBadgeGap+(launcherRunningBadgeSize-iconSize)/2,
+	))
+
+	return container.NewWithoutLayout(bg, icon)
+}
+
+func (l *Launcher) applyProfileBorderStyle(bg *canvas.Rectangle, profileID uuid.UUID) {
+	bg.StrokeColor = theme.Color(theme.ColorNameButton)
+	bg.StrokeWidth = 1
+	if l.isProfileRunning(profileID) {
+		bg.StrokeColor = launcherRunningProfileStrokeColor
+		bg.StrokeWidth = 2
+		return
+	}
+	if profileID == l.selectedProfileID {
+		bg.StrokeColor = theme.Color(theme.ColorNamePrimary)
+		bg.StrokeWidth = 2
+	}
+}
+
 func (l *Launcher) isDirectJoinEnabledForRunningProfile() bool {
 	l.runningProfileMu.Lock()
 	defer l.runningProfileMu.Unlock()
@@ -293,9 +334,14 @@ func hasDirectJoinFeature(versions []modmgr.ModVersion) bool {
 
 func (l *Launcher) onGameStarted(profileID uuid.UUID, pid int) {
 	l.runningProfileMu.Lock()
+	wasRunning := l.runningProfileID == profileID && l.runningGamePID > 0
 	l.runningGamePID = pid
 	directJoin := l.runningDirectJoin
+	isRunning := l.runningProfileID == profileID && l.runningGamePID > 0
 	l.runningProfileMu.Unlock()
+	if wasRunning != isRunning {
+		fyne.Do(l.refreshProfileHighlights)
+	}
 	if !directJoin || pid <= 0 || !l.state.Core.IsLobbyInfoAvailable() {
 		fyne.Do(func() {
 			l.refreshRoomLinkUI(nil, false)
@@ -308,12 +354,17 @@ func (l *Launcher) onGameStarted(profileID uuid.UUID, pid int) {
 func (l *Launcher) onGameExited(profileID uuid.UUID) {
 	l.stopLobbyPolling()
 	l.runningProfileMu.Lock()
+	wasRunning := l.runningProfileID == profileID && l.runningGamePID > 0
 	l.runningGamePID = 0
 	l.runningDirectJoin = false
 	l.runningStartedAt = time.Time{}
+	isRunning := l.runningProfileID == profileID && l.runningGamePID > 0
 	l.runningProfileMu.Unlock()
 	l.invalidateCachedRoomShareAsync()
 	fyne.Do(func() {
+		if wasRunning != isRunning {
+			l.refreshProfileHighlights()
+		}
 		l.refreshRoomLinkUI(nil, false)
 	})
 }
@@ -1186,7 +1237,9 @@ func (l *Launcher) setupProfileList() {
 			img := l.newProfileIconCanvas(profile.Profile{}, launcherListThumbMinSize, 8)
 			imgBg := canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground))
 			imgBg.CornerRadius = 3
-			imgArea := container.NewStack(imgBg, img)
+			runningBadge := l.newRunningProfileBadge()
+			runningBadge.Hide()
+			imgArea := container.NewStack(imgBg, img, runningBadge)
 
 			title := widget.NewLabel("Profile Name")
 			title.TextStyle = fyne.TextStyle{Bold: true}
@@ -1233,7 +1286,13 @@ func (l *Launcher) setupProfileList() {
 
 			imgArea := content.Objects[0].(*fyne.Container)
 			img := imgArea.Objects[1].(*canvas.Image)
+			runningBadge := imgArea.Objects[2]
 			l.refreshProfileIconCanvas(img, prof, int(launcherListThumbMinSize))
+			if l.isProfileRunning(prof.ID) {
+				runningBadge.Show()
+			} else {
+				runningBadge.Hide()
+			}
 
 			textArea := content.Objects[2].(*fyne.Container).Objects[0].(*fyne.Container)
 			title := textArea.Objects[0].(*widget.Label)
@@ -1255,12 +1314,7 @@ func (l *Launcher) setupProfileList() {
 				l.showProfileMenuAt(fyne.CurrentApp().Driver().AbsolutePositionForObject(menuBtn).Add(fyne.NewPos(0, fyne.CanvasObject(menuBtn).Size().Height)), prof)
 			}
 
-			bg.StrokeColor = theme.Color(theme.ColorNameButton)
-			bg.StrokeWidth = 1
-			if prof.ID == l.selectedProfileID {
-				bg.StrokeColor = theme.Color(theme.ColorNamePrimary)
-				bg.StrokeWidth = 2
-			}
+			l.applyProfileBorderStyle(bg, prof.ID)
 			bg.Refresh()
 		},
 	)
@@ -1493,6 +1547,11 @@ func (l *Launcher) refreshProfileGrid() {
 			l.showProfileMenuAt(fyne.CurrentApp().Driver().AbsolutePositionForObject(menuBtn).Add(fyne.NewPos(0, fyne.CanvasObject(menuBtn).Size().Height)), p)
 		}
 
+		runningBadge := l.newRunningProfileBadge()
+		if !l.isProfileRunning(p.ID) {
+			runningBadge.Hide()
+		}
+
 		iconAreaBg := canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground))
 		iconAreaBg.CornerRadius = 6
 		iconAreaBg.Resize(fyne.NewSquareSize(launcherGridIconAreaSize))
@@ -1503,7 +1562,7 @@ func (l *Launcher) refreshProfileGrid() {
 		iconAreaSizer.SetMinSize(fyne.NewSquareSize(launcherGridIconAreaSize))
 		iconArea := container.NewStack(
 			iconAreaSizer,
-			container.NewWithoutLayout(iconAreaBg, img, menuBtn),
+			container.NewWithoutLayout(iconAreaBg, img, menuBtn, runningBadge),
 		)
 
 		cardContent := container.NewBorder(
@@ -1528,13 +1587,8 @@ func (l *Launcher) refreshProfileGrid() {
 		})
 
 		bg := canvas.NewRectangle(theme.Color(theme.ColorNameBackground))
-		bg.StrokeColor = theme.Color(theme.ColorNameButton)
-		bg.StrokeWidth = 1
 		bg.CornerRadius = theme.InputRadiusSize()
-		if p.ID == l.selectedProfileID {
-			bg.StrokeColor = theme.Color(theme.ColorNamePrimary)
-			bg.StrokeWidth = 2
-		}
+		l.applyProfileBorderStyle(bg, p.ID)
 
 		items = append(items, container.NewStack(bg, container.NewPadded(tappable)))
 	}
@@ -1740,16 +1794,25 @@ func (l *Launcher) setRunningProfile(profileID uuid.UUID) {
 		return
 	}
 	l.runningProfileMu.Lock()
+	changed := l.runningProfileID != profileID
 	l.runningProfileID = profileID
 	l.runningProfileMu.Unlock()
+	if changed {
+		fyne.Do(l.refreshProfileHighlights)
+	}
 }
 
 func (l *Launcher) clearRunningProfile(profileID uuid.UUID) {
 	l.runningProfileMu.Lock()
+	changed := false
 	if l.runningProfileID == profileID {
 		l.runningProfileID = uuid.Nil
+		changed = true
 	}
 	l.runningProfileMu.Unlock()
+	if changed {
+		fyne.Do(l.refreshProfileHighlights)
+	}
 }
 
 func (l *Launcher) setLaunchingProfile(profileID uuid.UUID, launching bool) {
@@ -1787,6 +1850,15 @@ func (l *Launcher) isProfileBusy(profileID uuid.UUID) bool {
 		return true
 	}
 	return l.runningProfileID == profileID
+}
+
+func (l *Launcher) isProfileRunning(profileID uuid.UUID) bool {
+	if profileID == uuid.Nil {
+		return false
+	}
+	l.runningProfileMu.Lock()
+	defer l.runningProfileMu.Unlock()
+	return l.runningProfileID == profileID && l.runningGamePID > 0
 }
 
 func (l *Launcher) syncProfile(prof profile.Profile) {
