@@ -1,7 +1,9 @@
 package rest
 
 import (
+	"bytes"
 	"fmt"
+	"mime/multipart"
 	"net/url"
 
 	"github.com/ikafly144/au_mod_installer/common/rest"
@@ -77,10 +79,33 @@ func (c *clientImpl) CheckForUpdates(installedVersions map[string]string) (map[s
 }
 
 func (c *clientImpl) ShareGame(aupack []byte, room rest.RoomInfo) (*rest.ShareGameResponse, error) {
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+
+	aupackPart, err := writer.CreateFormFile("aupack", "profile.aupack")
+	if err != nil {
+		return nil, err
+	}
+	if _, err := aupackPart.Write(aupack); err != nil {
+		return nil, err
+	}
+	if err := writer.WriteField("lobby_code", room.LobbyCode); err != nil {
+		return nil, err
+	}
+	if err := writer.WriteField("server_ip", room.ServerIP); err != nil {
+		return nil, err
+	}
+	if err := writer.WriteField("server_port", fmt.Sprint(room.ServerPort)); err != nil {
+		return nil, err
+	}
+	if err := writer.Close(); err != nil {
+		return nil, err
+	}
+
 	var rs rest.ShareGameResponse
-	err := c.do(rest.EndpointShareGame.Compile(nil), rest.ShareGameRequest{
-		Aupack: aupack,
-		Room:   room,
+	err = c.do(rest.EndpointShareGame.Compile(nil), encodedRequestBody{
+		ContentType: writer.FormDataContentType(),
+		Body:        body.Bytes(),
 	}, &rs, 1)
 	if err != nil {
 		return nil, err

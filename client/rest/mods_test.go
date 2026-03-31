@@ -2,13 +2,16 @@ package rest
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	restcommon "github.com/ikafly144/au_mod_installer/common/rest"
 	"github.com/ikafly144/au_mod_installer/common/rest/model"
 )
 
@@ -62,4 +65,44 @@ func TestClientImpl_CheckForUpdates(t *testing.T) {
 	assert.Contains(t, updates, "mod-1")
 	assert.Equal(t, "v1.1.0", updates["mod-1"].ID)
 	assert.NotContains(t, updates, "mod-2")
+}
+
+func TestClientImpl_ShareGame_UsesMultipartFormData(t *testing.T) {
+	expectedAupack := []byte("test-aupack-bytes")
+	expectedRoom := restcommon.RoomInfo{
+		LobbyCode:  "ABCD",
+		ServerIP:   "127.0.0.1",
+		ServerPort: 22023,
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, http.MethodPost, r.Method)
+		require.Equal(t, "/share_game", r.URL.Path)
+		require.True(t, strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data;"))
+
+		require.NoError(t, r.ParseMultipartForm(1<<20))
+		file, _, err := r.FormFile("aupack")
+		require.NoError(t, err)
+		defer file.Close()
+
+		gotAupack, err := io.ReadAll(file)
+		require.NoError(t, err)
+		assert.Equal(t, expectedAupack, gotAupack)
+		assert.Equal(t, expectedRoom.LobbyCode, r.FormValue("lobby_code"))
+		assert.Equal(t, expectedRoom.ServerIP, r.FormValue("server_ip"))
+		assert.Equal(t, "22023", r.FormValue("server_port"))
+
+		require.NoError(t, json.NewEncoder(w).Encode(restcommon.ShareGameResponse{
+			URL:       "/join_game?session_id=s1",
+			SessionID: "s1",
+			HostKey:   "h1",
+		}))
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL)
+	rs, err := client.ShareGame(expectedAupack, expectedRoom)
+	require.NoError(t, err)
+	require.NotNil(t, rs)
+	assert.Equal(t, "s1", rs.SessionID)
+	assert.Equal(t, "h1", rs.HostKey)
 }

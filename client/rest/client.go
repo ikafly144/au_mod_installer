@@ -16,6 +16,11 @@ type clientImpl struct {
 	HTTPClient *http.Client
 }
 
+type encodedRequestBody struct {
+	ContentType string
+	Body        []byte
+}
+
 var _ Client = (*clientImpl)(nil)
 
 type config func(*clientImpl)
@@ -52,6 +57,14 @@ func (c *clientImpl) do(endpoint *rest.CompiledEndpoint, rqBody any, rsBody any,
 		case []byte:
 			contentType = "application/octet-stream"
 			rawRequestBody = v
+		case encodedRequestBody:
+			contentType = v.ContentType
+			rawRequestBody = v.Body
+		case *encodedRequestBody:
+			if v != nil {
+				contentType = v.ContentType
+				rawRequestBody = v.Body
+			}
 		default:
 			contentType = "application/json"
 			if rawRequestBody, err = json.Marshal(rqBody); err != nil {

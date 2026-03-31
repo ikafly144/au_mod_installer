@@ -1,8 +1,10 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"html"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -107,10 +109,44 @@ func router(srv *service.ModService, pathPrefix string, basePath string) http.Ha
 		ctx.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 	api.POST(rest.EndpointShareGame.Route, func(ctx *gin.Context) {
-		var req rest.ShareGameRequest
-		if err := ctx.ShouldBindJSON(&req); err != nil {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		fileHeader, err := ctx.FormFile("aupack")
+		if err != nil {
+			if errors.Is(err, http.ErrMissingFile) {
+				ctx.JSON(http.StatusBadRequest, gin.H{"error": "aupack is required"})
+				return
+			}
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid multipart body"})
 			return
+		}
+		file, err := fileHeader.Open()
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid aupack file"})
+			return
+		}
+		defer file.Close()
+
+		aupack, err := io.ReadAll(file)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "failed to read aupack file"})
+			return
+		}
+		serverPort := uint16(0)
+		serverPortStr := strings.TrimSpace(ctx.PostForm("server_port"))
+		if serverPortStr != "" {
+			parsed, err := strconv.ParseUint(serverPortStr, 10, 16)
+			if err != nil {
+				ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid server_port"})
+				return
+			}
+			serverPort = uint16(parsed)
+		}
+		req := rest.ShareGameRequest{
+			Aupack: aupack,
+			Room: rest.RoomInfo{
+				LobbyCode:  strings.TrimSpace(ctx.PostForm("lobby_code")),
+				ServerIP:   strings.TrimSpace(ctx.PostForm("server_ip")),
+				ServerPort: serverPort,
+			},
 		}
 		if len(req.Aupack) == 0 {
 			ctx.JSON(http.StatusBadRequest, gin.H{"error": "aupack is required"})
