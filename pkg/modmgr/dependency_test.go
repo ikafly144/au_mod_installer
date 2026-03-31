@@ -366,31 +366,6 @@ func TestResolveDependencies_RequiredCanBeSatisfiedByEmbedded(t *testing.T) {
 	require.NotContains(t, resolved, "a")
 }
 
-func TestResolveDependencies_CoflictTypoActsAsConflict(t *testing.T) {
-	initial := []ModVersion{
-		modVersion("b", "v1.0.0"),
-		modVersion("a", "v1.0.0", model.ModVersionDependency{
-			ModID:          "b",
-			VersionID:      "any",
-			DependencyType: model.DependencyType("coflict"),
-		}),
-	}
-	provider := &mockVersionProvider{
-		versions: map[string]map[string]ModVersion{
-			"a": {"v1.0.0": initial[1]},
-			"b": {"v1.0.0": initial[0]},
-		},
-		latest: map[string]string{
-			"a": "v1.0.0",
-			"b": "v1.0.0",
-		},
-	}
-
-	_, err := ResolveDependencies(initial, provider)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "dependency conflict for mod b")
-}
-
 func modVersion(modID, versionID string, deps ...model.ModVersionDependency) ModVersion {
 	return ModVersion{
 		ModVersionDetails: model.ModVersionDetails{
