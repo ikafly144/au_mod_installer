@@ -221,8 +221,28 @@ func (s *Settings) checkUninstallState() {
 
 func (s *Settings) Tab() (*container.TabItem, error) {
 	entry := widget.NewLabelWithData(s.state.SelectedGamePath)
-	selectedPath := container.NewHScroll(container.New(layout.NewCustomPaddedLayout(0, 10, 0, 0), entry))
-	selectedPath.SetMinSize(fyne.NewSize(0, 50))
+	entry.Selectable = true
+	pathBg := canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground))
+	pathBg.CornerRadius = theme.InputRadiusSize()
+	selectedPath := container.NewHScroll(
+		container.NewStack(
+			pathBg,
+			entry,
+		),
+	)
+
+	openInExplorerButton := widget.NewButtonWithIcon("", theme.FolderOpenIcon(), func() {
+		path, err := s.state.SelectedGamePath.Get()
+		if err != nil || path == "" {
+			s.state.ShowErrorDialog(errors.New(lang.LocalizeKey("installation.error.no_path", "Installation path is not specified.")))
+			return
+		}
+		slog.Info("Opening installation folder in explorer", "path", path)
+		if err := s.state.ExplorerOpenFolder(path); err != nil {
+			s.state.ShowErrorDialog(errors.New(lang.LocalizeKey("installation.error.open_explorer_failed", "Failed to open file explorer: ") + err.Error()))
+			return
+		}
+	})
 
 	basicPage := container.NewVScroll(container.NewVBox(
 		widget.NewCard(
@@ -233,7 +253,13 @@ func (s *Settings) Tab() (*container.TabItem, error) {
 				widget.NewAccordion(
 					widget.NewAccordionItem(
 						lang.LocalizeKey("installation.selected_install", "Selected Installation Path"),
-						selectedPath,
+						container.NewBorder(
+							nil,
+							nil,
+							nil,
+							openInExplorerButton,
+							selectedPath,
+						),
 					),
 				),
 			),

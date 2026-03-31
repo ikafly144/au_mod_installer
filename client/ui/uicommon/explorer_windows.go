@@ -96,7 +96,7 @@ func (s *State) ExplorerOpenFolder(path string) error {
 	if path == "" {
 		return errors.New("folder path is empty")
 	}
-	if err := exec.Command("explorer.exe", path).Start(); err != nil {
+	if err := exec.Command("cmd", "/c", "start", "", path).Start(); err != nil {
 		return fmt.Errorf("failed to open folder in explorer: %w", err)
 	}
 	return nil

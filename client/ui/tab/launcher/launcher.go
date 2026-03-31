@@ -266,6 +266,7 @@ func (l *Launcher) restoreRunningProfiles() {
 
 func (l *Launcher) setupRoomLinkUI() {
 	l.roomLinkEntry.SetText(roomLinkPlaceholder)
+	l.roomLinkEntry.Refresh()
 	l.copyRoomLinkButton.Disable()
 	l.unpublishRoomButton.Disable()
 	panelBackground := canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground))
@@ -532,6 +533,7 @@ func (l *Launcher) refreshRoomLinkUI(info *core.IPCLobbyInfo, running bool) {
 		}
 		l.setRoomLinkTrayExpanded(false)
 		l.roomLinkEntry.SetText(roomLinkPlaceholder)
+		l.roomLinkEntry.Refresh()
 		l.copyRoomLinkButton.Disable()
 		l.shareRoomButton.Disable()
 		l.unpublishRoomButton.Disable()
@@ -545,6 +547,7 @@ func (l *Launcher) refreshRoomLinkUI(info *core.IPCLobbyInfo, running bool) {
 		}
 		l.setRoomLinkTrayExpanded(false)
 		l.roomLinkEntry.SetText(roomLinkPlaceholder)
+		l.roomLinkEntry.Refresh()
 		l.copyRoomLinkButton.Disable()
 		l.shareRoomButton.Disable()
 		l.unpublishRoomButton.Disable()
@@ -564,6 +567,7 @@ func (l *Launcher) refreshRoomLinkUI(info *core.IPCLobbyInfo, running bool) {
 	l.roomShareMu.Unlock()
 	if cache.RoomKey != key {
 		l.roomLinkEntry.SetText(roomLinkPlaceholder)
+		l.roomLinkEntry.Refresh()
 		l.copyRoomLinkButton.Disable()
 		l.unpublishRoomButton.Disable()
 		if cache.SessionID != "" {
@@ -624,6 +628,7 @@ func (l *Launcher) unpublishCurrentRoom() {
 
 	fyne.Do(func() {
 		l.roomLinkEntry.SetText(roomLinkPlaceholder)
+		l.roomLinkEntry.Refresh()
 		l.copyRoomLinkButton.Disable()
 		l.unpublishRoomButton.Disable()
 	})
