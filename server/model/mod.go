@@ -72,7 +72,8 @@ type ModDetails struct {
 	Author       string  `gorm:"not null" json:"author"`
 	ThumbnailURI *string `gorm:"default:null" json:"-"`
 
-	LatestVersionID *string `gorm:"index;default:null;" json:"latest_version"`
+	LatestVersionID       *string `gorm:"index;default:null;" json:"-"`
+	LatestVersionExternal string  `gorm:"-" json:"latest_version"`
 
 	Versions []ModVersionDetails `gorm:"foreignKey:ModID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"-"`
 	Files    []ModVersionFile    `gorm:"foreignKey:ModID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"-"`

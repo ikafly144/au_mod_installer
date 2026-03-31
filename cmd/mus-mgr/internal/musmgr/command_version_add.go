@@ -85,7 +85,7 @@ func (f *commandFactory) newVersionAddCommand() *cli.Command {
 			fmt.Printf("Created version: %s\n", ver.VersionID)
 
 			if cmd.Bool("set-latest") {
-				update := &model.ModDetails{LatestVersionID: &ver.VersionID}
+				update := &model.ModDetails{LatestVersionID: &ver.ID}
 				if err := repo.UpdateMod(modID, update); err != nil {
 					return fmt.Errorf("failed to update latest version: %w", err)
 				}

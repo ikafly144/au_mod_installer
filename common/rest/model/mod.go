@@ -15,7 +15,7 @@ type ModDetails struct {
 	Description string `json:"description"`
 	Author      string `json:"author"`
 
-	LatestVersionID string `json:"latest_version"`
+	LatestVersionID string `json:"latest_version,omitempty"`
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`

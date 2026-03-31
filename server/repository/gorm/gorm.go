@@ -73,6 +73,13 @@ func (r *GormRepository) GetModDetails(modID string) (*model.ModDetails, error) 
 	if result.Error != nil {
 		return nil, result.Error
 	}
+	// Load LatestVersionExternal from LatestVersionID
+	if mod.LatestVersionID != nil {
+		var latestVersion model.ModVersionDetails
+		if err := r.db.Select("version_id").First(&latestVersion, "id = ?", *mod.LatestVersionID).Error; err == nil {
+			mod.LatestVersionExternal = latestVersion.VersionID
+		}
+	}
 	return &mod, nil
 }
 
