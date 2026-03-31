@@ -87,7 +87,7 @@ func (r *GormRepository) CreateModVersion(modID string, details *model.ModVersio
 
 func (r *GormRepository) GetModVersionIds(modID string) ([]string, error) {
 	var ids []string
-	result := r.db.Model(&model.ModVersionDetails{}).Where("mod_id = ?", modID).Pluck("ID", &ids)
+	result := r.db.Model(&model.ModVersionDetails{}).Where("mod_id = ?", modID).Pluck("VersionID", &ids)
 	if result.Error != nil {
 		return nil, result.Error
 	}
@@ -96,7 +96,7 @@ func (r *GormRepository) GetModVersionIds(modID string) ([]string, error) {
 
 func (r *GormRepository) GetModVersionDetails(modID, versionID string) (*model.ModVersionDetails, error) {
 	var version model.ModVersionDetails
-	result := r.db.Preload("Files").First(&version, "mod_id = ? AND id = ?", modID, versionID)
+	result := r.db.Preload("Files").First(&version, "mod_id = ? AND version_id = ?", modID, versionID)
 	if result.Error != nil {
 		return nil, result.Error
 	}
@@ -114,12 +114,12 @@ func (r *GormRepository) UpdateModFields(modID string, updates map[string]any) e
 }
 
 func (r *GormRepository) UpdateModVersion(modID, versionID string, details *model.ModVersionDetails) error {
-	result := r.db.Model(&model.ModVersionDetails{}).Where("mod_id = ? AND id = ?", modID, versionID).Updates(details)
+	result := r.db.Model(&model.ModVersionDetails{}).Where("mod_id = ? AND version_id = ?", modID, versionID).Updates(details)
 	return result.Error
 }
 
 func (r *GormRepository) UpdateModVersionFields(modID, versionID string, updates map[string]any) error {
-	result := r.db.Model(&model.ModVersionDetails{}).Where("mod_id = ? AND id = ?", modID, versionID).Updates(updates)
+	result := r.db.Model(&model.ModVersionDetails{}).Where("mod_id = ? AND version_id = ?", modID, versionID).Updates(updates)
 	return result.Error
 }
 
