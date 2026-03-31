@@ -26,8 +26,8 @@ type ModVersionListResult struct {
 }
 
 type ModVersionDetails struct {
-	ID    string `json:"id"`
-	ModID string `json:"mod_id"`
+	VersionID string `json:"version_id"`
+	ModID     string `json:"mod_id"`
 
 	GameVersions []string `json:"game_versions,omitempty"`
 

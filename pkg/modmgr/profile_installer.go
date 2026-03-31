@@ -72,10 +72,10 @@ func modVersionsEqual(a, b []ModVersion) bool {
 	// Sort or map? They might be in different order.
 	ma := make(map[string]string)
 	for _, v := range a {
-		ma[v.ModID] = v.ID
+		ma[v.ModID] = v.VersionID
 	}
 	for _, v := range b {
-		if id, ok := ma[v.ModID]; !ok || id != v.ID {
+		if id, ok := ma[v.ModID]; !ok || id != v.VersionID {
 			return false
 		}
 	}
@@ -165,30 +165,30 @@ func PrepareProfileDirectory(profileDir string, cacheDir string, modVersions []M
 
 			var metadata CacheMetadata
 			if metaFile, err := cacheRoot.Open("metadata.json"); err != nil {
-				slog.Warn("Failed to open mod cache metadata, will re-download", "modId", mod.ModID, "versionId", mod.ID, "error", err)
+				slog.Warn("Failed to open mod cache metadata, will re-download", "modId", mod.ModID, "versionId", mod.VersionID, "error", err)
 				return fmt.Errorf("mod cache metadata not found for %s: %w", mod.ModID, err)
 			} else if err := json.NewDecoder(metaFile).Decode(&metadata); err != nil {
 				_ = metaFile.Close()
-				slog.Warn("Failed to decode mod cache metadata, will re-download", "modId", mod.ModID, "versionId", mod.ID, "error", err)
+				slog.Warn("Failed to decode mod cache metadata, will re-download", "modId", mod.ModID, "versionId", mod.VersionID, "error", err)
 				return fmt.Errorf("failed to decode mod cache metadata for %s: %w", mod.ModID, err)
-			} else if metadata.ModVersion.ID != mod.ID {
+			} else if metadata.ModVersion.VersionID != mod.VersionID {
 				_ = metaFile.Close()
-				slog.Warn("Mod cache metadata version mismatch, will re-download", "modId", mod.ModID, "versionId", mod.ID, "cachedVersionId", metadata.ModVersion.ID)
-				return fmt.Errorf("mod cache metadata version mismatch for %s: cached %s but expected %s", mod.ModID, metadata.ModVersion.ID, mod.ID)
+				slog.Warn("Mod cache metadata version mismatch, will re-download", "modId", mod.ModID, "versionId", mod.VersionID, "cachedVersionId", metadata.ModVersion.VersionID)
+				return fmt.Errorf("mod cache metadata version mismatch for %s: cached %s but expected %s", mod.ModID, metadata.ModVersion.VersionID, mod.VersionID)
 			} else {
 				_ = metaFile.Close()
 			}
 
 			for _, file := range mod.Files {
 				if !binaryType.IsCompatibleWith(file.TargetPlatform) {
-					slog.Info("Skipping incompatible file in cache", "modId", mod.ModID, "versionId", mod.ID, "file", file, "binaryType", binaryType)
+					slog.Info("Skipping incompatible file in cache", "modId", mod.ModID, "versionId", mod.VersionID, "file", file, "binaryType", binaryType)
 					continue
 				}
 
 				path := fileDestinationPath(file)
 				if path == "" {
-					slog.Warn("File has no valid path, skipping", "modId", mod.ModID, "versionId", mod.ID, "file", file)
-					return fmt.Errorf("file has no valid path for mod %s version %s: %s", mod.ModID, mod.ID, file.Filename)
+					slog.Warn("File has no valid path, skipping", "modId", mod.ModID, "versionId", mod.VersionID, "file", file)
+					return fmt.Errorf("file has no valid path for mod %s version %s: %s", mod.ModID, mod.VersionID, file.Filename)
 				}
 				srcFile, err := cacheRoot.Open(path)
 				if err != nil {
@@ -215,7 +215,7 @@ func PrepareProfileDirectory(profileDir string, cacheDir string, modVersions []M
 						_ = srcFile.Close()
 						return fmt.Errorf("failed to compute hash for zip file: %w", err)
 					} else {
-						slog.Info("Zip file hash verified for cached file", "modId", mod.ModID, "versionId", mod.ID, "file", path, "hashes", computedHash)
+						slog.Info("Zip file hash verified for cached file", "modId", mod.ModID, "versionId", mod.VersionID, "file", path, "hashes", computedHash)
 					}
 
 					_, _ = srcFile.Seek(0, io.SeekStart)
@@ -279,10 +279,10 @@ func PrepareProfileDirectory(profileDir string, cacheDir string, modVersions []M
 				}
 				for hashType, hashStr := range file.Hashes {
 					if computedHash[hashType] != hashStr {
-						slog.Warn("File hash mismatch for copied file, deleting profile file", "modId", mod.ModID, "versionId", mod.ID, "file", path, "hashType", hashType, "expectedHash", hashStr, "computedHash", computedHash[hashType])
+						slog.Warn("File hash mismatch for copied file, deleting profile file", "modId", mod.ModID, "versionId", mod.VersionID, "file", path, "hashType", hashType, "expectedHash", hashStr, "computedHash", computedHash[hashType])
 						return fmt.Errorf("file hash mismatch for %s: expected %s but got %s", path, hashStr, computedHash[hashType])
 					}
-					slog.Info("File hash verified for copied file", "modId", mod.ModID, "versionId", mod.ID, "file", path, "hashType", hashType, "hash", hashStr)
+					slog.Info("File hash verified for copied file", "modId", mod.ModID, "versionId", mod.VersionID, "file", path, "hashType", hashType, "hash", hashStr)
 				}
 				modPaths = append(modPaths, filepath.Clean(path))
 				completedCopies++

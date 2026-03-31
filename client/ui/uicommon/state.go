@@ -281,7 +281,7 @@ func (i *State) RefreshModInstallation() {
 
 	var modNames []string
 	for _, mod := range status.InstalledMods {
-		modNames = append(modNames, mod.ModID+" ("+mod.ID+")")
+		modNames = append(modNames, mod.ModID+" ("+mod.VersionID+")")
 	}
 	info.WriteString(lang.LocalizeKey("installer.info.mod_name", "Mod: ") + strings.Join(modNames, ", ") + "\n")
 	i.ModInstalledInfo.SetText(strings.TrimSpace(info.String()))

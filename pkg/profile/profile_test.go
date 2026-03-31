@@ -32,8 +32,8 @@ func TestProfileManager_AddAndGet(t *testing.T) {
 	}
 	p.AddModVersion(modmgr.ModVersion{
 		ModVersionDetails: model.ModVersionDetails{
-			ID:    versionID,
-			ModID: modID,
+			VersionID: versionID,
+			ModID:     modID,
 		},
 	})
 
@@ -44,14 +44,14 @@ func TestProfileManager_AddAndGet(t *testing.T) {
 	loadedProfile, ok := manager.Get(profileID)
 	assert.True(t, ok)
 	assert.Equal(t, "Test Profile", loadedProfile.Name)
-	assert.Equal(t, versionID, loadedProfile.ModVersions[modID].ID)
+	assert.Equal(t, versionID, loadedProfile.ModVersions[modID].VersionID)
 
 	// Verify persistence
 	newManager, err := NewManager(tempDir)
 	require.NoError(t, err)
 	persistedProfile, ok := newManager.Get(profileID)
 	assert.True(t, ok)
-	assert.Equal(t, versionID, persistedProfile.ModVersions[modID].ID)
+	assert.Equal(t, versionID, persistedProfile.ModVersions[modID].VersionID)
 }
 
 func TestProfile_VersionTracking(t *testing.T) {
@@ -63,23 +63,23 @@ func TestProfile_VersionTracking(t *testing.T) {
 	modID := "example-mod"
 	v1 := modmgr.ModVersion{
 		ModVersionDetails: model.ModVersionDetails{
-			ID:    "v1",
-			ModID: modID,
+			VersionID: "v1",
+			ModID:     modID,
 		},
 	}
 	v2 := modmgr.ModVersion{
 		ModVersionDetails: model.ModVersionDetails{
-			ID:    "v2",
-			ModID: modID,
+			VersionID: "v2",
+			ModID:     modID,
 		},
 	}
 
 	p.AddModVersion(v1)
-	assert.Equal(t, "v1", p.ModVersions[modID].ID)
+	assert.Equal(t, "v1", p.ModVersions[modID].VersionID)
 
 	// Updating the version for the same mod
 	p.AddModVersion(v2)
-	assert.Equal(t, "v2", p.ModVersions[modID].ID)
+	assert.Equal(t, "v2", p.ModVersions[modID].VersionID)
 }
 
 func TestProfileManager_IconFileCRUD(t *testing.T) {

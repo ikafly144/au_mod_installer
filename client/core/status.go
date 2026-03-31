@@ -80,10 +80,10 @@ func (a *App) GetInstallationStatus(gamePath string, checkUpdates bool) *Install
 			if err != nil {
 				continue
 			}
-			if remoteMod.LatestVersionID != mod.ID {
+			if remoteMod.LatestVersionID != mod.VersionID {
 				info.OutdatedMods = append(info.OutdatedMods, OutdatedMod{
 					ID:             mod.ModID,
-					CurrentVersion: mod.ID,
+					CurrentVersion: mod.VersionID,
 					LatestVersion:  remoteMod.LatestVersionID,
 				})
 			}

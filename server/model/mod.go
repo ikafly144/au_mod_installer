@@ -82,8 +82,9 @@ type ModDetails struct {
 }
 
 type ModVersionDetails struct {
-	ID    string `gorm:"primaryKey" json:"id"`
-	ModID string `gorm:"primaryKey" json:"mod_id"`
+	ID        string `gorm:"primaryKey" json:"-"`
+	VersionID string `gorm:"index:idx_mod_version_details" json:"version_id"`
+	ModID     string `gorm:"index:idx_mod_version_details" json:"mod_id"`
 
 	Files        []ModVersionFile `gorm:"foreignKey:VersionID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"files,omitempty"`
 	Dependencies DependencyArray  `gorm:"type:json" json:"dependencies,omitempty"`

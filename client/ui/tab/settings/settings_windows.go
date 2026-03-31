@@ -469,7 +469,7 @@ func (s *Settings) importProfile() {
 		name := entry.Text
 		mods := make(map[string]modmgr.ModVersion)
 		for _, m := range installationInfo.InstalledMods {
-			mods[m.ID] = m.ModVersion
+			mods[m.VersionID] = m.ModVersion
 		}
 
 		prof := profile.Profile{

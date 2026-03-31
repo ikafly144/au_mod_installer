@@ -166,15 +166,15 @@ func DownloadMods(cacheDir string, modVersions []ModVersion, binaryType aumgr.Bi
 				// Load metadata and check if it matches the mod version
 				metaFile, err := os.Open(filepath.Join(modCacheDir, "metadata.json"))
 				if err != nil {
-					slog.Warn("Failed to open mod cache metadata, will re-download", "modId", modVersions[i].ModID, "versionId", modVersions[i].ID, "error", err)
+					slog.Warn("Failed to open mod cache metadata, will re-download", "modId", modVersions[i].ModID, "versionId", modVersions[i].VersionID, "error", err)
 					goto download
 				}
 				var metadata CacheMetadata
 				if err := json.NewDecoder(metaFile).Decode(&metadata); err != nil {
-					slog.Warn("Failed to decode mod cache metadata, will re-download", "modId", modVersions[i].ModID, "versionId", modVersions[i].ID, "error", err)
+					slog.Warn("Failed to decode mod cache metadata, will re-download", "modId", modVersions[i].ModID, "versionId", modVersions[i].VersionID, "error", err)
 					goto download
-				} else if metadata.ModVersion.ID != modVersions[i].ID {
-					slog.Warn("Mod cache metadata version mismatch, will re-download", "modId", modVersions[i].ModID, "versionId", modVersions[i].ID, "cachedVersionId", metadata.ModVersion.ID)
+				} else if metadata.ModVersion.VersionID != modVersions[i].VersionID {
+					slog.Warn("Mod cache metadata version mismatch, will re-download", "modId", modVersions[i].ModID, "versionId", modVersions[i].VersionID, "cachedVersionId", metadata.ModVersion.VersionID)
 					goto download
 				}
 
@@ -182,35 +182,35 @@ func DownloadMods(cacheDir string, modVersions []ModVersion, binaryType aumgr.Bi
 				for file := range modVersions[i].Downloads(binaryType) {
 					cachedFilePath := filepath.Join(modCacheDir, fileDestinationPath(file))
 					if _, err := os.Stat(cachedFilePath); os.IsNotExist(err) {
-						slog.Info("Cached mod file not found, need to re-download", "modId", modVersions[i].ModID, "versionId", modVersions[i].ID, "file", cachedFilePath)
+						slog.Info("Cached mod file not found, need to re-download", "modId", modVersions[i].ModID, "versionId", modVersions[i].VersionID, "file", cachedFilePath)
 						goto download
 					}
 					hashChecker := newHashWriters(file.Hashes)
 					hashFile, err := os.Open(cachedFilePath)
 					if err != nil {
-						slog.Error("Failed to open cached mod file for hashing", "modId", modVersions[i].ModID, "versionId", modVersions[i].ID, "file", cachedFilePath, "error", err)
+						slog.Error("Failed to open cached mod file for hashing", "modId", modVersions[i].ModID, "versionId", modVersions[i].VersionID, "file", cachedFilePath, "error", err)
 						goto download
 					}
 					if _, err := io.Copy(hashChecker, hashFile); err != nil {
-						slog.Error("Failed to hash cached mod file", "modId", modVersions[i].ModID, "versionId", modVersions[i].ID, "file", cachedFilePath, "error", err)
+						slog.Error("Failed to hash cached mod file", "modId", modVersions[i].ModID, "versionId", modVersions[i].VersionID, "file", cachedFilePath, "error", err)
 						hashFile.Close()
 						goto download
 					}
 					if _, err := hashChecker.Sum(); err != nil {
-						slog.Warn("Cached mod file hash mismatch, will re-download", "modId", modVersions[i].ModID, "versionId", modVersions[i].ID, "file", cachedFilePath, "error", err)
+						slog.Warn("Cached mod file hash mismatch, will re-download", "modId", modVersions[i].ModID, "versionId", modVersions[i].VersionID, "file", cachedFilePath, "error", err)
 						hashFile.Close()
 						goto download
 					}
 					hashFile.Close()
 				}
 
-				slog.Info("Mod already cached", "modId", modVersions[i].ModID, "versionId", modVersions[i].ID)
+				slog.Info("Mod already cached", "modId", modVersions[i].ModID, "versionId", modVersions[i].VersionID)
 				if progressListener != nil {
 					progressListener.SetValue(progressListener.GetValue() + (float64(modVersions[i].CompatibleFilesCount(binaryType)) / float64(totalDownloadCount)))
 				}
 				continue
 			} else {
-				slog.Info("Force re-downloading mod, clearing cache", "modId", modVersions[i].ModID, "versionId", modVersions[i].ID)
+				slog.Info("Force re-downloading mod, clearing cache", "modId", modVersions[i].ModID, "versionId", modVersions[i].VersionID)
 				if err := os.RemoveAll(modCacheDir); err != nil {
 					return fmt.Errorf("failed to clear mod cache: %w", err)
 				}
@@ -228,7 +228,7 @@ func DownloadMods(cacheDir string, modVersions []ModVersion, binaryType aumgr.Bi
 		}
 		defer modCacheRoot.Close()
 
-		slog.Info("Downloading mod", "modId", modVersions[i].ModID, "versionId", modVersions[i].ID)
+		slog.Info("Downloading mod", "modId", modVersions[i].ModID, "versionId", modVersions[i].VersionID)
 		for file := range modVersions[i].Downloads(binaryType) {
 			var response *http.Response
 			for _, uri := range file.Downloads {
@@ -251,7 +251,7 @@ func DownloadMods(cacheDir string, modVersions []ModVersion, binaryType aumgr.Bi
 				break
 			}
 			if response == nil {
-				return fmt.Errorf("failed to download mod file from all sources: %s@%s (%s)", modVersions[i].ModID, modVersions[i].ID, file.ID)
+				return fmt.Errorf("failed to download mod file from all sources: %s@%s (%s)", modVersions[i].ModID, modVersions[i].VersionID, file.ID)
 			}
 			contentLength := response.ContentLength
 			slog.Info("Downloading mod file", "url", response.Request.URL, "contentLength", contentLength)
@@ -291,7 +291,7 @@ func DownloadMods(cacheDir string, modVersions []ModVersion, binaryType aumgr.Bi
 
 			if computedHash, err := hashChecker.Sum(); err != nil {
 				if extractPath != "" {
-					slog.Warn("File hash mismatch for extracted file, deleting cached file", "modId", modVersions[i].ModID, "versionId", modVersions[i].ID, "file", extractPath, "error", err)
+					slog.Warn("File hash mismatch for extracted file, deleting cached file", "modId", modVersions[i].ModID, "versionId", modVersions[i].VersionID, "file", extractPath, "error", err)
 					if err := modCacheRoot.RemoveAll(extractPath); err != nil {
 						slog.Warn("Failed to remove cached file after hash mismatch", "file", extractPath, "error", err)
 					}
@@ -398,13 +398,13 @@ func uninstallMod(modInstallLocation *os.Root, progress progress.Progress, remai
 				if remainMods != nil {
 					shouldRemain := false
 					for _, remainVersion := range remainMods {
-						if version.ModID == remainVersion.ModID && version.ID == remainVersion.ID {
+						if version.ModID == remainVersion.ModID && version.VersionID == remainVersion.VersionID {
 							shouldRemain = true
 							break
 						}
 					}
 					if shouldRemain {
-						slog.Info("Keeping mod during uninstallation", "modId", version.ModID, "versionId", version.ID)
+						slog.Info("Keeping mod during uninstallation", "modId", version.ModID, "versionId", version.VersionID)
 						remainModInfos = append(remainModInfos, version)
 						continue
 					}

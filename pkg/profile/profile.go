@@ -65,7 +65,7 @@ func (p *Profile) MakeShared() SharedProfile {
 	}
 
 	for modID, version := range p.ModVersions {
-		shared.ModVersions[modID] = version.ID
+		shared.ModVersions[modID] = version.VersionID
 	}
 
 	return shared

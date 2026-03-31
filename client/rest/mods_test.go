@@ -28,7 +28,7 @@ func TestClientImpl_CheckForUpdates(t *testing.T) {
 			}
 		case "/mod/mod-1/version/v1.1.0":
 			// Mod 1 の最新バージョンの詳細
-			version := model.ModVersionDetails{ID: "v1.1.0", ModID: "mod-1"}
+			version := model.ModVersionDetails{VersionID: "v1.1.0", ModID: "mod-1"}
 			if err := json.NewEncoder(w).Encode(version); err != nil {
 				t.Errorf("Failed to encode response: %v", err)
 			}
@@ -40,7 +40,7 @@ func TestClientImpl_CheckForUpdates(t *testing.T) {
 			}
 		case "/mod/mod-2/version/v2.0.0":
 			// Mod 2 の最新バージョンの詳細
-			version := model.ModVersionDetails{ID: "v2.0.0", ModID: "mod-2"}
+			version := model.ModVersionDetails{VersionID: "v2.0.0", ModID: "mod-2"}
 			if err := json.NewEncoder(w).Encode(version); err != nil {
 				t.Errorf("Failed to encode response: %v", err)
 			}
@@ -63,7 +63,7 @@ func TestClientImpl_CheckForUpdates(t *testing.T) {
 
 	assert.Len(t, updates, 1)
 	assert.Contains(t, updates, "mod-1")
-	assert.Equal(t, "v1.1.0", updates["mod-1"].ID)
+	assert.Equal(t, "v1.1.0", updates["mod-1"].VersionID)
 	assert.NotContains(t, updates, "mod-2")
 }
 

@@ -46,7 +46,7 @@ func (f *FileClient) LoadData() error {
 		}
 		f.versionStore[m.ID]["all"] = m.Versions
 		for _, v := range m.Versions {
-			f.versionStore[m.ID][v.ID] = []modmgr.ModVersion{v}
+			f.versionStore[m.ID][v.VersionID] = []modmgr.ModVersion{v}
 		}
 	}
 
@@ -90,7 +90,7 @@ func (f *FileClient) GetModVersionIDs(modID string, limit int, after string) ([]
 	}
 	var versionIDs []string
 	for _, v := range versionsMap["all"] {
-		versionIDs = append(versionIDs, v.ID)
+		versionIDs = append(versionIDs, v.VersionID)
 	}
 	return versionIDs, nil
 }
@@ -122,7 +122,7 @@ func (f *FileClient) CheckForUpdates(installedVersions map[string]string) (map[s
 		if err != nil {
 			continue
 		}
-		if latest != nil && latest.ID != currentVersion {
+		if latest != nil && latest.VersionID != currentVersion {
 			updates[modID] = latest
 		}
 	}

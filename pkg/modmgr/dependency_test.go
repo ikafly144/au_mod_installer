@@ -66,7 +66,7 @@ func TestResolveDependencies_ExactVersionConstraint(t *testing.T) {
 		DependencyType: model.DependencyTypeRequired,
 	})}, provider)
 	require.NoError(t, err)
-	require.Equal(t, "v1.1.0", resolved["b"].ID)
+	require.Equal(t, "v1.1.0", resolved["b"].VersionID)
 }
 
 func TestResolveDependencies_ConstraintSelectsHighestMatch(t *testing.T) {
@@ -96,7 +96,7 @@ func TestResolveDependencies_ConstraintSelectsHighestMatch(t *testing.T) {
 		DependencyType: model.DependencyTypeRequired,
 	})}, provider)
 	require.NoError(t, err)
-	require.Equal(t, "v1.5.0", resolved["b"].ID)
+	require.Equal(t, "v1.5.0", resolved["b"].VersionID)
 }
 
 func TestResolveDependencies_ConstraintConflictOnResolved(t *testing.T) {
@@ -369,7 +369,7 @@ func TestResolveDependencies_RequiredCanBeSatisfiedByEmbedded(t *testing.T) {
 func modVersion(modID, versionID string, deps ...model.ModVersionDependency) ModVersion {
 	return ModVersion{
 		ModVersionDetails: model.ModVersionDetails{
-			ID:           versionID,
+			VersionID:    versionID,
 			ModID:        modID,
 			Dependencies: deps,
 		},

@@ -37,7 +37,7 @@ func (a *App) ResolveDependencies(initialMods []modmgr.ModVersion) ([]modmgr.Mod
 
 	result := make(map[string]modmgr.ModVersion, len(resolvedMap))
 	for _, v := range resolvedMap {
-		result[v.ID] = v
+		result[v.VersionID] = v
 	}
 	return slices.Collect(maps.Values(result)), nil
 }

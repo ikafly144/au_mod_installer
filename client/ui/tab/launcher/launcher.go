@@ -2429,12 +2429,12 @@ func (l *Launcher) openProfileEditor(prof profile.Profile) {
 	go func() {
 		installed := make(map[string]string)
 		for _, v := range currentProfile.Versions() {
-			installed[v.ModID] = v.ID
+			installed[v.ModID] = v.VersionID
 		}
 		updates, err := l.state.Rest.CheckForUpdates(installed)
 		if err == nil {
 			for modID, latest := range updates {
-				updatesAvailable[modID] = latest.ID
+				updatesAvailable[modID] = latest.VersionID
 			}
 			fyne.Do(func() {
 				if len(updatesAvailable) > 0 {
@@ -2463,7 +2463,7 @@ func (l *Launcher) openProfileEditor(prof profile.Profile) {
 
 		l.refreshModThumbnailCanvas(thumb, v.ModID, 64)
 		l.ensureModThumbnailLoaded(v.ModID, modList.Refresh)
-		label.SetText(v.ModID + " (" + v.ID + ")")
+		label.SetText(v.ModID + " (" + v.VersionID + ")")
 		label.Wrapping = fyne.TextWrapOff
 		label.Truncation = fyne.TextTruncateEllipsis
 
@@ -3029,7 +3029,7 @@ func (l *Launcher) newModDetailsDialog(mod *modmgr.Mod, onSelect func(modmgr.Mod
 			case row.err != nil:
 				btn.SetText(lang.LocalizeKey("profile.failed_version", "Failed to load version '{{.ID}}'", map[string]any{"ID": row.versionID}))
 			case row.version != nil:
-				btn.SetText(row.version.ID)
+				btn.SetText(row.version.VersionID)
 				btn.Enable()
 				version := *row.version
 				btn.OnTapped = func() {

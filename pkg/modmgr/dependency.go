@@ -35,7 +35,7 @@ func ResolveDependencies(initialMods []ModVersion, provider VersionProvider) (ma
 		for _, dep := range current.Dependencies {
 			depType, err := normalizeDependencyType(dep.DependencyType)
 			if err != nil {
-				return nil, fmt.Errorf("invalid dependency type for %s@%s -> %s: %w", current.ModID, current.ID, dep.ModID, err)
+				return nil, fmt.Errorf("invalid dependency type for %s@%s -> %s: %w", current.ModID, current.VersionID, dep.ModID, err)
 			}
 
 			if depType != ModDependencyTypeRequired {
@@ -88,7 +88,7 @@ func validateResolvedDependencies(resolved map[string]ModVersion, provider Versi
 		for _, dep := range current.Dependencies {
 			depType, err := normalizeDependencyType(dep.DependencyType)
 			if err != nil {
-				return fmt.Errorf("invalid dependency type for %s@%s -> %s: %w", current.ModID, current.ID, dep.ModID, err)
+				return fmt.Errorf("invalid dependency type for %s@%s -> %s: %w", current.ModID, current.VersionID, dep.ModID, err)
 			}
 
 			resolvedDep, found := resolved[dep.ModID]
@@ -133,7 +133,7 @@ func collectEmbeddedProviders(mods map[string]ModVersion) (map[string][]string, 
 		for _, dep := range current.Dependencies {
 			depType, err := normalizeDependencyType(dep.DependencyType)
 			if err != nil {
-				return nil, fmt.Errorf("invalid dependency type for %s@%s -> %s: %w", current.ModID, current.ID, dep.ModID, err)
+				return nil, fmt.Errorf("invalid dependency type for %s@%s -> %s: %w", current.ModID, current.VersionID, dep.ModID, err)
 			}
 			if depType == ModDependencyTypeEmbedded {
 				embeddedProviders[dep.ModID] = append(embeddedProviders[dep.ModID], current.ModID)
@@ -194,7 +194,7 @@ func checkDependencyConstraint(resolvedDep ModVersion, dep model.ModVersionDepen
 		return err
 	}
 	if !matched {
-		return fmt.Errorf("version conflict for mod %s: required %s but resolved %s", dep.ModID, requiredVersion, resolvedDep.ID)
+		return fmt.Errorf("version conflict for mod %s: required %s but resolved %s", dep.ModID, requiredVersion, resolvedDep.VersionID)
 	}
 	return nil
 }
@@ -205,7 +205,7 @@ func checkOptionalDependencyConstraint(resolvedDep ModVersion, dep model.ModVers
 		return err
 	}
 	if !matched {
-		return fmt.Errorf("optional dependency version conflict for mod %s: optional %s but resolved %s", dep.ModID, requiredVersion, resolvedDep.ID)
+		return fmt.Errorf("optional dependency version conflict for mod %s: optional %s but resolved %s", dep.ModID, requiredVersion, resolvedDep.VersionID)
 	}
 	return nil
 }
@@ -216,7 +216,7 @@ func checkConflictDependencyConstraint(resolvedDep ModVersion, dep model.ModVers
 		return err
 	}
 	if matched {
-		return fmt.Errorf("dependency conflict for mod %s: conflicted %s and resolved %s", dep.ModID, conflictVersion, resolvedDep.ID)
+		return fmt.Errorf("dependency conflict for mod %s: conflicted %s and resolved %s", dep.ModID, conflictVersion, resolvedDep.VersionID)
 	}
 	return nil
 }
@@ -228,7 +228,7 @@ func matchesDependencyConstraint(resolvedDep ModVersion, dep model.ModVersionDep
 	}
 
 	if isExactVersionConstraint(constraint) {
-		return resolvedDep.ID == constraint, dep.VersionID, nil
+		return resolvedDep.VersionID == constraint, dep.VersionID, nil
 	}
 
 	if strings.EqualFold(constraint, "latest") {
@@ -239,10 +239,10 @@ func matchesDependencyConstraint(resolvedDep ModVersion, dep model.ModVersionDep
 		if latest == nil {
 			return false, "", fmt.Errorf("failed to fetch latest dependency %s: version not found", dep.ModID)
 		}
-		return resolvedDep.ID == latest.ID, fmt.Sprintf("latest (%s)", latest.ID), nil
+		return resolvedDep.VersionID == latest.VersionID, fmt.Sprintf("latest (%s)", latest.VersionID), nil
 	}
 
-	return version.NewConstrainGroupFromString(constraint).Match(resolvedDep.ID), dep.VersionID, nil
+	return version.NewConstrainGroupFromString(constraint).Match(resolvedDep.VersionID), dep.VersionID, nil
 }
 
 func normalizeDependencyType(depType model.DependencyType) (ModDependencyType, error) {
@@ -261,7 +261,7 @@ func normalizeDependencyType(depType model.DependencyType) (ModDependencyType, e
 }
 
 func requiredFailureKey(current ModVersion, dep model.ModVersionDependency) string {
-	return fmt.Sprintf("%s@%s->%s@%s", current.ModID, current.ID, dep.ModID, dep.VersionID)
+	return fmt.Sprintf("%s@%s->%s@%s", current.ModID, current.VersionID, dep.ModID, dep.VersionID)
 }
 
 func isExactVersionConstraint(constraint string) bool {

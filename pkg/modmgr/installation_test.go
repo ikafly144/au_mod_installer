@@ -21,8 +21,8 @@ func TestInstallationInfo_SaveAndLoad(t *testing.T) {
 
 	modVersion := ModVersion{
 		ModVersionDetails: model.ModVersionDetails{
-			ID:    "v1.2.3",
-			ModID: "test-mod",
+			VersionID: "v1.2.3",
+			ModID:     "test-mod",
 		},
 	}
 
@@ -47,6 +47,6 @@ func TestInstallationInfo_SaveAndLoad(t *testing.T) {
 	assert.Equal(t, installation.FileVersion, loaded.FileVersion)
 	assert.Equal(t, installation.InstalledGameVersion, loaded.InstalledGameVersion)
 	require.Len(t, loaded.InstalledMods, 1)
-	assert.Equal(t, "v1.2.3", loaded.InstalledMods[0].ID)
+	assert.Equal(t, "v1.2.3", loaded.InstalledMods[0].VersionID)
 	assert.Equal(t, "test-mod", loaded.InstalledMods[0].ModID)
 }

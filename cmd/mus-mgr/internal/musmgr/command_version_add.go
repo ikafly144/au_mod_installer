@@ -49,7 +49,8 @@ func (f *commandFactory) newVersionAddCommand() *cli.Command {
 			}
 
 			ver := &model.ModVersionDetails{
-				ID:           versionID,
+				ID:           uuid.New().String(),
+				VersionID:    versionID,
 				ModID:        modID,
 				Dependencies: parseDependencies(cmd.StringSlice("dependency")),
 				Features:     parseFeatures(cmd.StringSlice("feature")),
@@ -66,7 +67,7 @@ func (f *commandFactory) newVersionAddCommand() *cli.Command {
 				verFile := model.ModVersionFile{
 					ID:             uuid.New().String(),
 					ModID:          &modID,
-					VersionID:      &ver.ID,
+					VersionID:      &ver.VersionID,
 					Filename:       filename,
 					ContentType:    model.FileType(pf.Type),
 					Size:           size,
@@ -81,10 +82,10 @@ func (f *commandFactory) newVersionAddCommand() *cli.Command {
 			if _, err := repo.CreateModVersion(modID, ver); err != nil {
 				return err
 			}
-			fmt.Printf("Created version: %s\n", ver.ID)
+			fmt.Printf("Created version: %s\n", ver.VersionID)
 
 			if cmd.Bool("set-latest") {
-				update := &model.ModDetails{LatestVersionID: &ver.ID}
+				update := &model.ModDetails{LatestVersionID: &ver.VersionID}
 				if err := repo.UpdateMod(modID, update); err != nil {
 					return fmt.Errorf("failed to update latest version: %w", err)
 				}

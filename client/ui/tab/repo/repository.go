@@ -178,7 +178,7 @@ func (r *Repository) updateModList(filter string) {
 			if activeID, err := uuid.Parse(activeProfileIDStr); err == nil {
 				if activeProfile, ok := r.state.ProfileManager.Get(activeID); ok {
 					if installedVersion, ok := activeProfile.ModVersions[mod.ID]; ok {
-						if installedVersion.ID != mod.LatestVersionID {
+						if installedVersion.VersionID != mod.LatestVersionID {
 							updateBadge.SetText(lang.LocalizeKey("repository.update_available", "Update Available"))
 							updateBadge.Importance = widget.WarningImportance
 							updateBadge.Show()

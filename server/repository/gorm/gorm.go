@@ -82,7 +82,7 @@ func (r *GormRepository) CreateModVersion(modID string, details *model.ModVersio
 	if result.Error != nil {
 		return "", result.Error
 	}
-	return details.ID, nil
+	return details.VersionID, nil
 }
 
 func (r *GormRepository) GetModVersionIds(modID string) ([]string, error) {
