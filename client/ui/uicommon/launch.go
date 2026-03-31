@@ -111,5 +111,8 @@ func (s *State) UpdateProfileLaunchMetrics(profileID uuid.UUID, startedAt, finis
 	if err := s.ProfileManager.Add(prof); err != nil {
 		return fmt.Errorf("failed to save profile launch metrics: %w", err)
 	}
+	if s.OnProfileMetricsUpdated != nil {
+		s.OnProfileMetricsUpdated(profileID)
+	}
 	return nil
 }

@@ -119,6 +119,7 @@ type State struct {
 	OnDroppedURIs           func([]fyne.URI)
 	OnGameStarted           func(profileID uuid.UUID, pid int)
 	OnGameExited            func(profileID uuid.UUID)
+	OnProfileMetricsUpdated func(profileID uuid.UUID)
 
 	pendingJoinInfo *core.LaunchJoinInfo
 }

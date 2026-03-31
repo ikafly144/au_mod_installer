@@ -185,6 +185,11 @@ func (l *Launcher) init() {
 	l.state.OnGameExited = func(profileID uuid.UUID) {
 		l.onGameExited(profileID)
 	}
+	l.state.OnProfileMetricsUpdated = func(profileID uuid.UUID) {
+		fyne.Do(func() {
+			l.refreshProfiles()
+		})
+	}
 	l.setupRoomLinkUI()
 	l.roomLinkEntry.OnChanged = func(value string) {
 		l.copyRoomLinkButton.SetText(lang.LocalizeKey("launcher.room_link.copy", "リンクをコピー"))
