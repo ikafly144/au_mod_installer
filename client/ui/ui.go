@@ -7,6 +7,7 @@ import (
 
 	"github.com/ikafly144/au_mod_installer/client/ui/tab/launcher"
 	"github.com/ikafly144/au_mod_installer/client/ui/tab/repo"
+	servertab "github.com/ikafly144/au_mod_installer/client/ui/tab/server"
 	"github.com/ikafly144/au_mod_installer/client/ui/tab/settings"
 	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
 
@@ -69,9 +70,16 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 		return err
 	}
 
+	st := servertab.NewServerTab(state)
+	serverTab, err := st.Tab()
+	if err != nil {
+		return err
+	}
+
 	canvas := container.NewAppTabs(
 		launcherTab,
 		repoTab,
+		serverTab,
 		settingsTab,
 	)
 	w.SetOnDropped(func(_ fyne.Position, uris []fyne.URI) {
