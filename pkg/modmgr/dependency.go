@@ -18,64 +18,351 @@ type VersionProvider interface {
 
 // ResolveDependencies recursively finds all required dependencies for a given set of mod versions.
 // It returns a map of ModID to ModVersion containing all original mods and their required dependencies.
+// The algorithm attempts to find the best compatible version combination, trying newer versions first
+// but backtracking to older versions if conflicts arise.
+// When multiple MODs require the same dependency, it merges constraints to find a version that satisfies all.
 func ResolveDependencies(initialMods []ModVersion, provider VersionProvider) (map[string]ModVersion, error) {
 	resolved := make(map[string]ModVersion)
-	failedRequired := make(map[string]error)
 	for _, m := range initialMods {
 		resolved[m.ModID] = m
 	}
 
-	queue := make([]ModVersion, len(initialMods))
-	copy(queue, initialMods)
+	// Collect all required dependencies and their constraints first
+	allDeps := collectAllRequiredDependencies(initialMods, resolved)
 
-	for len(queue) > 0 {
-		current := queue[0]
-		queue = queue[1:]
-
-		for _, dep := range current.Dependencies {
-			depType, err := normalizeDependencyType(dep.DependencyType)
-			if err != nil {
-				return nil, fmt.Errorf("invalid dependency type for %s@%s -> %s: %w", current.ModID, current.VersionID, dep.ModID, err)
-			}
-
-			if depType != ModDependencyTypeRequired {
-				continue
-			}
-
-			embeddedProviders, err := collectEmbeddedProviders(resolved)
-			if err != nil {
-				return nil, err
-			}
-			if len(embeddedProviders[dep.ModID]) > 0 {
-				// This required dependency is satisfied by another resolved mod that embeds it.
-				continue
-			}
-
-			// Check if already resolved
-			if resolvedDep, ok := resolved[dep.ModID]; ok {
-				if err := checkDependencyConstraint(resolvedDep, dep, provider); err != nil {
-					return nil, err
-				}
-				continue
-			}
-
-			depVersion, err := resolveDependencyVersion(provider, dep)
-			if err != nil {
-				failedRequired[requiredFailureKey(current, dep)] = err
-				continue
-			}
-
-			delete(failedRequired, requiredFailureKey(current, dep))
-			resolved[dep.ModID] = *depVersion
-			queue = append(queue, *depVersion)
-		}
+	// Resolve dependencies with merged constraints
+	if err := resolveDependenciesWithConstraints(resolved, allDeps, provider); err != nil {
+		return nil, err
 	}
 
-	if err := validateResolvedDependencies(resolved, provider, failedRequired); err != nil {
+	// Final validation
+	if err := validateResolvedDependencies(resolved, provider, nil); err != nil {
 		return nil, err
 	}
 
 	return resolved, nil
+}
+
+// dependencyConstraints holds all constraints for a single dependency
+type dependencyConstraints struct {
+	modID       string
+	constraints []model.ModVersionDependency
+}
+
+// collectAllRequiredDependencies recursively collects all required dependencies and their constraints
+func collectAllRequiredDependencies(queue []ModVersion, alreadyResolved map[string]ModVersion) map[string]*dependencyConstraints {
+	allDeps := make(map[string]*dependencyConstraints)
+	visited := make(map[string]bool)
+
+	// Mark already resolved as visited, but still collect their dependencies
+	for _, mod := range alreadyResolved {
+		visited[mod.ModID] = true
+	}
+
+	var collectRecursive func(mods []ModVersion)
+	collectRecursive = func(mods []ModVersion) {
+		for _, current := range mods {
+			wasVisited := visited[current.ModID]
+			visited[current.ModID] = true
+
+			for _, dep := range current.Dependencies {
+				depType, err := normalizeDependencyType(dep.DependencyType)
+				if err != nil || depType != ModDependencyTypeRequired {
+					continue
+				}
+
+				// Skip if this dependency is already resolved
+				if _, alreadyResolved := alreadyResolved[dep.ModID]; alreadyResolved {
+					continue
+				}
+
+				if allDeps[dep.ModID] == nil {
+					allDeps[dep.ModID] = &dependencyConstraints{
+						modID:       dep.ModID,
+						constraints: []model.ModVersionDependency{},
+					}
+				}
+				allDeps[dep.ModID].constraints = append(allDeps[dep.ModID].constraints, dep)
+			}
+
+			// Don't recurse if we already visited this node
+			if wasVisited {
+				continue
+			}
+		}
+	}
+
+	collectRecursive(queue)
+	return allDeps
+}
+
+// resolveDependenciesWithConstraints resolves dependencies considering all constraints
+func resolveDependenciesWithConstraints(resolved map[string]ModVersion, allDeps map[string]*dependencyConstraints, provider VersionProvider) error {
+	// Keep resolving until no more dependencies to add
+	for len(allDeps) > 0 {
+		// Pick one dependency to resolve
+		var depConstraint *dependencyConstraints
+		for _, dc := range allDeps {
+			depConstraint = dc
+			break
+		}
+
+		embeddedProviders, err := collectEmbeddedProviders(resolved)
+		if err != nil {
+			return err
+		}
+		if len(embeddedProviders[depConstraint.modID]) > 0 {
+			// This dependency is satisfied by an embedded provider
+			delete(allDeps, depConstraint.modID)
+			continue
+		}
+
+		// Get candidates that satisfy ALL constraints
+		candidates, err := getCandidateVersionsForConstraints(provider, depConstraint.constraints)
+		if err != nil {
+			return err
+		}
+
+		if len(candidates) == 0 {
+			constraintStrs := make([]string, len(depConstraint.constraints))
+			for i, c := range depConstraint.constraints {
+				constraintStrs[i] = c.VersionID
+			}
+			return fmt.Errorf("failed to find version for %s satisfying all constraints: %v", depConstraint.modID, constraintStrs)
+		}
+
+		// Try each candidate (ordered newest to oldest)
+		var lastErr error
+		resolved_any := false
+		for _, candidate := range candidates {
+			// Create a test resolution
+			testResolved := make(map[string]ModVersion)
+			for k, v := range resolved {
+				testResolved[k] = v
+			}
+			testResolved[depConstraint.modID] = *candidate
+
+			// Collect new dependencies introduced by this candidate
+			// Pass only the original resolved (not testResolved) to avoid skipping new deps
+			newDeps := collectAllRequiredDependencies([]ModVersion{*candidate}, resolved)
+			
+			// Merge with remaining dependencies
+			testAllDeps := make(map[string]*dependencyConstraints)
+			for k, v := range allDeps {
+				if k == depConstraint.modID {
+					continue // Skip the one we just resolved
+				}
+				// Deep copy the constraints
+				testAllDeps[k] = &dependencyConstraints{
+					modID:       v.modID,
+					constraints: append([]model.ModVersionDependency{}, v.constraints...),
+				}
+			}
+			for k, v := range newDeps {
+				if testAllDeps[k] == nil {
+					testAllDeps[k] = v
+				} else {
+					// Merge constraints
+					testAllDeps[k].constraints = append(testAllDeps[k].constraints, v.constraints...)
+				}
+			}
+
+			// Try to resolve the rest
+			if err := resolveDependenciesWithConstraints(testResolved, testAllDeps, provider); err != nil {
+				lastErr = err
+				continue
+			}
+
+			// Success! Update resolved
+			for k, v := range testResolved {
+				resolved[k] = v
+			}
+			resolved_any = true
+			break
+		}
+
+		if !resolved_any {
+			if lastErr != nil {
+				return lastErr
+			}
+			return fmt.Errorf("failed to resolve dependency %s with any candidate version", depConstraint.modID)
+		}
+
+		// Remove this dependency from the list
+		delete(allDeps, depConstraint.modID)
+	}
+
+	return nil
+}
+
+// getCandidateVersionsForConstraints returns versions that satisfy ALL given constraints
+func getCandidateVersionsForConstraints(provider VersionProvider, constraints []model.ModVersionDependency) ([]*ModVersion, error) {
+	if len(constraints) == 0 {
+		return nil, fmt.Errorf("no constraints provided")
+	}
+
+	modID := constraints[0].ModID
+
+	// Check if all constraints are exact and identical
+	firstConstraint := strings.TrimSpace(constraints[0].VersionID)
+	allSame := true
+	for _, c := range constraints {
+		if strings.TrimSpace(c.VersionID) != firstConstraint {
+			allSame = false
+			break
+		}
+	}
+
+	if allSame {
+		// All constraints are the same, use single constraint logic
+		return getCandidateVersions(provider, constraints[0])
+	}
+
+	// Get all available versions
+	versionIDs, err := provider.GetModVersionIDs(modID, 100, "")
+	if err != nil {
+		return nil, fmt.Errorf("failed to list versions for dependency %s: %w", modID, err)
+	}
+
+	// Filter versions that satisfy ALL constraints
+	matchingVersionIDs := make([]string, 0)
+	for _, versionID := range versionIDs {
+		satisfiesAll := true
+		for _, constraint := range constraints {
+			constraintStr := strings.TrimSpace(constraint.VersionID)
+			
+			// Check if this version satisfies this constraint
+			if constraintStr == "" || strings.EqualFold(constraintStr, "any") {
+				continue // "any" is always satisfied
+			}
+
+			if strings.EqualFold(constraintStr, "latest") {
+				// For "latest", we'll check later
+				continue
+			}
+
+			if isExactVersionConstraint(constraintStr) {
+				if versionID != constraintStr {
+					satisfiesAll = false
+					break
+				}
+			} else {
+				group := version.NewConstrainGroupFromString(constraintStr)
+				if !group.Match(versionID) {
+					satisfiesAll = false
+					break
+				}
+			}
+		}
+
+		if satisfiesAll {
+			matchingVersionIDs = append(matchingVersionIDs, versionID)
+		}
+	}
+
+	// Handle "latest" constraints
+	hasLatestConstraint := false
+	for _, constraint := range constraints {
+		if strings.EqualFold(strings.TrimSpace(constraint.VersionID), "latest") {
+			hasLatestConstraint = true
+			break
+		}
+	}
+
+	if hasLatestConstraint && len(matchingVersionIDs) > 0 {
+		// If there's a "latest" constraint, only return the latest matching version
+		latest, err := provider.GetLatestModVersion(modID)
+		if err != nil {
+			return nil, err
+		}
+		if latest != nil {
+			// Check if latest is in our matching list
+			for _, vid := range matchingVersionIDs {
+				if vid == latest.VersionID {
+					return []*ModVersion{latest}, nil
+				}
+			}
+		}
+		// Latest doesn't satisfy other constraints
+		return nil, nil
+	}
+
+	// Sort matching versions (newest first)
+	for i := 0; i < len(matchingVersionIDs)-1; i++ {
+		for j := i + 1; j < len(matchingVersionIDs); j++ {
+			if compareVersionID(matchingVersionIDs[i], matchingVersionIDs[j]) < 0 {
+				matchingVersionIDs[i], matchingVersionIDs[j] = matchingVersionIDs[j], matchingVersionIDs[i]
+			}
+		}
+	}
+
+	// Fetch version objects
+	candidates := make([]*ModVersion, 0, len(matchingVersionIDs))
+	for _, versionID := range matchingVersionIDs {
+		depVersion, err := provider.GetModVersion(modID, versionID)
+		if err != nil {
+			continue
+		}
+		if depVersion != nil {
+			candidates = append(candidates, depVersion)
+		}
+	}
+
+	return candidates, nil
+}
+
+// getCandidateVersions returns a list of candidate versions in priority order (best to worst)
+func getCandidateVersions(provider VersionProvider, dep model.ModVersionDependency) ([]*ModVersion, error) {
+	constraint := strings.TrimSpace(dep.VersionID)
+
+	// Handle "any", "latest", or empty constraint
+	if constraint == "" || strings.EqualFold(constraint, "any") || strings.EqualFold(constraint, "latest") {
+		depVersion, err := provider.GetLatestModVersion(dep.ModID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch dependency %s (version: %s): %w", dep.ModID, dep.VersionID, err)
+		}
+		if depVersion == nil {
+			return nil, fmt.Errorf("failed to fetch dependency %s (version: %s): version not found", dep.ModID, dep.VersionID)
+		}
+		return []*ModVersion{depVersion}, nil
+	}
+
+	// Handle exact version constraint
+	if isExactVersionConstraint(constraint) {
+		depVersion, err := provider.GetModVersion(dep.ModID, constraint)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch dependency %s (version: %s): %w", dep.ModID, dep.VersionID, err)
+		}
+		if depVersion == nil {
+			return nil, fmt.Errorf("failed to fetch dependency %s (version: %s): version not found", dep.ModID, dep.VersionID)
+		}
+		return []*ModVersion{depVersion}, nil
+	}
+
+	// Handle range constraint - get all matching versions in descending order
+	versionIDs, err := provider.GetModVersionIDs(dep.ModID, 100, "")
+	if err != nil {
+		return nil, fmt.Errorf("failed to list versions for dependency %s: %w", dep.ModID, err)
+	}
+
+	matchingVersionIDs := getAllMatchingVersionIDs(versionIDs, constraint)
+	if len(matchingVersionIDs) == 0 {
+		return nil, nil
+	}
+
+	// Fetch all matching versions
+	candidates := make([]*ModVersion, 0, len(matchingVersionIDs))
+	for _, versionID := range matchingVersionIDs {
+		depVersion, err := provider.GetModVersion(dep.ModID, versionID)
+		if err != nil {
+			continue // Skip versions that fail to fetch
+		}
+		if depVersion != nil {
+			candidates = append(candidates, depVersion)
+		}
+	}
+
+	return candidates, nil
 }
 
 func validateResolvedDependencies(resolved map[string]ModVersion, provider VersionProvider, failedRequired map[string]error) error {
@@ -95,8 +382,10 @@ func validateResolvedDependencies(resolved map[string]ModVersion, provider Versi
 			switch depType {
 			case ModDependencyTypeRequired:
 				if !found && len(embeddedProviders[dep.ModID]) == 0 {
-					if resolveErr, ok := failedRequired[requiredFailureKey(current, dep)]; ok {
-						return resolveErr
+					if failedRequired != nil {
+						if resolveErr, ok := failedRequired[requiredFailureKey(current, dep)]; ok {
+							return resolveErr
+						}
 					}
 					return fmt.Errorf("required dependency not resolved for mod %s: %s", current.ModID, dep.ModID)
 				}
@@ -280,6 +569,28 @@ func bestMatchedVersionID(versionIDs []string, constraint string) (string, bool)
 		}
 	}
 	return best, best != ""
+}
+
+// getAllMatchingVersionIDs returns all versions that match the constraint, sorted from newest to oldest
+func getAllMatchingVersionIDs(versionIDs []string, constraint string) []string {
+	group := version.NewConstrainGroupFromString(constraint)
+	matching := make([]string, 0)
+	for _, versionID := range versionIDs {
+		if group.Match(versionID) {
+			matching = append(matching, versionID)
+		}
+	}
+
+	// Sort in descending order (newest first)
+	for i := 0; i < len(matching)-1; i++ {
+		for j := i + 1; j < len(matching); j++ {
+			if compareVersionID(matching[i], matching[j]) < 0 {
+				matching[i], matching[j] = matching[j], matching[i]
+			}
+		}
+	}
+
+	return matching
 }
 
 func compareVersionID(a, b string) int {

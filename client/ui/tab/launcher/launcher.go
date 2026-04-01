@@ -452,6 +452,7 @@ func (l *Launcher) watchRestoredRunningProfile(profileID uuid.UUID, pid int, sta
 func (l *Launcher) startLobbyPolling(pid int) {
 	l.stopLobbyPolling()
 	stop := l.state.Core.StartLobbyInfoPolling(pid, lobbyPollInterval, func(info *core.IPCLobbyInfo) {
+		slog.Info("Received lobby info", "info", fmt.Sprintf("%+v", info))
 		fyne.Do(func() {
 			l.refreshRoomLinkUI(info, true)
 		})
@@ -2391,10 +2392,13 @@ func (l *Launcher) openProfileEditor(prof profile.Profile) {
 			badge := widget.NewLabel("")
 			badge.Hide()
 			textArea := container.NewVBox(label, badge)
+			updateBtn := widget.NewButtonWithIcon("", theme.DownloadIcon(), nil)
+			updateBtn.Hide()
 			deleteBtn := widget.NewButtonWithIcon("", theme.DeleteIcon(), nil)
-			content := container.New(layout.NewBorderLayout(nil, nil, thumbArea, deleteBtn),
+			buttonsArea := container.NewHBox(updateBtn, deleteBtn)
+			content := container.New(layout.NewBorderLayout(nil, nil, thumbArea, buttonsArea),
 				thumbArea,
-				deleteBtn,
+				buttonsArea,
 				container.NewPadded(textArea),
 			)
 			return container.NewPadded(content)
@@ -2460,7 +2464,9 @@ func (l *Launcher) openProfileEditor(prof profile.Profile) {
 		textArea := c.Objects[2].(*fyne.Container).Objects[0].(*fyne.Container)
 		label := textArea.Objects[0].(*widget.Label)
 		badge := textArea.Objects[1].(*widget.Label)
-		delBtn := c.Objects[1].(*widget.Button)
+		buttonsArea := c.Objects[1].(*fyne.Container)
+		updateBtn := buttonsArea.Objects[0].(*widget.Button)
+		delBtn := buttonsArea.Objects[1].(*widget.Button)
 
 		l.refreshModThumbnailCanvas(thumb, v.ModID, 64)
 		l.ensureModThumbnailLoaded(v.ModID, modList.Refresh)
@@ -2472,8 +2478,25 @@ func (l *Launcher) openProfileEditor(prof profile.Profile) {
 			badge.SetText(lang.LocalizeKey("repository.update_available", "Update Available") + " (" + latestID + ")")
 			badge.Importance = widget.WarningImportance
 			badge.Show()
+			updateBtn.Show()
+			updateBtn.OnTapped = func() {
+				modID := v.ModID
+				latestVersionID := latestID
+				version, fetchErr := l.state.Rest.GetModVersion(modID, latestVersionID)
+				if fetchErr != nil {
+					dialog.ShowError(fmt.Errorf("failed to fetch latest version for %s:%s: %w", modID, latestVersionID, fetchErr), l.state.Window)
+					return
+				}
+				currentProfile.AddModVersion(*version)
+				delete(updatesAvailable, modID)
+				if len(updatesAvailable) == 0 {
+					applyLatestBtn.Hide()
+				}
+				modList.Refresh()
+			}
 		} else {
 			badge.Hide()
+			updateBtn.Hide()
 		}
 
 		delBtn.OnTapped = func() {

@@ -366,6 +366,264 @@ func TestResolveDependencies_RequiredCanBeSatisfiedByEmbedded(t *testing.T) {
 	require.NotContains(t, resolved, "a")
 }
 
+func TestResolveDependencies_BacktrackToOlderVersion(t *testing.T) {
+	// Scenario: Mod A requires B >=1.0.0, Mod C requires B <2.0.0
+	// Available versions of B: 1.0.0, 1.5.0, 2.0.0, 2.5.0
+	// Expected: Should select B 1.5.0 (not latest 2.5.0) to satisfy both constraints
+	initial := []ModVersion{
+		modVersion("a", "v1.0.0", model.ModVersionDependency{
+			ModID:          "b",
+			VersionID:      ">=v1.0.0",
+			DependencyType: model.DependencyTypeRequired,
+		}),
+		modVersion("c", "v1.0.0", model.ModVersionDependency{
+			ModID:          "b",
+			VersionID:      "<v2.0.0",
+			DependencyType: model.DependencyTypeRequired,
+		}),
+	}
+	provider := &mockVersionProvider{
+		versions: map[string]map[string]ModVersion{
+			"a": {"v1.0.0": initial[0]},
+			"b": {
+				"v1.0.0": modVersion("b", "v1.0.0"),
+				"v1.5.0": modVersion("b", "v1.5.0"),
+				"v2.0.0": modVersion("b", "v2.0.0"),
+				"v2.5.0": modVersion("b", "v2.5.0"),
+			},
+			"c": {"v1.0.0": initial[1]},
+		},
+		ids: map[string][]string{"b": {"v1.0.0", "v2.5.0", "v2.0.0", "v1.5.0"}},
+		latest: map[string]string{
+			"a": "v1.0.0",
+			"b": "v2.5.0",
+			"c": "v1.0.0",
+		},
+	}
+
+	resolved, err := ResolveDependencies(initial, provider)
+	require.NoError(t, err)
+	require.Equal(t, "v1.5.0", resolved["b"].VersionID, "Should select v1.5.0 to satisfy both constraints")
+}
+
+func TestResolveDependencies_BacktrackWithTransitiveDependencies(t *testing.T) {
+	// Scenario: 
+	// A requires B >=1.0.0
+	// B v2.0.0 requires D >=2.0.0
+	// B v1.0.0 requires D >=1.0.0
+	// C requires D <2.0.0
+	// Expected: Should select B v1.0.0 and D v1.5.0 to satisfy all constraints
+	bV2 := modVersion("b", "v2.0.0", model.ModVersionDependency{
+		ModID:          "d",
+		VersionID:      ">=v2.0.0",
+		DependencyType: model.DependencyTypeRequired,
+	})
+	bV1 := modVersion("b", "v1.0.0", model.ModVersionDependency{
+		ModID:          "d",
+		VersionID:      ">=v1.0.0",
+		DependencyType: model.DependencyTypeRequired,
+	})
+
+	initial := []ModVersion{
+		modVersion("a", "v1.0.0", model.ModVersionDependency{
+			ModID:          "b",
+			VersionID:      ">=v1.0.0",
+			DependencyType: model.DependencyTypeRequired,
+		}),
+		modVersion("c", "v1.0.0", model.ModVersionDependency{
+			ModID:          "d",
+			VersionID:      "<v2.0.0",
+			DependencyType: model.DependencyTypeRequired,
+		}),
+	}
+
+	provider := &mockVersionProvider{
+		versions: map[string]map[string]ModVersion{
+			"a": {"v1.0.0": initial[0]},
+			"b": {
+				"v1.0.0": bV1,
+				"v2.0.0": bV2,
+			},
+			"c": {"v1.0.0": initial[1]},
+			"d": {
+				"v1.0.0": modVersion("d", "v1.0.0"),
+				"v1.5.0": modVersion("d", "v1.5.0"),
+				"v2.0.0": modVersion("d", "v2.0.0"),
+			},
+		},
+		ids: map[string][]string{
+			"b": {"v2.0.0", "v1.0.0"},
+			"d": {"v2.0.0", "v1.5.0", "v1.0.0"},
+		},
+		latest: map[string]string{
+			"a": "v1.0.0",
+			"b": "v2.0.0",
+			"c": "v1.0.0",
+			"d": "v2.0.0",
+		},
+	}
+
+	resolved, err := ResolveDependencies(initial, provider)
+	require.NoError(t, err)
+	require.Equal(t, "v1.0.0", resolved["b"].VersionID, "Should backtrack to B v1.0.0")
+	require.Contains(t, []string{"v1.0.0", "v1.5.0"}, resolved["d"].VersionID, "Should select D < v2.0.0")
+}
+
+func TestResolveDependencies_PreferNewerWhenNoConflict(t *testing.T) {
+	// Scenario: A requires B >=1.0.0, no other constraints
+	// Available versions of B: 1.0.0, 1.5.0, 2.0.0
+	// Expected: Should select latest matching version (2.0.0)
+	initial := []ModVersion{
+		modVersion("a", "v1.0.0", model.ModVersionDependency{
+			ModID:          "b",
+			VersionID:      ">=v1.0.0",
+			DependencyType: model.DependencyTypeRequired,
+		}),
+	}
+	provider := &mockVersionProvider{
+		versions: map[string]map[string]ModVersion{
+			"a": {"v1.0.0": initial[0]},
+			"b": {
+				"v1.0.0": modVersion("b", "v1.0.0"),
+				"v1.5.0": modVersion("b", "v1.5.0"),
+				"v2.0.0": modVersion("b", "v2.0.0"),
+			},
+		},
+		ids: map[string][]string{"b": {"v1.0.0", "v2.0.0", "v1.5.0"}},
+		latest: map[string]string{
+			"a": "v1.0.0",
+			"b": "v2.0.0",
+		},
+	}
+
+	resolved, err := ResolveDependencies(initial, provider)
+	require.NoError(t, err)
+	require.Equal(t, "v2.0.0", resolved["b"].VersionID, "Should prefer newest version when no conflicts")
+}
+
+func TestResolveDependencies_MergeConstraintsFromMultipleMods(t *testing.T) {
+	// Scenario: 
+	// MOD B requires A >=1.0.0
+	// MOD C requires A >=1.5.0, <2.0.0
+	// Available versions of A: 1.0.0, 1.5.0, 1.8.0, 2.0.0, 2.5.0
+	// Expected: Should select A 1.8.0 (satisfies both >=1.0.0 AND >=1.5.0, <2.0.0)
+	initial := []ModVersion{
+		modVersion("b", "v1.0.0", model.ModVersionDependency{
+			ModID:          "a",
+			VersionID:      ">=v1.0.0",
+			DependencyType: model.DependencyTypeRequired,
+		}),
+		modVersion("c", "v1.0.0", model.ModVersionDependency{
+			ModID:          "a",
+			VersionID:      ">=v1.5.0, <v2.0.0",
+			DependencyType: model.DependencyTypeRequired,
+		}),
+	}
+	provider := &mockVersionProvider{
+		versions: map[string]map[string]ModVersion{
+			"a": {
+				"v1.0.0": modVersion("a", "v1.0.0"),
+				"v1.5.0": modVersion("a", "v1.5.0"),
+				"v1.8.0": modVersion("a", "v1.8.0"),
+				"v2.0.0": modVersion("a", "v2.0.0"),
+				"v2.5.0": modVersion("a", "v2.5.0"),
+			},
+			"b": {"v1.0.0": initial[0]},
+			"c": {"v1.0.0": initial[1]},
+		},
+		ids: map[string][]string{"a": {"v2.5.0", "v2.0.0", "v1.8.0", "v1.5.0", "v1.0.0"}},
+		latest: map[string]string{
+			"a": "v2.5.0",
+			"b": "v1.0.0",
+			"c": "v1.0.0",
+		},
+	}
+
+	resolved, err := ResolveDependencies(initial, provider)
+	require.NoError(t, err)
+	require.Equal(t, "v1.8.0", resolved["a"].VersionID, "Should select v1.8.0 satisfying merged constraints >=1.5.0, <2.0.0")
+}
+
+func TestResolveDependencies_MergeConstraintsWithExactVersion(t *testing.T) {
+	// Scenario:
+	// MOD B requires A >=1.5.0
+	// MOD C requires A v1.8.0 (exact)
+	// Expected: Should select A v1.8.0 (the exact constraint is narrower)
+	initial := []ModVersion{
+		modVersion("b", "v1.0.0", model.ModVersionDependency{
+			ModID:          "a",
+			VersionID:      ">=v1.5.0",
+			DependencyType: model.DependencyTypeRequired,
+		}),
+		modVersion("c", "v1.0.0", model.ModVersionDependency{
+			ModID:          "a",
+			VersionID:      "v1.8.0",
+			DependencyType: model.DependencyTypeRequired,
+		}),
+	}
+	provider := &mockVersionProvider{
+		versions: map[string]map[string]ModVersion{
+			"a": {
+				"v1.5.0": modVersion("a", "v1.5.0"),
+				"v1.8.0": modVersion("a", "v1.8.0"),
+				"v2.0.0": modVersion("a", "v2.0.0"),
+			},
+			"b": {"v1.0.0": initial[0]},
+			"c": {"v1.0.0": initial[1]},
+		},
+		ids: map[string][]string{"a": {"v2.0.0", "v1.8.0", "v1.5.0"}},
+		latest: map[string]string{
+			"a": "v2.0.0",
+			"b": "v1.0.0",
+			"c": "v1.0.0",
+		},
+	}
+
+	resolved, err := ResolveDependencies(initial, provider)
+	require.NoError(t, err)
+	require.Equal(t, "v1.8.0", resolved["a"].VersionID, "Should select exact version v1.8.0")
+}
+
+func TestResolveDependencies_MergeConstraintsNoValidVersion(t *testing.T) {
+	// Scenario:
+	// MOD B requires A >=2.0.0
+	// MOD C requires A <2.0.0
+	// Expected: Should fail - no version satisfies both constraints
+	initial := []ModVersion{
+		modVersion("b", "v1.0.0", model.ModVersionDependency{
+			ModID:          "a",
+			VersionID:      ">=v2.0.0",
+			DependencyType: model.DependencyTypeRequired,
+		}),
+		modVersion("c", "v1.0.0", model.ModVersionDependency{
+			ModID:          "a",
+			VersionID:      "<v2.0.0",
+			DependencyType: model.DependencyTypeRequired,
+		}),
+	}
+	provider := &mockVersionProvider{
+		versions: map[string]map[string]ModVersion{
+			"a": {
+				"v1.5.0": modVersion("a", "v1.5.0"),
+				"v2.0.0": modVersion("a", "v2.0.0"),
+				"v2.5.0": modVersion("a", "v2.5.0"),
+			},
+			"b": {"v1.0.0": initial[0]},
+			"c": {"v1.0.0": initial[1]},
+		},
+		ids: map[string][]string{"a": {"v2.5.0", "v2.0.0", "v1.5.0"}},
+		latest: map[string]string{
+			"a": "v2.5.0",
+			"b": "v1.0.0",
+			"c": "v1.0.0",
+		},
+	}
+
+	_, err := ResolveDependencies(initial, provider)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "satisfying all constraints")
+}
+
 func modVersion(modID, versionID string, deps ...model.ModVersionDependency) ModVersion {
 	return ModVersion{
 		ModVersionDetails: model.ModVersionDetails{
