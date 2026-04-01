@@ -59,10 +59,8 @@ func collectAllRequiredDependencies(queue []ModVersion, alreadyResolved map[stri
 		visited[mod.ModID] = true
 	}
 
-	var collectRecursive func(mods []ModVersion)
-	collectRecursive = func(mods []ModVersion) {
+	collectRecursive := func(mods []ModVersion) {
 		for _, current := range mods {
-			wasVisited := visited[current.ModID]
 			visited[current.ModID] = true
 
 			for _, dep := range current.Dependencies {
@@ -83,11 +81,6 @@ func collectAllRequiredDependencies(queue []ModVersion, alreadyResolved map[stri
 					}
 				}
 				allDeps[dep.ModID].constraints = append(allDeps[dep.ModID].constraints, dep)
-			}
-
-			// Don't recurse if we already visited this node
-			if wasVisited {
-				continue
 			}
 		}
 	}
@@ -432,51 +425,6 @@ func collectEmbeddedProviders(mods map[string]ModVersion) (map[string][]string, 
 	return embeddedProviders, nil
 }
 
-func resolveDependencyVersion(provider VersionProvider, dep model.ModVersionDependency) (*ModVersion, error) {
-	constraint := strings.TrimSpace(dep.VersionID)
-	if constraint == "" || strings.EqualFold(constraint, "any") || strings.EqualFold(constraint, "latest") {
-		depVersion, err := provider.GetLatestModVersion(dep.ModID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to fetch dependency %s (version: %s): %w", dep.ModID, dep.VersionID, err)
-		}
-		if depVersion == nil {
-			return nil, fmt.Errorf("failed to fetch dependency %s (version: %s): version not found", dep.ModID, dep.VersionID)
-		}
-		return depVersion, nil
-	}
-
-	if isExactVersionConstraint(constraint) {
-		depVersion, err := provider.GetModVersion(dep.ModID, constraint)
-		if err != nil {
-			return nil, fmt.Errorf("failed to fetch dependency %s (version: %s): %w", dep.ModID, dep.VersionID, err)
-		}
-		if depVersion == nil {
-			return nil, fmt.Errorf("failed to fetch dependency %s (version: %s): version not found", dep.ModID, dep.VersionID)
-		}
-		return depVersion, nil
-	}
-
-	versionIDs, err := provider.GetModVersionIDs(dep.ModID, 100, "")
-	if err != nil {
-		return nil, fmt.Errorf("failed to list versions for dependency %s: %w", dep.ModID, err)
-	}
-
-	matchedVersionID, found := bestMatchedVersionID(versionIDs, constraint)
-	if !found {
-		return nil, fmt.Errorf("failed to fetch dependency %s (version: %s): no matching version found", dep.ModID, dep.VersionID)
-	}
-
-	depVersion, err := provider.GetModVersion(dep.ModID, matchedVersionID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch dependency %s (version: %s): %w", dep.ModID, dep.VersionID, err)
-	}
-	if depVersion == nil {
-		return nil, fmt.Errorf("failed to fetch dependency %s (version: %s): version not found", dep.ModID, dep.VersionID)
-	}
-
-	return depVersion, nil
-}
-
 func checkDependencyConstraint(resolvedDep ModVersion, dep model.ModVersionDependency, provider VersionProvider) error {
 	matched, requiredVersion, err := matchesDependencyConstraint(resolvedDep, dep, provider)
 	if err != nil {
@@ -555,20 +503,6 @@ func requiredFailureKey(current ModVersion, dep model.ModVersionDependency) stri
 
 func isExactVersionConstraint(constraint string) bool {
 	return !strings.ContainsAny(constraint, "<>!=~*xX,^@,") && !strings.EqualFold(constraint, "latest") && !strings.EqualFold(constraint, "any")
-}
-
-func bestMatchedVersionID(versionIDs []string, constraint string) (string, bool) {
-	group := version.NewConstrainGroupFromString(constraint)
-	best := ""
-	for _, versionID := range versionIDs {
-		if !group.Match(versionID) {
-			continue
-		}
-		if best == "" || compareVersionID(versionID, best) > 0 {
-			best = versionID
-		}
-	}
-	return best, best != ""
 }
 
 // getAllMatchingVersionIDs returns all versions that match the constraint, sorted from newest to oldest
