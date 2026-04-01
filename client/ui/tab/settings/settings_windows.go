@@ -244,21 +244,44 @@ func (s *Settings) Tab() (*container.TabItem, error) {
 		}
 	})
 
+	gameVersionLabel := widget.NewLabel("")
+	s.state.SelectedGamePath.AddListener(binding.NewDataListener(func() {
+		path, err := s.state.SelectedGamePath.Get()
+		if err != nil {
+			slog.Warn("Failed to get selected game path", "error", err)
+			gameVersionLabel.SetText(lang.LocalizeKey("installation.error.get_version_failed", "Failed to get game version information"))
+			return
+		}
+		gameVersion, err := s.state.Core.GetGameVersion(path)
+		if err != nil {
+			slog.Warn("Failed to get installation status for game version label", "error", err)
+			gameVersionLabel.SetText(lang.LocalizeKey("installation.error.get_version_failed", "Failed to get game version information"))
+			return
+		}
+		gameVersionLabel.SetText(lang.LocalizeKey("installation.game_version", "Game Version: {{.Version}}", map[string]any{
+			"Version": gameVersion,
+		}))
+	}))
+
 	basicPage := container.NewVScroll(container.NewVBox(
 		widget.NewCard(
-			lang.LocalizeKey("installation.select_install_path", "Among Us Installation Path"),
+			lang.LocalizeKey("installation.select_install_info", "Among Us Installation Information"),
 			"",
 			container.NewVBox(
 				s.state.InstallSelect,
 				widget.NewAccordion(
 					widget.NewAccordionItem(
-						lang.LocalizeKey("installation.selected_install", "Selected Installation Path"),
+						lang.LocalizeKey("installation.selected_install", "Selected Installation"),
 						container.NewBorder(
-							nil,
-							nil,
-							nil,
-							openInExplorerButton,
-							selectedPath,
+							container.NewBorder(
+								nil,
+								nil,
+								nil,
+								openInExplorerButton,
+								selectedPath,
+							),
+							nil, nil, nil,
+							gameVersionLabel,
 						),
 					),
 				),

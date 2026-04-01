@@ -31,6 +31,7 @@ type OutdatedMod struct {
 	LatestVersion  string
 }
 
+// Deprecated:
 func (a *App) GetInstallationStatus(gamePath string, checkUpdates bool) *InstallationInfo {
 	info := &InstallationInfo{
 		Status: StatusNotInstalled,
@@ -91,4 +92,8 @@ func (a *App) GetInstallationStatus(gamePath string, checkUpdates bool) *Install
 	}
 
 	return info
+}
+
+func (a *App) GetGameVersion(gamePath string) (string, error) {
+	return aumgr.GetVersion(gamePath)
 }

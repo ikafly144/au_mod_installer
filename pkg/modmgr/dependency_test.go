@@ -407,7 +407,7 @@ func TestResolveDependencies_BacktrackToOlderVersion(t *testing.T) {
 }
 
 func TestResolveDependencies_BacktrackWithTransitiveDependencies(t *testing.T) {
-	// Scenario: 
+	// Scenario:
 	// A requires B >=1.0.0
 	// B v2.0.0 requires D >=2.0.0
 	// B v1.0.0 requires D >=1.0.0
@@ -502,7 +502,7 @@ func TestResolveDependencies_PreferNewerWhenNoConflict(t *testing.T) {
 }
 
 func TestResolveDependencies_MergeConstraintsFromMultipleMods(t *testing.T) {
-	// Scenario: 
+	// Scenario:
 	// MOD B requires A >=1.0.0
 	// MOD C requires A >=1.5.0, <2.0.0
 	// Available versions of A: 1.0.0, 1.5.0, 1.8.0, 2.0.0, 2.5.0

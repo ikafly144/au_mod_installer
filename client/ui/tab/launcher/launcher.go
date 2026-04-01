@@ -130,8 +130,6 @@ const (
 	roomLinkTrayWidth              = float32(320)
 )
 
-var roomLinkPlaceholder = lang.LocalizeKey("launcher.join_link.placeholder", "No room shared now")
-
 var launcherRunningProfileStrokeColor = color.NRGBA{R: 56, G: 170, B: 92, A: 255}
 
 type sharedRoomLinkCache struct {
@@ -265,7 +263,7 @@ func (l *Launcher) restoreRunningProfiles() {
 }
 
 func (l *Launcher) setupRoomLinkUI() {
-	l.roomLinkEntry.SetText(roomLinkPlaceholder)
+	l.roomLinkEntry.SetText(lang.LocalizeKey("launcher.join_link.placeholder", "No room shared now"))
 	l.copyRoomLinkButton.Disable()
 	l.unpublishRoomButton.Disable()
 	panelBackground := canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground))
@@ -532,7 +530,7 @@ func (l *Launcher) refreshRoomLinkUI(info *core.IPCLobbyInfo, running bool) {
 			l.roomLinkTray.Hide()
 		}
 		l.setRoomLinkTrayExpanded(false)
-		l.roomLinkEntry.SetText(roomLinkPlaceholder)
+		l.roomLinkEntry.SetText(lang.LocalizeKey("launcher.join_link.placeholder", "No room shared now"))
 		l.copyRoomLinkButton.Disable()
 		l.shareRoomButton.Disable()
 		l.unpublishRoomButton.Disable()
@@ -545,7 +543,7 @@ func (l *Launcher) refreshRoomLinkUI(info *core.IPCLobbyInfo, running bool) {
 			l.content.Refresh()
 		}
 		l.setRoomLinkTrayExpanded(false)
-		l.roomLinkEntry.SetText(roomLinkPlaceholder)
+		l.roomLinkEntry.SetText(lang.LocalizeKey("launcher.join_link.placeholder", "No room shared now"))
 		l.copyRoomLinkButton.Disable()
 		l.shareRoomButton.Disable()
 		l.unpublishRoomButton.Disable()
@@ -564,7 +562,7 @@ func (l *Launcher) refreshRoomLinkUI(info *core.IPCLobbyInfo, running bool) {
 	cache := l.roomShareCache
 	l.roomShareMu.Unlock()
 	if cache.RoomKey != key {
-		l.roomLinkEntry.SetText(roomLinkPlaceholder)
+		l.roomLinkEntry.SetText(lang.LocalizeKey("launcher.join_link.placeholder", "No room shared now"))
 		l.copyRoomLinkButton.Disable()
 		l.unpublishRoomButton.Disable()
 		if cache.SessionID != "" {
@@ -577,7 +575,7 @@ func (l *Launcher) refreshRoomLinkUI(info *core.IPCLobbyInfo, running bool) {
 		l.copyRoomLinkButton.Enable()
 		l.unpublishRoomButton.Enable()
 	} else {
-		l.roomLinkEntry.SetText(roomLinkPlaceholder)
+		l.roomLinkEntry.SetText(lang.LocalizeKey("launcher.join_link.placeholder", "No room shared now"))
 		l.copyRoomLinkButton.Disable()
 		l.unpublishRoomButton.Disable()
 	}
@@ -625,7 +623,7 @@ func (l *Launcher) unpublishCurrentRoom() {
 	}
 
 	fyne.Do(func() {
-		l.roomLinkEntry.SetText(roomLinkPlaceholder)
+		l.roomLinkEntry.SetText(lang.LocalizeKey("launcher.join_link.placeholder", "No room shared now"))
 		l.copyRoomLinkButton.Disable()
 		l.unpublishRoomButton.Disable()
 	})

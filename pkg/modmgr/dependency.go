@@ -145,7 +145,7 @@ func resolveDependenciesWithConstraints(resolved map[string]ModVersion, allDeps 
 			// Collect new dependencies introduced by this candidate
 			// Pass only the original resolved (not testResolved) to avoid skipping new deps
 			newDeps := collectAllRequiredDependencies([]ModVersion{*candidate}, resolved)
-			
+
 			// Merge with remaining dependencies
 			testAllDeps := make(map[string]*dependencyConstraints)
 			for k, v := range allDeps {
@@ -230,7 +230,7 @@ func getCandidateVersionsForConstraints(provider VersionProvider, constraints []
 		satisfiesAll := true
 		for _, constraint := range constraints {
 			constraintStr := strings.TrimSpace(constraint.VersionID)
-			
+
 			// Check if this version satisfies this constraint
 			if constraintStr == "" || strings.EqualFold(constraintStr, "any") {
 				continue // "any" is always satisfied
