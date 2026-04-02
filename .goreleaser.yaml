@@ -10,6 +10,10 @@ version: 2
 
 project_name: mod-of-us
 
+git:
+  tag_sort: -version:creatordate
+  prerelease_suffix: "-"
+
 before:
   hooks:
     # You may remove this if you don't use go modules.
