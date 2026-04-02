@@ -138,12 +138,15 @@ func (a *App) ExecuteLaunch(gamePath string, dllDir string, joinInfo *LaunchJoin
 			}
 		}
 	}
-	return aumgr.LaunchAmongUs(launcherType, gamePath, dllDir, exchangeCode,
-		aumgr.DirectJoinInfo{
+	var directJoinInfo aumgr.DirectJoinInfo
+	if joinInfo != nil {
+		directJoinInfo = aumgr.DirectJoinInfo{
 			LobbyCode:      joinInfo.LobbyCode,
 			ServerIP:       joinInfo.ServerIP,
 			ServerPort:     joinInfo.ServerPort,
 			MatchMakerIp:   joinInfo.MatchMakerIp,
 			MatchMakerPort: joinInfo.MatchMakerPort,
-		}, onStarted)
+		}
+	}
+	return aumgr.LaunchAmongUs(launcherType, gamePath, dllDir, exchangeCode, directJoinInfo, onStarted)
 }
