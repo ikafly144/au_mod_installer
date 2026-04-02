@@ -15,9 +15,11 @@ import (
 )
 
 type LaunchJoinInfo struct {
-	LobbyCode  string
-	ServerIP   string
-	ServerPort uint16
+	LobbyCode      string
+	ServerIP       string
+	ServerPort     uint16
+	MatchMakerIp   string
+	MatchMakerPort uint16
 }
 
 // ResolveProfileDependencies resolves all required dependencies for the given profile.

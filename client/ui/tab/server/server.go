@@ -15,6 +15,7 @@ import (
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/lang"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
@@ -29,6 +30,7 @@ const regionInfoFileName = "regioninfo.json"
 const regionTypeStatic = "StaticHttpRegionInfo, Assembly-CSharp"
 const regionTypeDNS = "DnsRegionInfo, Assembly-CSharp"
 const serverIconSize = float32(32)
+const serverRowDragStepFallback = float32(36)
 
 const globeIconSVG = `<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 0 24 24" width="24"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zM4 12c0-.61.08-1.21.21-1.78L8.99 15v1c0 1.1.9 2 2 2v1.93C7.06 19.43 4 16.07 4 12zm13.89 5.4c-.26-.81-1-1.4-1.9-1.4h-1v-3c0-.55-.45-1-1-1h-6v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41C17.92 5.77 20 8.65 20 12c0 2.08-.81 3.98-2.11 5.4z"/></svg>`
 const buildCircleIconSVG = `<svg xmlns="http://www.w3.org/2000/svg" enable-background="new 0 0 24 24" height="24" viewBox="0 0 24 24" width="24"><g><rect fill="none" height="24" width="24"/></g><g><g><path d="M12,2C6.48,2,2,6.48,2,12c0,5.52,4.48,10,10,10s10-4.48,10-10 C22,6.48,17.52,2,12,2z M12,20c-4.41,0-8-3.59-8-8c0-4.41,3.59-8,8-8s8,3.59,8,8C20,16.41,16.41,20,12,20z" fill-rule="evenodd"/><path d="M13.49,11.38c0.43-1.22,0.17-2.64-0.81-3.62c-1.11-1.11-2.79-1.3-4.1-0.59 l2.35,2.35l-1.41,1.41L7.17,8.58c-0.71,1.32-0.52,2.99,0.59,4.1c0.98,0.98,2.4,1.24,3.62,0.81l3.41,3.41c0.2,0.2,0.51,0.2,0.71,0 l1.4-1.4c0.2-0.2,0.2-0.51,0-0.71L13.49,11.38z" fill-rule="evenodd"/></g></g></svg>`
@@ -93,51 +95,59 @@ type ServerTab struct {
 	regions          []regionEntry
 	currentRegionIdx int
 	regionInfoPath   string
+
+	draggingIndex   int
+	dragAccumulated float32
+	dragStep        float32
+	dragMoved       bool
 }
 
 func NewServerTab(state *uicommon.State) *ServerTab {
 	s := &ServerTab{
 		state:            state,
 		currentRegionIdx: 0,
+		draggingIndex:    -1,
 	}
 	s.addButton = widget.NewButtonWithIcon(lang.LocalizeKey("server.add", "Add"), theme.ContentAddIcon(), s.showAddDialog)
 	s.addButton.Importance = widget.HighImportance
+	createRow := func() fyne.CanvasObject {
+		icon := widget.NewIcon(customServerIcon)
+		iconHolder := container.New(
+			layout.NewGridWrapLayout(fyne.NewSquareSize(serverIconSize)),
+			icon,
+		)
+		name := widget.NewRichText(&widget.TextSegment{
+			Style: widget.RichTextStyleStrong,
+			Text:  "",
+		})
+		name.Wrapping = fyne.TextWrapWord
+		address := widget.NewLabel("")
+		address.Wrapping = fyne.TextWrapWord
+		dragHandle := newServerRowDragHandle()
+		editBtn := widget.NewButtonWithIcon(lang.LocalizeKey("server.update", "Update"), theme.DocumentCreateIcon(), nil)
+		deleteBtn := widget.NewButtonWithIcon(lang.LocalizeKey("server.delete", "Delete"), theme.DeleteIcon(), nil)
+		deleteBtn.Importance = widget.DangerImportance
+		editBtn.Importance = widget.LowImportance
+		deleteBtn.Importance = widget.LowImportance
+		body := container.NewVBox(name, address)
+		actions := container.NewHBox(editBtn, deleteBtn, dragHandle)
+		content := container.New(&serverListItemLayout{
+			minIconSize: serverIconSize,
+			spacing:     theme.Padding(),
+		}, iconHolder, body, actions)
+
+		bg := canvas.NewRectangle(color.Transparent)
+		bg.CornerRadius = theme.InputRadiusSize()
+		bg.StrokeColor = theme.Color(theme.ColorNameButton)
+		bg.StrokeWidth = 1
+		return container.NewStack(
+			bg,
+			container.NewPadded(content),
+		)
+	}
 	s.list = widget.NewList(
 		func() int { return len(s.regions) },
-		func() fyne.CanvasObject {
-			icon := widget.NewIcon(customServerIcon)
-			iconHolder := container.New(
-				layout.NewGridWrapLayout(fyne.NewSquareSize(serverIconSize)),
-				icon,
-			)
-			name := widget.NewRichText(&widget.TextSegment{
-				Style: widget.RichTextStyleStrong,
-				Text:  "",
-			})
-			name.Wrapping = fyne.TextWrapWord
-			address := widget.NewLabel("")
-			address.Wrapping = fyne.TextWrapWord
-			editBtn := widget.NewButtonWithIcon(lang.LocalizeKey("server.update", "Update"), theme.DocumentCreateIcon(), nil)
-			deleteBtn := widget.NewButtonWithIcon(lang.LocalizeKey("server.delete", "Delete"), theme.DeleteIcon(), nil)
-			deleteBtn.Importance = widget.DangerImportance
-			editBtn.Importance = widget.LowImportance
-			deleteBtn.Importance = widget.LowImportance
-			body := container.NewVBox(name, address)
-			actions := container.NewHBox(editBtn, deleteBtn)
-			content := container.New(&serverListItemLayout{
-				minIconSize: serverIconSize,
-				spacing:     theme.Padding(),
-			}, iconHolder, body, actions)
-
-			bg := canvas.NewRectangle(color.Transparent)
-			bg.CornerRadius = theme.InputRadiusSize()
-			bg.StrokeColor = theme.Color(theme.ColorNameButton)
-			bg.StrokeWidth = 1
-			return container.NewStack(
-				bg,
-				container.NewPadded(content),
-			)
-		},
+		createRow,
 		func(id widget.ListItemID, obj fyne.CanvasObject) {
 			if id < 0 || id >= len(s.regions) {
 				return
@@ -163,6 +173,16 @@ func NewServerTab(state *uicommon.State) *ServerTab {
 			actions := row.Objects[2].(*fyne.Container)
 			editBtn := actions.Objects[0].(*widget.Button)
 			deleteBtn := actions.Objects[1].(*widget.Button)
+			dragHandle := actions.Objects[2].(*serverRowDragHandle)
+			dragHandle.SetCallbacks(
+				func() {
+					s.startDragReorder(id)
+				},
+				func(ev *fyne.DragEvent) {
+					s.updateDragReorder(ev.Dragged.DY)
+				},
+				s.endDragReorder,
+			)
 			editBtn.OnTapped = func() {
 				if current.isOfficial() {
 					return
@@ -181,6 +201,12 @@ func NewServerTab(state *uicommon.State) *ServerTab {
 			}
 		},
 	)
+	if template := createRow(); template != nil {
+		s.dragStep = template.MinSize().Height * 0.6
+	}
+	if s.dragStep < serverRowDragStepFallback {
+		s.dragStep = serverRowDragStepFallback
+	}
 	s.list.HideSeparators = true
 	if err := s.loadFromDisk(); err != nil {
 		s.state.ShowErrorDialog(err)
@@ -575,6 +601,96 @@ func (r regionEntry) plainName() string {
 	return b.String()
 }
 
+func (s *ServerTab) startDragReorder(index int) {
+	if index < 0 || index >= len(s.regions) {
+		return
+	}
+	s.draggingIndex = index
+	s.dragAccumulated = 0
+	s.dragMoved = false
+}
+
+func (s *ServerTab) updateDragReorder(deltaY float32) {
+	if s.draggingIndex < 0 || s.draggingIndex >= len(s.regions) {
+		return
+	}
+	if deltaY == 0 {
+		return
+	}
+	s.dragAccumulated += deltaY
+	for s.dragAccumulated >= s.dragStep {
+		if !s.moveDraggedRegion(1) {
+			s.dragAccumulated = 0
+			break
+		}
+		s.dragAccumulated -= s.dragStep
+	}
+	for s.dragAccumulated <= -s.dragStep {
+		if !s.moveDraggedRegion(-1) {
+			s.dragAccumulated = 0
+			break
+		}
+		s.dragAccumulated += s.dragStep
+	}
+}
+
+func (s *ServerTab) moveDraggedRegion(direction int) bool {
+	from := s.draggingIndex
+	to := from + direction
+	if to < 0 || to >= len(s.regions) {
+		return false
+	}
+	if !s.moveRegion(from, to) {
+		return false
+	}
+	s.draggingIndex = to
+	s.dragMoved = true
+	s.list.Refresh()
+	return true
+}
+
+func (s *ServerTab) moveRegion(from, to int) bool {
+	if from < 0 || from >= len(s.regions) || to < 0 || to >= len(s.regions) || from == to {
+		return false
+	}
+	moved := s.regions[from]
+	if from < to {
+		copy(s.regions[from:to], s.regions[from+1:to+1])
+	} else {
+		copy(s.regions[to+1:from+1], s.regions[to:from])
+	}
+	s.regions[to] = moved
+	s.adjustCurrentRegionIndexAfterMove(from, to)
+	return true
+}
+
+func (s *ServerTab) adjustCurrentRegionIndexAfterMove(from, to int) {
+	switch {
+	case s.currentRegionIdx == from:
+		s.currentRegionIdx = to
+	case from < to && s.currentRegionIdx > from && s.currentRegionIdx <= to:
+		s.currentRegionIdx--
+	case to < from && s.currentRegionIdx >= to && s.currentRegionIdx < from:
+		s.currentRegionIdx++
+	}
+}
+
+func (s *ServerTab) endDragReorder() {
+	if s.draggingIndex < 0 {
+		return
+	}
+	changed := s.dragMoved
+	s.draggingIndex = -1
+	s.dragAccumulated = 0
+	s.dragMoved = false
+	if !changed {
+		return
+	}
+	if err := s.saveToDisk(); err != nil {
+		s.state.ShowErrorDialog(err)
+	}
+}
+
 func (s *ServerTab) refreshView() {
 	if s.emptyHint == nil || s.bodyStack == nil {
 		return
@@ -588,6 +704,70 @@ func (s *ServerTab) refreshView() {
 	}
 	s.bodyStack.Refresh()
 }
+
+type serverRowDragHandle struct {
+	widget.BaseWidget
+	icon        *widget.Icon
+	onDragStart func()
+	onDragged   func(*fyne.DragEvent)
+	onDragEnd   func()
+	dragStarted bool
+}
+
+func newServerRowDragHandle() *serverRowDragHandle {
+	h := &serverRowDragHandle{
+		icon: widget.NewIcon(theme.MoreVerticalIcon()),
+	}
+	h.ExtendBaseWidget(h)
+	return h
+}
+
+func (h *serverRowDragHandle) SetCallbacks(onDragStart func(), onDragged func(*fyne.DragEvent), onDragEnd func()) {
+	h.onDragStart = onDragStart
+	h.onDragged = onDragged
+	h.onDragEnd = onDragEnd
+}
+
+func (h *serverRowDragHandle) CreateRenderer() fyne.WidgetRenderer {
+	return widget.NewSimpleRenderer(h.icon)
+}
+
+func (h *serverRowDragHandle) Dragged(ev *fyne.DragEvent) {
+	if !h.dragStarted {
+		h.dragStarted = true
+		if h.onDragStart != nil {
+			h.onDragStart()
+		}
+	}
+	if h.onDragged != nil {
+		h.onDragged(ev)
+	}
+}
+
+func (h *serverRowDragHandle) DragEnd() {
+	if h.dragStarted && h.onDragEnd != nil {
+		h.onDragEnd()
+	}
+	h.dragStarted = false
+}
+
+func (h *serverRowDragHandle) Tapped(*fyne.PointEvent) {}
+
+func (h *serverRowDragHandle) Cursor() desktop.Cursor {
+	return desktop.PointerCursor
+}
+
+func (h *serverRowDragHandle) MouseIn(*desktop.MouseEvent) {}
+
+func (h *serverRowDragHandle) MouseOut() {}
+
+func (h *serverRowDragHandle) MouseMoved(*desktop.MouseEvent) {}
+
+var _ fyne.Widget = (*serverRowDragHandle)(nil)
+var _ fyne.Draggable = (*serverRowDragHandle)(nil)
+var _ fyne.Tappable = (*serverRowDragHandle)(nil)
+var _ desktop.Cursorable = (*serverRowDragHandle)(nil)
+var _ desktop.Hoverable = (*serverRowDragHandle)(nil)
 
 type serverListItemLayout struct {
 	minIconSize float32

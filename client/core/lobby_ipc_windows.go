@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -75,6 +76,7 @@ func (a *App) SendLobbyJoinByPID(pid int, joinInfo LaunchJoinInfo) error {
 	if pid <= 0 {
 		return fmt.Errorf("invalid pid: %d", pid)
 	}
+	slog.Info("Sending lobby join IPC", "pid", pid, "joinInfo", joinInfo)
 	pipeName := fmt.Sprintf(`\\.\pipe\LobbyUtilsPipe-%d`, pid)
 	timeout := 3 * time.Second
 	conn, err := winio.DialPipe(pipeName, &timeout)
@@ -86,12 +88,14 @@ func (a *App) SendLobbyJoinByPID(pid int, joinInfo LaunchJoinInfo) error {
 	payload := map[string]any{
 		"Action": "join",
 	}
-	if joinInfo.LobbyCode != "" {
+	if joinInfo.LobbyCode != "" && joinInfo.ServerIP != "" && joinInfo.ServerPort > 0 {
 		payload["Code"] = joinInfo.LobbyCode
-	}
-	if joinInfo.ServerIP != "" && joinInfo.ServerPort > 0 {
 		payload["Ip"] = joinInfo.ServerIP
 		payload["Port"] = joinInfo.ServerPort
+	}
+	if joinInfo.MatchMakerIp != "" && joinInfo.MatchMakerPort > 0 {
+		payload["MatchMakerIp"] = joinInfo.MatchMakerIp
+		payload["MatchMakerPort"] = joinInfo.MatchMakerPort
 	}
 	if err := writeIPCJSON(conn, payload); err != nil {
 		return err

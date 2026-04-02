@@ -9,9 +9,11 @@ type HealthStatus struct {
 }
 
 type RoomInfo struct {
-	LobbyCode  string `json:"lobby_code,omitempty"`
-	ServerIP   string `json:"server_ip,omitempty"`
-	ServerPort uint16 `json:"server_port,omitempty"`
+	LobbyCode      string `json:"lobby_code,omitempty"`
+	ServerIP       string `json:"server_ip,omitempty"`
+	ServerPort     uint16 `json:"server_port,omitempty"`
+	MatchMakerIp   string `json:"match_maker_ip,omitempty"`
+	MatchMakerPort uint16 `json:"match_maker_port,omitempty"`
 }
 
 type ShareGameRequest struct {

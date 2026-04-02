@@ -482,12 +482,15 @@ func (l *Launcher) currentRoomInfo(info *core.IPCLobbyInfo) (commonrest.RoomInfo
 	if strings.TrimSpace(info.LobbyCode) == "" {
 		return commonrest.RoomInfo{}, false
 	}
-	room := commonrest.RoomInfo{
-		LobbyCode: strings.TrimSpace(info.LobbyCode),
-		ServerIP:  strings.TrimSpace(info.ServerIP),
+	if info.ServerIP == "" || info.ServerPort <= 0 {
+		return commonrest.RoomInfo{}, false
 	}
-	if info.ServerPort > 0 && info.ServerPort <= 65535 {
-		room.ServerPort = uint16(info.ServerPort)
+	room := commonrest.RoomInfo{
+		LobbyCode:      strings.TrimSpace(info.LobbyCode),
+		ServerIP:       strings.TrimSpace(info.ServerIP),
+		ServerPort:     uint16(info.ServerPort),
+		MatchMakerIp:   strings.TrimSpace(info.MatchMakerIp),
+		MatchMakerPort: uint16(info.MatchMakerPort),
 	}
 	return room, true
 }
@@ -712,8 +715,8 @@ func (l *Launcher) shareCurrentRoom() {
 		l.roomLinkEntry.SetText(rs.URL)
 		l.copyRoomLinkButton.Enable()
 		l.unpublishRoomButton.Enable()
+		l.copyRoomLinkToClipboard()
 	})
-	l.copyRoomLinkToClipboard()
 }
 
 func (l *Launcher) shareProfile(prof profile.Profile) {
@@ -1047,9 +1050,11 @@ func (l *Launcher) handleJoinGameURI(sharedURI string) {
 		return
 	}
 	joinInfo := &core.LaunchJoinInfo{
-		LobbyCode:  rs.Room.LobbyCode,
-		ServerIP:   rs.Room.ServerIP,
-		ServerPort: rs.Room.ServerPort,
+		LobbyCode:      rs.Room.LobbyCode,
+		ServerIP:       rs.Room.ServerIP,
+		ServerPort:     rs.Room.ServerPort,
+		MatchMakerIp:   rs.Room.MatchMakerIp,
+		MatchMakerPort: rs.Room.MatchMakerPort,
 	}
 	runningProfileID, runningPID := l.currentRunningProfileAndPID()
 	if runningProfile, ok := l.state.Core.ProfileManager.Get(l.runningProfileID); ok && runningPID > 0 && runningProfileID == shared.ID && hasDirectJoinFeature(runningProfile.Versions()) {

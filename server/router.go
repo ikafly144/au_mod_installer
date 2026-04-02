@@ -140,12 +140,24 @@ func router(srv *service.ModService, pathPrefix string, basePath string) http.Ha
 			}
 			serverPort = uint16(parsed)
 		}
+		matchMakerPort := uint16(0)
+		matchMakerPortStr := strings.TrimSpace(ctx.PostForm("match_maker_port"))
+		if matchMakerPortStr != "" {
+			parsed, err := strconv.ParseUint(matchMakerPortStr, 10, 16)
+			if err != nil {
+				ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid match_maker_port"})
+				return
+			}
+			matchMakerPort = uint16(parsed)
+		}
 		req := rest.ShareGameRequest{
 			Aupack: aupack,
 			Room: rest.RoomInfo{
-				LobbyCode:  strings.TrimSpace(ctx.PostForm("lobby_code")),
-				ServerIP:   strings.TrimSpace(ctx.PostForm("server_ip")),
-				ServerPort: serverPort,
+				LobbyCode:      strings.TrimSpace(ctx.PostForm("lobby_code")),
+				ServerIP:       strings.TrimSpace(ctx.PostForm("server_ip")),
+				ServerPort:     serverPort,
+				MatchMakerIp:   strings.TrimSpace(ctx.PostForm("match_maker_ip")),
+				MatchMakerPort: matchMakerPort,
 			},
 		}
 		if len(req.Aupack) == 0 {
