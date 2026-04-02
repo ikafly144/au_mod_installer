@@ -38,6 +38,9 @@ func (i *IPCLobbyInfo) String() string {
 	} else {
 		fmt.Fprintln(b, "IsInGame: nil")
 	}
+	fmt.Fprint(b, ", ")
+	fmt.Fprintf(b, "MatchMakerIp: %s, ", i.MatchMakerIp)
+	fmt.Fprintf(b, "MatchMakerPort: %d", i.MatchMakerPort)
 	fmt.Fprint(b, "}")
 	return b.String()
 }
