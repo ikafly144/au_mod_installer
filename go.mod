@@ -3,7 +3,7 @@ module github.com/ikafly144/au_mod_installer
 go 1.26.1
 
 require (
-	fyne.io/fyne/v2 v2.7.2
+	fyne.io/fyne/v2 v2.7.3
 	github.com/AlecAivazis/survey/v2 v2.3.7
 	github.com/Microsoft/go-winio v0.6.2
 	github.com/TheTitanrain/w32 v0.0.0-20200114052255-2654d97dbd3d
@@ -54,7 +54,7 @@ require (
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/go-playground/validator/v10 v10.30.1 // indirect
 	github.com/go-text/render v0.2.0 // indirect
-	github.com/go-text/typesetting v0.3.0 // indirect
+	github.com/go-text/typesetting v0.3.3 // indirect
 	github.com/goccy/go-json v0.10.6 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
