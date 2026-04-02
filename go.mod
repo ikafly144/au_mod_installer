@@ -3,7 +3,7 @@ module github.com/ikafly144/au_mod_installer
 go 1.26.1
 
 require (
-	fyne.io/fyne/v2 v2.7.2
+	fyne.io/fyne/v2 v2.7.3
 	github.com/AlecAivazis/survey/v2 v2.3.7
 	github.com/Microsoft/go-winio v0.6.2
 	github.com/TheTitanrain/w32 v0.0.0-20200114052255-2654d97dbd3d
@@ -15,12 +15,12 @@ require (
 	github.com/mcuadros/go-version v0.0.0-20190830083331-035f6764e8d2
 	github.com/minio/selfupdate v0.6.0
 	github.com/nightlyone/lockfile v1.0.0
-	github.com/rs/zerolog v1.34.1-0.20260317125229-2f5b8a91be2c
+	github.com/rs/zerolog v1.35.0
 	github.com/sqweek/dialog v0.0.0-20240226140203-065105509627
 	github.com/stretchr/testify v1.11.1
 	github.com/urfave/cli/v3 v3.8.0
 	github.com/zzl/go-win32api v1.2.0
-	golang.org/x/mod v0.33.0
+	golang.org/x/mod v0.34.0
 	golang.org/x/sys v0.42.0
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.31.1
@@ -54,7 +54,7 @@ require (
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/go-playground/validator/v10 v10.30.1 // indirect
 	github.com/go-text/render v0.2.0 // indirect
-	github.com/go-text/typesetting v0.3.0 // indirect
+	github.com/go-text/typesetting v0.3.3 // indirect
 	github.com/goccy/go-json v0.10.6 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
