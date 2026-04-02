@@ -20,6 +20,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/urfave/cli/v3 v3.8.0
 	github.com/zzl/go-win32api v1.2.0
+	github.com/zzl/go-win32api/v2 v2.2.0
 	golang.org/x/mod v0.33.0
 	golang.org/x/sys v0.42.0
 	gorm.io/driver/postgres v1.6.0
