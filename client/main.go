@@ -21,7 +21,7 @@ import (
 	"github.com/Microsoft/go-winio"
 	"github.com/nightlyone/lockfile"
 	"github.com/sqweek/dialog"
-	"github.com/zzl/go-win32api/win32"
+	"github.com/zzl/go-win32api/v2/win32"
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 

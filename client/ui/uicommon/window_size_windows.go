@@ -6,7 +6,7 @@ import (
 	"log/slog"
 
 	"fyne.io/fyne/v2"
-	"github.com/zzl/go-win32api/win32"
+	"github.com/zzl/go-win32api/v2/win32"
 )
 
 func nudgeWindowPosition(w fyne.Window) {

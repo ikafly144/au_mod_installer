@@ -14,7 +14,7 @@ import (
 	"syscall"
 	"unsafe"
 
-	"github.com/zzl/go-win32api/win32"
+	"github.com/zzl/go-win32api/v2/win32"
 )
 
 type oleTextDropTarget struct {
@@ -340,7 +340,7 @@ func extractUTF16TextFromDataObject(dataObj *win32.IDataObject, format uint16) (
 	}
 	defer win32.ReleaseStgMedium(&medium)
 
-	if medium.Tymed != uint32(win32.TYMED_HGLOBAL) {
+	if medium.Tymed != win32.TYMED_HGLOBAL {
 		return "", false
 	}
 	hGlobal := medium.HGlobalVal()
@@ -372,7 +372,7 @@ func extractANSITextFromDataObject(dataObj *win32.IDataObject, format uint16) (s
 	}
 	defer win32.ReleaseStgMedium(&medium)
 
-	if medium.Tymed != uint32(win32.TYMED_HGLOBAL) {
+	if medium.Tymed != win32.TYMED_HGLOBAL {
 		return "", false
 	}
 	hGlobal := medium.HGlobalVal()
