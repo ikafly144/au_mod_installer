@@ -2,8 +2,10 @@ package versioning
 
 // repository information
 import (
+	"bytes"
 	"context"
 	"crypto"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"io"
@@ -69,14 +71,14 @@ func Update(ctx context.Context, tag string) error {
 		return err
 	}
 
-	assetName := artifactName
-	assetName = replaceOSAndArch(assetName)
+	assetName := replaceOSAndArch(artifactName)
 	var checkSum []byte
 	var binaryAsset *github.ReleaseAsset
+
 	for _, asset := range release.Assets {
 		if asset.GetName() == assetName {
 			binaryAsset = asset
-			break
+			continue
 		}
 		if asset.GetName() == "checksums.txt" {
 			resp, err := http.Get(asset.GetBrowserDownloadURL())
@@ -85,8 +87,20 @@ func Update(ctx context.Context, tag string) error {
 			}
 			defer resp.Body.Close()
 			buf := new(strings.Builder)
-			if _, err = io.Copy(buf, resp.Body); err != nil {
+
+			var sha256Hash [32]byte
+			if hashStr, ok := strings.CutPrefix(asset.GetDigest(), "sha256:"); ok {
+				if _, err := hex.Decode(sha256Hash[:], []byte(hashStr)); err != nil {
+					return err
+				}
+			}
+			hasher := sha256.New()
+			writer := io.MultiWriter(buf, hasher)
+			if _, err = io.Copy(writer, resp.Body); err != nil {
 				return err
+			}
+			if !bytes.Equal(sha256Hash[:], hasher.Sum(nil)) {
+				return errors.New("checksum verification failed for checksums.txt")
 			}
 			lines := strings.SplitSeq(buf.String(), "\n")
 			for line := range lines {
@@ -101,18 +115,33 @@ func Update(ctx context.Context, tag string) error {
 			}
 		}
 	}
-	if binaryAsset != nil {
-		resp, err := http.Get(binaryAsset.GetBrowserDownloadURL())
-		if err != nil {
+	if binaryAsset == nil {
+		return errors.New("no suitable asset found for update")
+	}
+	resp, err := http.Get(binaryAsset.GetBrowserDownloadURL())
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	hasher := sha256.New()
+	reader := io.TeeReader(resp.Body, hasher)
+	if err := selfupdate.Apply(reader, selfupdate.Options{
+		Checksum: checkSum,
+		Hash:     crypto.SHA256,
+	}); err != nil {
+		return err
+	}
+	var sha256Hash [32]byte
+	if hashStr, ok := strings.CutPrefix(binaryAsset.GetDigest(), "sha256:"); ok {
+		if _, err := hex.Decode(sha256Hash[:], []byte(hashStr)); err != nil {
+			slog.Error("failed to decode binary asset digest", "error", err)
 			return err
 		}
-		defer resp.Body.Close()
-		return selfupdate.Apply(resp.Body, selfupdate.Options{
-			Checksum: checkSum,
-			Hash:     crypto.SHA256,
-		})
+		if !bytes.Equal(sha256Hash[:], hasher.Sum(nil)) {
+			return errors.New("checksum verification failed for downloaded binary")
+		}
 	}
-	return errors.New("no suitable asset found for update")
+	return nil
 }
 
 func replaceOSAndArch(name string) string {
