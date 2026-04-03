@@ -230,8 +230,8 @@ func parseColor(v string) (color.Color, bool) {
 		return color.NRGBA{R: 255, G: 255, B: 0, A: 255}, true
 	}
 
-	if strings.HasPrefix(s, "#") {
-		hex := strings.TrimPrefix(s, "#")
+	if after, ok := strings.CutPrefix(s, "#"); ok {
+		hex := after
 		switch len(hex) {
 		case 6:
 			n, err := strconv.ParseUint(hex, 16, 32)
@@ -265,8 +265,8 @@ func parseSizeScale(v string) (float32, bool) {
 	if s == "" {
 		return 0, false
 	}
-	if strings.HasSuffix(s, "%") {
-		n, err := strconv.ParseFloat(strings.TrimSuffix(s, "%"), 64)
+	if before, ok := strings.CutSuffix(s, "%"); ok {
+		n, err := strconv.ParseFloat(before, 64)
 		if err != nil || n <= 0 {
 			return 0, false
 		}

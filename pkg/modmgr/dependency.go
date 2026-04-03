@@ -2,6 +2,8 @@ package modmgr
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 
 	version "github.com/mcuadros/go-version"
@@ -130,9 +132,7 @@ func resolveDependenciesWithConstraints(resolved map[string]ModVersion, allDeps 
 		for _, candidate := range candidates {
 			// Create a test resolution
 			testResolved := make(map[string]ModVersion)
-			for k, v := range resolved {
-				testResolved[k] = v
-			}
+			maps.Copy(testResolved, resolved)
 			testResolved[depConstraint.modID] = *candidate
 
 			// Collect new dependencies introduced by this candidate
@@ -167,9 +167,7 @@ func resolveDependenciesWithConstraints(resolved map[string]ModVersion, allDeps 
 			}
 
 			// Success! Update resolved
-			for k, v := range testResolved {
-				resolved[k] = v
-			}
+			maps.Copy(resolved, testResolved)
 			resolved_any = true
 			break
 		}
@@ -270,10 +268,8 @@ func getCandidateVersionsForConstraints(provider VersionProvider, constraints []
 		}
 		if latest != nil {
 			// Check if latest is in our matching list
-			for _, vid := range matchingVersionIDs {
-				if vid == latest.VersionID {
-					return []*ModVersion{latest}, nil
-				}
+			if slices.Contains(matchingVersionIDs, latest.VersionID) {
+				return []*ModVersion{latest}, nil
 			}
 		}
 		// Latest doesn't satisfy other constraints
