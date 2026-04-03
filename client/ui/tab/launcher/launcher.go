@@ -2285,7 +2285,7 @@ func (l *Launcher) showDuplicateDialog(prof profile.Profile) {
 		}
 		newName := entry.Text
 
-		newProf := prof
+		newProf := prof.Clone()
 		newProf.ID = uuid.New()
 		newProf.Name = newName
 		newProf.UpdatedAt = time.Now()

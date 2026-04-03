@@ -81,3 +81,14 @@ func (p *Profile) AddPlayDuration(d time.Duration) {
 	}
 	p.PlayDurationNS += int64(d)
 }
+
+func (p *Profile) Clone() Profile {
+	copy := *p
+	if p.ModVersions != nil {
+		copy.ModVersions = make(map[string]modmgr.ModVersion, len(p.ModVersions))
+		for k, v := range p.ModVersions {
+			copy.ModVersions[k] = v
+		}
+	}
+	return copy
+}
