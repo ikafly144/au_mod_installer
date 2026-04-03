@@ -5,6 +5,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"errors"
 	"flag"
 	"io"
 	"log/slog"
@@ -22,6 +23,7 @@ import (
 	"github.com/nightlyone/lockfile"
 	"github.com/sqweek/dialog"
 	"github.com/zzl/go-win32api/v2/win32"
+	"golang.org/x/mod/semver"
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 
@@ -169,7 +171,7 @@ func realMain(sharedURI string, sharedArchive string) error {
 
 	branch := versioning.BranchFromString(a.Preferences().StringWithFallback("core.update_branch", "stable"))
 
-	tag, err := versioning.CheckForUpdates(context.Background(), branch, version)
+	tag, stable, err := versioning.CheckForUpdates(context.Background(), branch, version)
 	if err != nil {
 		slog.Error("Failed to check for updates", "error", err)
 	} else if tag != "" {
@@ -184,6 +186,11 @@ func realMain(sharedURI string, sharedArchive string) error {
 			}
 			execCmd := exec.Command(os.Args[0], os.Args[1:]...)
 			return execCmd.Start()
+		} else if version != "(devel)" && semver.Prerelease(tag) == "" && semver.Compare(stable, version) > 0 {
+			// 開発版でないかつ安定版が現在のバージョンより新しい場合は、更新を促す
+			slog.Info("User chose not to update")
+			(&dialog.MsgBuilder{Msg: lang.LocalizeKey("update.required", "Update is required to continue. Please update to the latest version and restart the application.")}).Title(lang.LocalizeKey("update.required_title", "Update Required")).Error()
+			return errors.New("update required")
 		}
 	} else {
 		slog.Info("No updates available")

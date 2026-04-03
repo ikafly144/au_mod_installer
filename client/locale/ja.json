@@ -4,6 +4,8 @@
     "update.available": "新しいバージョン\"{{.Version}}\"が利用可能です。「はい」をクリックすると更新します。",
     "update.title": "アップデート利用可能",
     "update.failed": "更新に失敗しました: {{.Error}}",
+    "update.required": "続行するには最新バージョンが必要です。最新バージョンに更新して再度お試しください。",
+    "update.required_title": "更新が必要",
     "app.name": "Mod of Us",
     "installer.select_install_path": "インストール先を選択してください。",
     "installer.select_install": "（Among Usを選択）",

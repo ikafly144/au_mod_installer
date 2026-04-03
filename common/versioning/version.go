@@ -25,21 +25,29 @@ var (
 	artifactName = "mod-of-us_${OS}_${ARCH}"
 )
 
-func CheckForUpdates(ctx context.Context, branch Branch, currentVersion string) (releaseTag string, err error) {
+func CheckForUpdates(ctx context.Context, branch Branch, currentVersion string) (releaseTag string, latestStable string, err error) {
 	client := github.NewClient(http.DefaultClient)
 	opt := &github.ListOptions{
 		PerPage: 10,
 		Page:    1,
 	}
+outer:
 	for {
 		tags, resp, err := client.Repositories.ListTags(ctx, repoOwner, repoName, opt)
 		if err != nil {
-			return "", err
+			return "", "", err
 		}
 		for _, tag := range tags {
 			slog.Info("found tag", "tag", tag.GetName())
 			if before, _, _ := strings.Cut(strings.TrimPrefix(semver.Prerelease(tag.GetName()), "-"), "."); before != "" && !branch.match(before) {
 				slog.Info("skipping tag due to prerelease branch mismatch", "tag", tag.GetName(), "branch", branch)
+			}
+			if semver.Compare(tag.GetName(), currentVersion) <= 0 {
+				slog.Info("no newer version found", "current", currentVersion, "found", tag.GetName())
+				return "", "", nil
+			}
+			if semver.Prerelease(tag.GetName()) != "" && semver.Compare(tag.GetName(), releaseTag) <= 0 {
+				slog.Info("already found a newer version, skipping", "current", currentVersion, "found", tag.GetName(), "existing", releaseTag)
 				continue
 			}
 			release, _, err := client.Repositories.GetReleaseByTag(ctx, repoOwner, repoName, tag.GetName())
@@ -47,12 +55,14 @@ func CheckForUpdates(ctx context.Context, branch Branch, currentVersion string) 
 				slog.Error("failed to get release by tag", "tag", tag.GetName(), "error", err)
 				continue
 			}
-			if semver.Compare(release.GetTagName(), currentVersion) <= 0 {
-				slog.Info("no newer version found", "current", currentVersion, "found", release.GetTagName())
-				return "", nil
+			if release.GetTagName() != currentVersion && releaseTag == "" {
+				releaseTag = release.GetTagName()
 			}
-			if release.GetTagName() != currentVersion {
-				return release.GetTagName(), nil
+			if semver.Prerelease(release.GetTagName()) == "" && latestStable == "" {
+				latestStable = release.GetTagName()
+			}
+			if releaseTag != "" && latestStable != "" {
+				break outer
 			}
 		}
 		if resp.NextPage == 0 {
@@ -61,7 +71,7 @@ func CheckForUpdates(ctx context.Context, branch Branch, currentVersion string) 
 		opt.Page = resp.NextPage
 	}
 
-	return "", nil
+	return releaseTag, latestStable, nil
 }
 
 func Update(ctx context.Context, tag string) error {
