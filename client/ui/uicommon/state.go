@@ -44,7 +44,9 @@ func NewState(w fyne.Window, version string, options ...Option) (*State, error) 
 
 	detectedPath, err := app.DetectGamePath()
 	if err != nil {
-		return nil, err
+		// TODO: インストールが正常に選択されていない状態でバグらないことを検証する
+		slog.Warn("Failed to detect game path", "error", err)
+		detectedPath = ""
 	}
 
 	var s State
