@@ -27,18 +27,6 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
-      - name: Cache Go modules
-        id: restore-cache
-        uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ env.cache-name }}-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-${{ env.cache-name }}-
-            ${{ runner.os }}-go-
-            ${{ runner.os }}-
       - name: Set up MinGW
         uses: egor-tensin/setup-mingw@41b837e47d7f85214629d255b9c4bc3fcbe9fd63 # v3.0
         with:
@@ -48,6 +36,29 @@ jobs:
         with:
           go-version: stable
           cache: false
+      - name: Cache Go modules and build cache
+        id: restore-cache
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-crossbuild-windows-amd64-${{ hashFiles('**/go.sum') }}-${{ hashFiles('**/*.go') }}
+          restore-keys: |
+            ${{ runner.os }}-go-crossbuild-windows-amd64-${{ hashFiles('**/go.sum') }}-
+            ${{ runner.os }}-go-crossbuild-windows-amd64-
+            ${{ runner.os }}-go-${{ env.cache-name }}-${{ hashFiles('**/go.sum') }}
+            ${{ runner.os }}-go-${{ env.cache-name }}-
+            ${{ runner.os }}-go-
+            ${{ runner.os }}-
+      - name: Prebuild for Windows cross-compilation
+        if: steps.restore-cache.outputs.cache-hit != 'true'
+        run: |
+          echo "Cache miss - prebuilding standard library for Windows"
+          CGO_ENABLED=1 GOOS=windows GOARCH=amd64 CC=x86_64-w64-mingw32-gcc \
+            go build -v -trimpath ./client
+        env:
+          GOCACHE: /home/runner/.cache/go-build
       - name: Get previous stable release
         id: get_previous_stable
         run: |
@@ -118,9 +129,10 @@ jobs:
           echo "Cache prime key: ${{ steps.restore-cache.outputs.cache-primary-key }}" >> $GITHUB_STEP_SUMMARY
           echo "Cache matched key: ${{ steps.restore-cache.outputs.cache-matched-key }}" >> $GITHUB_STEP_SUMMARY
       - name: Save Go module cache
+        if: always()
         uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
           path: |
             ~/.cache/go-build
             ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ env.cache-name }}-${{ hashFiles('**/go.sum') }}
+          key: ${{ runner.os }}-go-crossbuild-windows-amd64-${{ hashFiles('**/go.sum') }}-${{ hashFiles('**/*.go') }}
