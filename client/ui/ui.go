@@ -4,6 +4,7 @@ package ui
 
 import (
 	"log/slog"
+	"runtime"
 
 	"github.com/ikafly144/au_mod_installer/client/ui/tab/launcher"
 	"github.com/ikafly144/au_mod_installer/client/ui/tab/repo"
@@ -110,6 +111,7 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 			w.CenterOnScreen()
 		}
 	})
+	runtime.LockOSThread()
 	fyne.CurrentApp().Run()
 	return nil
 }
