@@ -51,6 +51,8 @@ jobs:
             ${{ runner.os }}-go-${{ env.cache-name }}-
             ${{ runner.os }}-go-
             ${{ runner.os }}-
+      - name: Generate assets
+        run: go generate ./client
       - name: Prebuild for Windows cross-compilation
         if: steps.restore-cache.outputs.cache-hit != 'true'
         run: |
