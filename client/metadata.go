@@ -21,7 +21,7 @@ func init() {
 	info, ok := debug.ReadBuildInfo()
 	if ok {
 		fmt.Println(info)
-		version = "(devel)"
+		version = info.Main.Version
 		vscIdx := -1
 		for i, setting := range info.Settings {
 			if setting.Key == "vcs.revision" {
