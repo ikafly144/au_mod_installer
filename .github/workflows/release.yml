@@ -12,6 +12,7 @@ permissions:
   packages: write
   issues: write
   id-token: write
+  attestations: write
 
 jobs:
   goreleaser:
