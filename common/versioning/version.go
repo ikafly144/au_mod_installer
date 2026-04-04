@@ -14,7 +14,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/google/go-github/v80/github"
+	"github.com/google/go-github/v84/github"
 	"github.com/minio/selfupdate"
 	"golang.org/x/mod/semver"
 )
