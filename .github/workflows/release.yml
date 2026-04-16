@@ -38,7 +38,7 @@ jobs:
           cache: false
       - name: Cache Go modules and build cache
         id: restore-cache
-        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: |
             ~/.cache/go-build
@@ -132,7 +132,7 @@ jobs:
           echo "Cache matched key: ${{ steps.restore-cache.outputs.cache-matched-key }}" >> $GITHUB_STEP_SUMMARY
       - name: Save Go module cache
         if: always()
-        uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: |
             ~/.cache/go-build
