@@ -30,7 +30,7 @@ require (
 require (
 	aead.dev/minisign v0.3.0 // indirect
 	fyne.io/systray v1.12.0 // indirect
-	fyne.io/tools v1.7.0 // indirect
+	fyne.io/tools v1.7.1 // indirect
 	github.com/BurntSushi/toml v1.5.0 // indirect
 	github.com/akavel/rsrc v0.10.2 // indirect
 	github.com/bytedance/gopkg v0.1.4 // indirect
