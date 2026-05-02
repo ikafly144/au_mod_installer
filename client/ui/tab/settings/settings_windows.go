@@ -18,7 +18,6 @@ import (
 	"slices"
 	"sort"
 	"strings"
-	"time"
 
 	"fyne.io/fyne/v2"
 	fyneapp "fyne.io/fyne/v2/app"
@@ -32,12 +31,8 @@ import (
 	"fyne.io/fyne/v2/widget"
 	"golang.org/x/sys/windows"
 
-	"github.com/google/uuid"
-
 	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
 	"github.com/ikafly144/au_mod_installer/common/versioning"
-	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
-	"github.com/ikafly144/au_mod_installer/pkg/profile"
 )
 
 type Settings struct {
@@ -45,13 +40,9 @@ type Settings struct {
 	BranchSelect            *widget.Select
 	DisplayScaleSlider      *widget.Slider
 	DisplayScaleSelect      *widget.Select
-	ApiServerEntry          *widget.Entry
-	SaveConfigButton        *widget.Button
-	ImportProfileButton     *widget.Button
 	ClearCacheButton        *widget.Button
 	DeleteAmongUsDataButton *widget.Button
 
-	uninstallButton      *widget.Button
 	installationListener binding.DataListener
 
 	epicAccountLabel *widget.Label
@@ -129,10 +120,6 @@ func NewSettings(state *uicommon.State) *Settings {
 	displayScaleSlider.Step = float64(displayScaleStep)
 	displayScaleSlider.SetValue(float64(clampDisplayScale(currentScale)))
 
-	apiServerEntry := widget.NewEntry()
-	apiServerEntry.PlaceHolder = "https://modofus.sabafly.net/api/v1"
-	apiServerEntry.SetText(fyne.CurrentApp().Preferences().String("api_server"))
-
 	thirdPartyLicenses, thirdPartyLicenseLoadErr := loadThirdPartyLicenses()
 	if thirdPartyLicenseLoadErr != nil {
 		slog.Warn("Failed to load third-party licenses", "error", thirdPartyLicenseLoadErr)
@@ -150,8 +137,6 @@ func NewSettings(state *uicommon.State) *Settings {
 		BranchSelect:             branchSelect,
 		DisplayScaleSlider:       displayScaleSlider,
 		DisplayScaleSelect:       displayScaleSelect,
-		ApiServerEntry:           apiServerEntry,
-		uninstallButton:          widget.NewButtonWithIcon(lang.LocalizeKey("installation.uninstall", "Uninstall from Game Folder"), theme.DeleteIcon(), nil), // nil callback initially, set in init
 		epicAccountLabel:         widget.NewLabel(""),
 		displayScaleValues:       displayScaleValues,
 		currentDisplayScale:      clampDisplayScale(currentScale),
@@ -164,26 +149,11 @@ func NewSettings(state *uicommon.State) *Settings {
 	s.DisplayScaleSlider.OnChangeEnded = s.onDisplayScaleSliderChangeEnded
 	s.setDisplayScaleControls(s.currentDisplayScale)
 
-	s.SaveConfigButton = widget.NewButtonWithIcon(lang.LocalizeKey("settings.save", "Save"), theme.DocumentSaveIcon(), s.saveConfig)
-
 	s.epicLoginButton = widget.NewButton(lang.LocalizeKey("settings.epic_login", "Login"), s.showEpicLoginDialog)
 	s.epicLogoutButton = widget.NewButton(lang.LocalizeKey("settings.epic_logout", "Logout"), s.epicLogout)
 
 	s.refreshEpicAccountInfo()
 
-	s.uninstallButton.OnTapped = s.runUninstall
-	s.uninstallButton.Importance = widget.DangerImportance
-	s.uninstallButton.Disable()
-
-	if s.installationListener == nil {
-		s.installationListener = binding.NewDataListener(s.checkUninstallState)
-		s.state.ModInstalled.AddListener(s.installationListener)
-		s.state.SelectedGamePath.AddListener(s.installationListener)
-		s.state.CanInstall.AddListener(s.installationListener)
-		s.state.RefreshModInstallation()
-	}
-
-	s.ImportProfileButton = widget.NewButtonWithIcon(lang.LocalizeKey("settings.import_profile", "Import Profile from Current Installation"), theme.DocumentSaveIcon(), s.importProfile)
 	s.ClearCacheButton = widget.NewButtonWithIcon(lang.LocalizeKey("settings.clear_cache", "Clear Mod Cache"), theme.DeleteIcon(), s.clearCache)
 
 	s.DeleteAmongUsDataButton = widget.NewButtonWithIcon(lang.LocalizeKey("settings.delete_among_us_data", "Delete Among Us Data"), theme.DeleteIcon(), s.deleteAmongUsData)
@@ -203,20 +173,6 @@ func (s *Settings) clearCache() {
 			dialog.ShowInformation(lang.LocalizeKey("common.success", "Success"), lang.LocalizeKey("settings.cache_cleared", "Mod cache cleared successfully."), s.state.Window)
 		}
 	}, s.state.Window)
-}
-
-func (s *Settings) checkUninstallState() {
-	if ok, err := s.state.CanInstall.Get(); !ok || err != nil {
-		s.uninstallButton.Disable()
-		return
-	}
-	if ok, err := s.state.ModInstalled.Get(); ok && err == nil {
-		s.uninstallButton.Enable()
-	} else if err == nil {
-		s.uninstallButton.Disable()
-	} else {
-		slog.Warn("Failed to get modInstalled", "error", err)
-	}
 }
 
 func (s *Settings) Tab() (*container.TabItem, error) {
@@ -335,27 +291,6 @@ func (s *Settings) Tab() (*container.TabItem, error) {
 	advancedPage := container.NewVScroll(container.NewVBox(
 		warningText,
 		widget.NewCard(
-			lang.LocalizeKey("settings.legacy_migration", "Legacy Migration"),
-			"",
-			container.NewVBox(s.ImportProfileButton),
-		),
-		widget.NewCard(
-			lang.LocalizeKey("installation.legacy_installation_status", "Legacy Installation Status"),
-			"",
-			container.NewVBox(
-				s.state.ModInstalledInfo,
-				s.uninstallButton,
-			),
-		),
-		widget.NewCard(
-			lang.LocalizeKey("settings.advanced_settings", "Advanced Settings"),
-			"",
-			container.NewVBox(
-				settingsEntry(lang.LocalizeKey("settings.server_url", "Server URL"), s.ApiServerEntry),
-				s.SaveConfigButton,
-			),
-		),
-		widget.NewCard(
 			lang.LocalizeKey("settings.data_management", "Data Management"),
 			"",
 			container.NewVBox(s.DeleteAmongUsDataButton),
@@ -454,88 +389,6 @@ func (s *Settings) epicLogout() {
 	s.refreshEpicAccountInfo()
 }
 
-func (s *Settings) runUninstall() {
-	defer s.state.RefreshModInstallation()
-	s.state.ClearError()
-	path, err := s.state.SelectedGamePath.Get()
-	if err != nil || path == "" {
-		s.state.ShowErrorDialog(errors.New(lang.LocalizeKey("installation.error.no_path", "Installation path is not specified.")))
-		return
-	}
-	slog.Info("Uninstalling mod", "path", path)
-
-	go func() {
-		if err := s.state.Core.UninstallMod(path, nil); err != nil {
-			s.state.ShowErrorDialog(errors.New(lang.LocalizeKey("installation.error.failed_to_uninstall", "Failed to uninstall mod: ") + err.Error()))
-			slog.Warn("Failed to uninstall mod", "error", err)
-			return
-		}
-		slog.Info("Mod uninstalled successfully", "path", path)
-		s.state.ShowInfoDialog(
-			lang.LocalizeKey("common.success", "Success"),
-			lang.LocalizeKey("installation.success.uninstalled", "Mod uninstalled successfully."),
-		)
-		fyne.Do(s.state.RefreshModInstallation)
-	}()
-}
-
-func (s *Settings) importProfile() {
-	path := s.state.ModInstallDir()
-	if path == "" {
-		dialog.ShowError(os.ErrNotExist, s.state.Window)
-		return
-	}
-
-	modInstallLocation, err := os.OpenRoot(path)
-	if err != nil {
-		dialog.ShowError(err, s.state.Window)
-		return
-	}
-	defer modInstallLocation.Close()
-
-	// TODO: remove legacy code
-	//nolint:staticcheck
-	installationInfo, err := modmgr.LoadInstallationInfo(modInstallLocation)
-	if err != nil {
-		dialog.ShowError(err, s.state.Window)
-		return
-	}
-
-	entry := widget.NewEntry()
-	entry.Validator = func(str string) error {
-		if str == "" {
-			return os.ErrInvalid
-		}
-		return nil
-	}
-
-	dialog.ShowForm(lang.LocalizeKey("profile.save_title", "Create Profile"), lang.LocalizeKey("common.save", "Save"), lang.LocalizeKey("common.cancel", "Cancel"), []*widget.FormItem{
-		widget.NewFormItem(lang.LocalizeKey("profile.name", "Profile Name"), entry),
-	}, func(confirm bool) {
-		if !confirm {
-			return
-		}
-		name := entry.Text
-		mods := make(map[string]modmgr.ModVersion)
-		for _, m := range installationInfo.InstalledMods {
-			mods[m.VersionID] = m.ModVersion
-		}
-
-		prof := profile.Profile{
-			ID:          uuid.New(),
-			Name:        name,
-			ModVersions: mods,
-			UpdatedAt:   time.Now(),
-		}
-
-		if err := s.state.ProfileManager.Add(prof); err != nil {
-			dialog.ShowError(err, s.state.Window)
-			return
-		}
-		dialog.ShowInformation(lang.LocalizeKey("common.success", "Success"), lang.LocalizeKey("settings.profile_imported", "Profile imported successfully."), s.state.Window)
-	}, s.state.Window)
-}
-
 func (s *Settings) deleteAmongUsData() {
 	dialog.ShowConfirm(lang.LocalizeKey("settings.delete_among_us_data_confirm_title", "Delete Among Us Data"), lang.LocalizeKey("settings.delete_among_us_data_confirm_message", "Are you sure you want to delete all Among Us data? This will reset all your Among Us settings and save data. This action cannot be undone."), func(confirm bool) {
 		if !confirm {
@@ -552,19 +405,8 @@ func (s *Settings) deleteAmongUsData() {
 			dialog.ShowError(err, s.state.Window)
 		} else {
 			dialog.ShowInformation(lang.LocalizeKey("common.success", "Success"), lang.LocalizeKey("settings.among_us_data_deleted", "Among Us data deleted successfully."), s.state.Window)
-			s.state.RefreshModInstallation()
 		}
 	}, s.state.Window)
-}
-
-func (s *Settings) saveConfig() {
-	server := s.ApiServerEntry.Text
-	if server == "" {
-		fyne.CurrentApp().Preferences().RemoveValue("api_server")
-	} else {
-		fyne.CurrentApp().Preferences().SetString("api_server", server)
-	}
-	dialog.ShowInformation(lang.LocalizeKey("common.success", "Success"), lang.LocalizeKey("settings.saved", "Settings saved successfully. Please restart the application."), s.state.Window)
 }
 
 func (s *Settings) newOpenSourcePage() fyne.CanvasObject {

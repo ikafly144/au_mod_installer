@@ -51,8 +51,6 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 		init(state)
 	}
 
-	state.CheckInstalled()
-
 	l := launcher.NewLauncherTab(state)
 	launcherTab, err := l.Tab()
 	if err != nil {

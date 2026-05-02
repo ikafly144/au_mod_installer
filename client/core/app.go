@@ -13,9 +13,7 @@ import (
 
 	"github.com/ikafly144/au_mod_installer/client/rest"
 	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
-	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 	"github.com/ikafly144/au_mod_installer/pkg/profile"
-	"github.com/ikafly144/au_mod_installer/pkg/progress"
 )
 
 const (
@@ -69,20 +67,6 @@ func (a *App) DetectGamePath() (string, error) {
 
 func (a *App) DetectLauncherType(path string) aumgr.LauncherType {
 	return aumgr.DetectLauncherType(path)
-}
-
-func (a *App) UninstallMod(gamePath string, progressListener progress.Progress) error {
-	modInstallLocation, err := os.OpenRoot(gamePath)
-	if err != nil {
-		return fmt.Errorf("failed to open game root: %w", err)
-	}
-	defer modInstallLocation.Close()
-
-	if _, err := modInstallLocation.Stat(modmgr.InstallationInfoFileName); os.IsNotExist(err) {
-		return fmt.Errorf("mod is not installed in this path")
-	}
-
-	return modmgr.UninstallMod(modInstallLocation, progressListener, nil)
 }
 
 func (a *App) ClearModCache() error {

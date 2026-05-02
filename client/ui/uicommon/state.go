@@ -3,7 +3,6 @@ package uicommon
 import (
 	"errors"
 	"log/slog"
-	"strings"
 	"sync"
 
 	"fyne.io/fyne/v2"
@@ -56,7 +55,6 @@ func NewState(w fyne.Window, version string, options ...Option) (*State, error) 
 		Core:             app,
 		SelectedGamePath: binding.NewString(),
 		DetectedGamePath: detectedPath,
-		ModInstalled:     binding.NewBool(),
 		CanLaunch:        binding.NewBool(),
 		CanInstall:       binding.NewBool(),
 		InstallSelect:    widget.NewSelect([]string{}, s.selectLauncher),
@@ -72,9 +70,6 @@ func NewState(w fyne.Window, version string, options ...Option) (*State, error) 
 		return nil, err
 	}
 
-	listener := binding.NewDataListener(s.RefreshModInstallation)
-	s.ModInstalled.AddListener(listener)
-	s.SelectedGamePath.AddListener(listener)
 	s.ModInstalledInfo.Wrapping = fyne.TextWrapWord
 	s.ModInstalledInfo.TextStyle.Symbol = true
 	s.ErrorText.Wrapping = fyne.TextWrapWord
@@ -96,7 +91,6 @@ type State struct {
 	// ModPath          string
 	SelectedGamePath binding.String
 	DetectedGamePath string
-	ModInstalled     binding.Bool
 	CanLaunch        binding.Bool
 	CanInstall       binding.Bool
 	launchLock       sync.Mutex
@@ -203,97 +197,6 @@ func (s *State) ClearError() {
 			d.Hide()
 		}
 	})
-}
-
-func (i *State) RefreshModInstallation() {
-	if err := i.CanLaunch.Set(false); err != nil {
-		slog.Warn("Failed to set launchable", "error", err)
-	}
-	path, err := i.SelectedGamePath.Get()
-	if err != nil || path == "" {
-		defer i.ModInstalledInfo.Refresh()
-		i.ModInstalledInfo.SetText(lang.LocalizeKey("installer.info.select_path", "Please select the installation path."))
-		return
-	}
-
-	status := i.Core.GetInstallationStatus(path, true)
-	if status.Error != nil {
-		slog.Warn("Failed to get installation status", "error", status.Error)
-		// Assuming generic error for now, or we can check type of error
-		// Using the error message from status if possible, or fallback
-		i.ModInstalledInfo.SetText(lang.LocalizeKey("installer.error.failed_to_get_version", "Mod is installed, but failed to get game version information."))
-		return
-	}
-
-	// Update ModInstalled binding
-	isInstalled := status.Status != core.StatusNotInstalled
-	// Avoid infinite loop if binding triggers this function?
-	// ModInstalled.Set triggers listener? Yes.
-	// But we check i.ModInstalled.Get() in original code.
-	// Here we should set it if different?
-	currentInstalled, _ := i.ModInstalled.Get()
-	if currentInstalled != isInstalled {
-		if err := i.ModInstalled.Set(isInstalled); err != nil {
-			slog.Warn("Failed to set modInstalled", "error", err)
-		}
-	}
-
-	if !isInstalled {
-		fyne.Do(func() {
-			i.ModInstalledInfo.Refresh()
-			i.ModInstalledInfo.SetText(lang.LocalizeKey("installer.info.mod_not_installed", "Mod is not installed."))
-		})
-		return
-	}
-
-	defer i.ModInstalledInfo.Refresh()
-
-	detectedLauncher := i.Core.DetectLauncherType(path)
-	slog.Info("Detected launcher type", "type", detectedLauncher.String())
-
-	if status.Status == core.StatusBroken {
-		i.ModInstalledInfo.SetText(lang.LocalizeKey("installer.error.broken_installation", "Mod installation is broken. Please uninstall and reinstall the mod."))
-		return
-	}
-
-	canLaunch := false
-	var info strings.Builder
-	info.WriteString(lang.LocalizeKey("installer.info.mod_installed", "Mod is installed.") + "\n")
-
-	if status.Status == core.StatusIncompatible {
-		info.WriteString(lang.LocalizeKey("installer.info.game_version", "Game Version: ") + status.GameVersion + " (Modインストール時: " + status.InstalledGameVersion + ")\n")
-		info.WriteString(lang.LocalizeKey("installer.info.mod_incompatible", "Mod is incompatible with the current game version.") + "\n")
-		canLaunch = false
-	} else {
-		// Compatible
-		info.WriteString(lang.LocalizeKey("installer.info.game_version", "Game Version: ") + status.GameVersion + "\n")
-		canLaunch = true
-
-		for _, outdated := range status.OutdatedMods {
-			info.WriteString(lang.LocalizeKey("installer.info.mod_version_outdated", "Mod version is outdated: {{.mod}} (Installed: {{.version}}, Latest: {{.latest}})",
-				map[string]any{
-					"mod":     outdated.ID,
-					"version": outdated.CurrentVersion,
-					"latest":  outdated.LatestVersion,
-				}))
-			// Original code broke loop here
-			break
-		}
-	}
-
-	var modNames []string
-	for _, mod := range status.InstalledMods {
-		modNames = append(modNames, mod.ModID+" ("+mod.VersionID+")")
-	}
-	info.WriteString(lang.LocalizeKey("installer.info.mod_name", "Mod: ") + strings.Join(modNames, ", ") + "\n")
-	i.ModInstalledInfo.SetText(strings.TrimSpace(info.String()))
-
-	if strings.Contains(i.Version, "(devel)") { // NOTE: allow launching in development mode
-		canLaunch = true
-	}
-	if err := i.CanLaunch.Set(canLaunch); err != nil {
-		slog.Warn("Failed to set launchable", "error", err)
-	}
 }
 
 func (s *State) SetPendingJoinInfo(joinInfo *core.LaunchJoinInfo) {

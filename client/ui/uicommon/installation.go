@@ -4,28 +4,8 @@ import (
 	"log/slog"
 	"path/filepath"
 
-	"github.com/ikafly144/au_mod_installer/client/core"
 	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
 )
-
-func (s *State) CheckInstalled() bool {
-	if err := s.ModInstalled.Set(false); err != nil {
-		slog.Warn("Failed to set modInstalled", "error", err)
-	}
-	path, err := s.SelectedGamePath.Get()
-	if err != nil || path == "" {
-		return false
-	}
-
-	status := s.Core.GetInstallationStatus(path, false)
-	isInstalled := status.Status != core.StatusNotInstalled
-
-	if err := s.ModInstalled.Set(isInstalled); err != nil {
-		slog.Warn("Failed to set modInstalled", "error", err)
-	}
-
-	return isInstalled
-}
 
 func (i *State) selectLauncher(s string) {
 	i.ErrorText.Hide()
@@ -48,5 +28,4 @@ func (i *State) selectLauncher(s string) {
 		_ = i.SelectedGamePath.Set(filepath.Dir(path))
 		i.InstallSelect.Selected = l.String()
 	}
-	i.CheckInstalled()
 }
