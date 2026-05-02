@@ -161,10 +161,6 @@ func realMain(sharedURI string, sharedArchive string) error {
 	flag.BoolVar(&offline, "offline", false, "Run in offline mode (only uninstallation and management of installed mods are available)")
 	flag.Parse()
 
-	if server == "" {
-		server = a.Preferences().StringWithFallback("api_server", DefaultServer)
-	}
-
 	if err := registerScheme(); err != nil {
 		slog.Error("Failed to register scheme", "error", err)
 	}
