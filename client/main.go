@@ -157,7 +157,7 @@ func realMain(sharedURI string, sharedArchive string) error {
 	a := app.New()
 
 	flag.StringVar(&localMode, "local", "", "Path to local mods.json file for local mode")
-	flag.StringVar(&server, "server", "", "URL of the mod server")
+	flag.StringVar(&server, "server", DefaultServer, "URL of the mod server")
 	flag.BoolVar(&offline, "offline", false, "Run in offline mode (only uninstallation and management of installed mods are available)")
 	flag.Parse()
 
