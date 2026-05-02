@@ -8,7 +8,7 @@ services:
     networks:
       - default
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql
     environment:
       - POSTGRES_DB=au_mod_installer
       - POSTGRES_USER=postgres
