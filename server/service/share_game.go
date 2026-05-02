@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	shareGameTTL          = 10 * time.Minute
-	shareGameRateWindow   = time.Minute
+	shareGameTTL          = 1 * time.Hour
+	shareGameRateWindow   = 10 * time.Minute
 	shareGameMaxPerWindow = 10
 )
 
@@ -210,7 +210,7 @@ func (m *shareGameManager) deleteSessionLocked(sessionID string) {
 
 func dedupeRoomKey(ip string, aupack []byte, room restcommon.RoomInfo) string {
 	sum := sha256.Sum256(aupack)
-	return fmt.Sprintf("%s|%s|%s|%s|%d", ip, hex.EncodeToString(sum[:]), room.LobbyCode, room.ServerIP, room.ServerPort)
+	return fmt.Sprintf("%s|%s|%s|%s|%d", ip, hex.EncodeToString(sum[:]), room.LobbyCode, room.MatchMakerIp, room.MatchMakerPort)
 }
 
 func randomURLToken(size int) (string, error) {
