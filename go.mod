@@ -15,7 +15,7 @@ require (
 	github.com/mcuadros/go-version v0.0.0-20190830083331-035f6764e8d2
 	github.com/minio/selfupdate v0.6.0
 	github.com/nightlyone/lockfile v1.0.0
-	github.com/rs/zerolog v1.34.1-0.20260317125229-2f5b8a91be2c
+	github.com/rs/zerolog v1.35.1
 	github.com/sqweek/dialog v0.0.0-20240226140203-065105509627
 	github.com/stretchr/testify v1.11.1
 	github.com/urfave/cli/v3 v3.8.0
