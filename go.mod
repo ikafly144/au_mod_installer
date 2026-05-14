@@ -3,13 +3,12 @@ module github.com/ikafly144/au_mod_installer
 go 1.26.3
 
 require (
-	fyne.io/fyne/v2 v2.7.3
+	fyne.io/fyne/v2 v2.7.4
 	github.com/AlecAivazis/survey/v2 v2.3.7
 	github.com/Microsoft/go-winio v0.6.2
 	github.com/TheTitanrain/w32 v0.0.0-20200114052255-2654d97dbd3d
 	github.com/gin-gonic/gin v1.12.0
 	github.com/google/go-github/v85 v85.0.0
-	github.com/google/go-github/v86 v86.0.0
 	github.com/google/uuid v1.6.0
 	github.com/jchv/go-webview2 v0.0.0-20260205173254-56598839c808
 	github.com/josephspurrier/goversioninfo v1.7.0
@@ -29,7 +28,7 @@ require (
 
 require (
 	aead.dev/minisign v0.3.0 // indirect
-	fyne.io/systray v1.12.0 // indirect
+	fyne.io/systray v1.12.1 // indirect
 	fyne.io/tools v1.7.1 // indirect
 	github.com/BurntSushi/toml v1.5.0 // indirect
 	github.com/akavel/rsrc v0.10.2 // indirect
@@ -54,8 +53,8 @@ require (
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/go-playground/validator/v10 v10.30.1 // indirect
-	github.com/go-text/render v0.2.0 // indirect
-	github.com/go-text/typesetting v0.3.3 // indirect
+	github.com/go-text/render v0.2.1 // indirect
+	github.com/go-text/typesetting v0.3.4 // indirect
 	github.com/goccy/go-json v0.10.6 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
@@ -80,6 +79,7 @@ require (
 	github.com/lucor/goinfo v0.9.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
+	github.com/mattn/go-runewidth v0.0.17 // indirect
 	github.com/mgutz/ansi v0.0.0-20170206155736-9520e82c474b // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
@@ -90,6 +90,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.59.0 // indirect
+	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/rymdport/portal v0.4.2 // indirect
