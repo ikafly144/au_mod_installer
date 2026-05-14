@@ -12,7 +12,7 @@ require (
 	github.com/google/go-github/v86 v86.0.0
 	github.com/google/uuid v1.6.0
 	github.com/jchv/go-webview2 v0.0.0-20260205173254-56598839c808
-	github.com/josephspurrier/goversioninfo v1.5.0
+	github.com/josephspurrier/goversioninfo v1.7.0
 	github.com/mcuadros/go-version v0.0.0-20190830083331-035f6764e8d2
 	github.com/minio/selfupdate v0.6.0
 	github.com/nightlyone/lockfile v1.0.0
