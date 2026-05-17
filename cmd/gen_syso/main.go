@@ -61,9 +61,10 @@ func getVersionData() (string, []int, error) {
 }
 
 var (
-	iconFlag   = flag.String("icon", "icon.ico", "Path to the icon file")
-	archFlag   = flag.String("arch", "64", "Architecture (32 or 64)")
-	outputFlag = flag.String("o", "mod-of-us.syso", "Output .syso file path")
+	iconFlag     = flag.String("icon", "icon.ico", "Path to the icon file")
+	archFlag     = flag.String("arch", "64", "Architecture (32 or 64)")
+	manifestFlag = flag.String("manifest", "app.exe.manifest", "Path to the manifest file")
+	outputFlag   = flag.String("o", "mod-of-us.syso", "Output .syso file path")
 )
 
 func main() {
@@ -84,7 +85,8 @@ func main() {
 		os.Exit(1)
 	}
 	vi := &goversioninfo.VersionInfo{
-		IconPath: *iconFlag,
+		IconPath:     *iconFlag,
+		ManifestPath: *manifestFlag,
 		FixedFileInfo: goversioninfo.FixedFileInfo{
 			FileVersion:    goversioninfo.FileVersion{Major: fileVerNum[0], Minor: fileVerNum[1], Patch: fileVerNum[2], Build: fileVerNum[3]},
 			ProductVersion: goversioninfo.FileVersion{Major: fileVerNum[0], Minor: fileVerNum[1], Patch: fileVerNum[2], Build: fileVerNum[3]},

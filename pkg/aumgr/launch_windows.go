@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"time"
 
 	"golang.org/x/sys/windows"
 )
@@ -19,6 +20,8 @@ func LaunchAmongUs(launcherType LauncherType, amongUsDir string, dllDir string, 
 		return launchSteam(amongUsDir, dllDir, directJoinInfo, onStarted)
 	case LauncherEpicGames:
 		return launchEpicGames(amongUsDir, dllDir, exchangeCode, directJoinInfo, onStarted)
+	case LauncherMicrosoft:
+		return launchMicrosoft(amongUsDir, dllDir, directJoinInfo, onStarted)
 	default:
 		return launchDefault(amongUsDir, dllDir, directJoinInfo, onStarted)
 	}
@@ -120,4 +123,47 @@ func launchEpicGames(amongUsDir string, dllDir string, exchangeCode string, dire
 		args = append(args, "-AUTH_LOGIN=unused")
 	}
 	return launchDefault(amongUsDir, dllDir, directJoinInfo, onStarted, args...)
+}
+
+func launchMicrosoft(amongUsDir string, dllDir string, directJoinInfo DirectJoinInfo, onStarted func(pid int) error) error {
+	appId, err := GetXboxAppId()
+	if err != nil {
+		return fmt.Errorf("failed to get Xbox AppId: %w", err)
+	}
+	cmd := exec.Command("explorer.exe", "shell:appsFolder\\"+appId)
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start Microsoft Store app: %w", err)
+	}
+	for range 100 {
+		time.Sleep(500 * time.Millisecond)
+		pList, err := getProcesses()
+		if err != nil {
+			slog.Error("Failed to get process list", "error", err)
+			continue
+		}
+		p := findProcessByName(pList, "Among Us.exe")
+		if p == nil {
+			continue
+		}
+
+		proc, err := os.FindProcess(p.ProcessID)
+		if err != nil {
+			slog.Error("Failed to find Among Us process", "error", err)
+			continue
+		}
+		slog.Info("Among Us launched successfully", "pid", p.ProcessID)
+		if onStarted != nil {
+			if err := onStarted(p.ProcessID); err != nil {
+				_ = proc.Kill()
+				return fmt.Errorf("launch started but failed to notify process start: %w", err)
+			}
+		}
+		if _, err := proc.Wait(); err != nil {
+			slog.Error("Failed to wait for Among Us process", "error", err)
+		}
+
+		return nil
+	}
+
+	return fmt.Errorf("timeout waiting for Among Us to launch")
 }

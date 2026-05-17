@@ -11,12 +11,14 @@ const (
 	LauncherUnknown   LauncherType = ""
 	LauncherSteam     LauncherType = "steam"
 	LauncherEpicGames LauncherType = "epic"
+	LauncherMicrosoft LauncherType = "microsoft"
 )
 
 var launcherTypeNames = map[LauncherType]string{
 	LauncherUnknown:   "Unknown",
 	LauncherSteam:     "Steam",
 	LauncherEpicGames: "Epic Games",
+	LauncherMicrosoft: "Microsoft Store",
 }
 
 func (lt LauncherType) String() string {
@@ -41,6 +43,9 @@ func DetectLauncherType(amongUsDir string) LauncherType {
 	}
 	if filepath.Base(amongUsDir) == "AmongUs" && strings.Contains(amongUsDir, "Epic Games") {
 		return LauncherEpicGames
+	}
+	if strings.Contains(amongUsDir, "Innersloth.AmongUs") && strings.Contains(amongUsDir, "WindowsApps") {
+		return LauncherMicrosoft
 	}
 	return LauncherUnknown
 }

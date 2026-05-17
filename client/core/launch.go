@@ -97,7 +97,7 @@ func (a *App) PrepareLaunch(gamePath string, profileID uuid.UUID) (string, func(
 		}
 	}
 
-	if err := modmgr.PrepareProfileDirectory(profileDir, cacheDir, resolvedVersions, binaryType, gameVersion, false, nil); err != nil {
+	if err := modmgr.PrepareProfileDirectory(profileDir, gamePath, cacheDir, resolvedVersions, binaryType, gameVersion, false, nil); err != nil {
 		return "", nil, err
 	}
 
@@ -122,7 +122,7 @@ func (a *App) SyncProfile(profileID uuid.UUID, binaryType aumgr.BinaryType, game
 	cacheDir := filepath.Join(a.ConfigDir, "mods")
 	profileDir := filepath.Join(a.ConfigDir, "profiles", profileID.String())
 
-	return modmgr.PrepareProfileDirectory(profileDir, cacheDir, resolvedVersions, binaryType, gameVersion, true, progressListener)
+	return modmgr.PrepareProfileDirectory(profileDir, "", cacheDir, resolvedVersions, binaryType, gameVersion, true, progressListener)
 }
 
 // ExecuteLaunch launches the game and blocks until it exits.

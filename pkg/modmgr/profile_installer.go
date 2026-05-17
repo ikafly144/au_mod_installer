@@ -83,7 +83,7 @@ func modVersionsEqual(a, b []ModVersion) bool {
 }
 
 // PrepareProfileDirectory installs mods from cache to the profile directory and generates doorstop_config.ini.
-func PrepareProfileDirectory(profileDir string, cacheDir string, modVersions []ModVersion, binaryType aumgr.BinaryType, gameVersion string, force bool, progressListener progress.Progress) error {
+func PrepareProfileDirectory(profileDir string, gamePath string, cacheDir string, modVersions []ModVersion, binaryType aumgr.BinaryType, gameVersion string, force bool, progressListener progress.Progress) error {
 	if err := os.MkdirAll(profileDir, 0755); err != nil {
 		return fmt.Errorf("failed to create profile directory: %w", err)
 	}
@@ -306,16 +306,41 @@ func PrepareProfileDirectory(profileDir string, cacheDir string, modVersions []M
 		}
 	}
 
+	if _, err := os.Stat(filepath.Join(profileDir, "winhttp.dll")); os.IsNotExist(err) {
+		return nil
+	}
+
 	// Generate doorstop_config.ini
-	doorstopConfig := generateDoorstopConfig(profileDir)
-	if err := os.WriteFile(filepath.Join(profileDir, "doorstop_config.ini"), []byte(doorstopConfig), 0644); err != nil {
+	doorstopConfig := GenerateDoorstopConfig(profileDir)
+
+	var writePath string
+	if gamePath != "" && aumgr.DetectLauncherType(gamePath) == aumgr.LauncherMicrosoft {
+		writePath = filepath.Join(gamePath, "doorstop_config.ini")
+		dstFile, err := os.OpenFile(filepath.Join(gamePath, "winhttp.dll"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+		if err != nil {
+			return fmt.Errorf("failed to create doorstop_config.ini in game directory: %w", err)
+		}
+		defer dstFile.Close()
+		srcFile, err := os.Open(filepath.Join(profileDir, "winhttp.dll"))
+		if err != nil {
+			return fmt.Errorf("failed to open winhttp.dll in profile directory: %w", err)
+		}
+		defer srcFile.Close()
+		if _, err := io.Copy(dstFile, srcFile); err != nil {
+			return fmt.Errorf("failed to copy winhttp.dll to game directory: %w", err)
+		}
+	} else {
+		writePath = filepath.Join(profileDir, "doorstop_config.ini")
+	}
+
+	if err := os.WriteFile(writePath, []byte(doorstopConfig), 0644); err != nil {
 		return fmt.Errorf("failed to write doorstop_config.ini: %w", err)
 	}
 
 	return nil
 }
 
-func generateDoorstopConfig(basePath string) string {
+func GenerateDoorstopConfig(basePath string) string {
 	// Paths must be absolute or relative to the executable?
 	// With SetDllDirectory, winhttp.dll is loaded from basePath.
 	// Doorstop usually resolves relative paths against the game executable.
