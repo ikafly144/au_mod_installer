@@ -1,6 +1,7 @@
 package profile
 
 import (
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -86,9 +87,7 @@ func (p *Profile) Clone() Profile {
 	copy := *p
 	if p.ModVersions != nil {
 		copy.ModVersions = make(map[string]modmgr.ModVersion, len(p.ModVersions))
-		for k, v := range p.ModVersions {
-			copy.ModVersions[k] = v
-		}
+		maps.Copy(copy.ModVersions, p.ModVersions)
 	}
 	return copy
 }

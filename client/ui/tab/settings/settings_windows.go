@@ -43,8 +43,6 @@ type Settings struct {
 	ClearCacheButton        *widget.Button
 	DeleteAmongUsDataButton *widget.Button
 
-	installationListener binding.DataListener
-
 	epicAccountLabel *widget.Label
 	epicLoginButton  *widget.Button
 	epicLogoutButton *widget.Button
