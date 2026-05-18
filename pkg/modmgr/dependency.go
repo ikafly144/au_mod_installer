@@ -25,15 +25,17 @@ type VersionProvider interface {
 // When multiple MODs require the same dependency, it merges constraints to find a version that satisfies all.
 func ResolveDependencies(initialMods []ModVersion, provider VersionProvider) (map[string]ModVersion, error) {
 	resolved := make(map[string]ModVersion)
+	lockedModIDs := make(map[string]bool)
 	for _, m := range initialMods {
 		resolved[m.ModID] = m
+		lockedModIDs[m.ModID] = true
 	}
 
 	// Collect all required dependencies and their constraints first
 	allDeps := collectAllRequiredDependencies(initialMods, resolved)
 
 	// Resolve dependencies with merged constraints
-	if err := resolveDependenciesWithConstraints(resolved, allDeps, provider); err != nil {
+	if err := resolveDependenciesWithConstraints(resolved, allDeps, lockedModIDs, map[string][]model.ModVersionDependency{}, provider); err != nil {
 		return nil, err
 	}
 
@@ -92,7 +94,13 @@ func collectAllRequiredDependencies(queue []ModVersion, alreadyResolved map[stri
 }
 
 // resolveDependenciesWithConstraints resolves dependencies considering all constraints
-func resolveDependenciesWithConstraints(resolved map[string]ModVersion, allDeps map[string]*dependencyConstraints, provider VersionProvider) error {
+func resolveDependenciesWithConstraints(
+	resolved map[string]ModVersion,
+	allDeps map[string]*dependencyConstraints,
+	lockedModIDs map[string]bool,
+	activeConstraintGuards map[string][]model.ModVersionDependency,
+	provider VersionProvider,
+) error {
 	// Keep resolving until no more dependencies to add
 	for len(allDeps) > 0 {
 		// Pick one dependency to resolve
@@ -129,15 +137,17 @@ func resolveDependenciesWithConstraints(resolved map[string]ModVersion, allDeps 
 		// Try each candidate (ordered newest to oldest)
 		var lastErr error
 		resolved_any := false
+		var remainingDepsAfterResolve map[string]*dependencyConstraints
 		for _, candidate := range candidates {
 			// Create a test resolution
 			testResolved := make(map[string]ModVersion)
 			maps.Copy(testResolved, resolved)
 			testResolved[depConstraint.modID] = *candidate
 
-			// Collect new dependencies introduced by this candidate
-			// Pass only the original resolved (not testResolved) to avoid skipping new deps
-			newDeps := collectAllRequiredDependencies([]ModVersion{*candidate}, resolved)
+			// Collect new dependencies introduced by this candidate.
+			// Use an empty resolved map so transitive constraints are not dropped,
+			// then handle locked initial mods explicitly below.
+			newDeps := collectAllRequiredDependencies([]ModVersion{*candidate}, map[string]ModVersion{})
 
 			// Merge with remaining dependencies
 			testAllDeps := make(map[string]*dependencyConstraints)
@@ -151,23 +161,85 @@ func resolveDependenciesWithConstraints(resolved map[string]ModVersion, allDeps 
 					constraints: append([]model.ModVersionDependency{}, v.constraints...),
 				}
 			}
+			candidateConflict := false
 			for k, v := range newDeps {
+				if lockedModIDs[k] {
+					lockedResolved, found := testResolved[k]
+					if !found {
+						lastErr = fmt.Errorf("locked mod %s is missing from resolved set", k)
+						candidateConflict = true
+						break
+					}
+
+					for _, depConstraint := range v.constraints {
+						if err := checkDependencyConstraint(lockedResolved, depConstraint, provider); err != nil {
+							lastErr = err
+							candidateConflict = true
+							break
+						}
+					}
+					if candidateConflict {
+						break
+					}
+					continue
+				}
+
 				if testAllDeps[k] == nil {
-					testAllDeps[k] = v
+					testAllDeps[k] = &dependencyConstraints{
+						modID:       v.modID,
+						constraints: append([]model.ModVersionDependency{}, v.constraints...),
+					}
 				} else {
 					// Merge constraints
 					testAllDeps[k].constraints = append(testAllDeps[k].constraints, v.constraints...)
 				}
 			}
+			if candidateConflict {
+				continue
+			}
+
+			testConstraintGuards := make(map[string][]model.ModVersionDependency, len(activeConstraintGuards)+1)
+			for modID, constraints := range activeConstraintGuards {
+				testConstraintGuards[modID] = append([]model.ModVersionDependency{}, constraints...)
+			}
+			testConstraintGuards[depConstraint.modID] = append(
+				testConstraintGuards[depConstraint.modID],
+				depConstraint.constraints...,
+			)
 
 			// Try to resolve the rest
-			if err := resolveDependenciesWithConstraints(testResolved, testAllDeps, provider); err != nil {
+			if err := resolveDependenciesWithConstraints(testResolved, testAllDeps, lockedModIDs, testConstraintGuards, provider); err != nil {
 				lastErr = err
+				continue
+			}
+
+			// Ensure dependencies chosen in outer frames still satisfy their original constraints.
+			constraintGuardFailed := false
+			for modID, constraints := range testConstraintGuards {
+				resolvedMod, found := testResolved[modID]
+				if !found {
+					lastErr = fmt.Errorf("resolved dependency %s disappeared during backtracking", modID)
+					constraintGuardFailed = true
+					break
+				}
+				for _, constraint := range constraints {
+					if err := checkDependencyConstraint(resolvedMod, constraint, provider); err != nil {
+						lastErr = err
+						constraintGuardFailed = true
+						break
+					}
+				}
+				if constraintGuardFailed {
+					break
+				}
+			}
+			if constraintGuardFailed {
 				continue
 			}
 
 			// Success! Update resolved
 			maps.Copy(resolved, testResolved)
+			remainingDepsAfterResolve = testAllDeps
 			resolved_any = true
 			break
 		}
@@ -179,8 +251,11 @@ func resolveDependenciesWithConstraints(resolved map[string]ModVersion, allDeps 
 			return fmt.Errorf("failed to resolve dependency %s with any candidate version", depConstraint.modID)
 		}
 
-		// Remove this dependency from the list
-		delete(allDeps, depConstraint.modID)
+		// Continue from the successfully resolved branch's remaining dependency state.
+		clear(allDeps)
+		for modID, constraints := range remainingDepsAfterResolve {
+			allDeps[modID] = constraints
+		}
 	}
 
 	return nil
