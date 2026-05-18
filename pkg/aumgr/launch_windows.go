@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"syscall"
 	"time"
 
 	"golang.org/x/sys/windows"
@@ -63,6 +64,7 @@ func launchDefault(amongUsDir string, dllDir string, directJoinInfo DirectJoinIn
 	}
 
 	cmd := exec.Command(exePath, finalArgs...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	cmd.Dir = amongUsDir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -131,6 +133,7 @@ func launchMicrosoft(amongUsDir string, dllDir string, directJoinInfo DirectJoin
 		return fmt.Errorf("failed to get Xbox AppId: %w", err)
 	}
 	cmd := exec.Command("explorer.exe", "shell:appsFolder\\"+appId)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("failed to start Microsoft Store app: %w", err)
 	}

@@ -7,10 +7,12 @@ import (
 	"log/slog"
 	"os/exec"
 	"strings"
+	"syscall"
 )
 
 func GetXboxAppId() (string, error) {
 	cmd := exec.Command("powershell", "-NoProfile", "-Command", "(Get-StartApps | Where-Object { $_.Name -like '*Among Us*' }).AppId")
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	stdErr, err := cmd.StderrPipe()
 	if err != nil {
 		return "", err

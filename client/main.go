@@ -181,6 +181,7 @@ func realMain(sharedURI string, sharedArchive string) error {
 				return err
 			}
 			execCmd := exec.Command(os.Args[0], os.Args[1:]...)
+			execCmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 			return execCmd.Start()
 		} else if version != "(devel)" && semver.Prerelease(tag) == "" && semver.Compare(stable, version) > 0 {
 			// 開発版でないかつ安定版が現在のバージョンより新しい場合は、更新を促す
