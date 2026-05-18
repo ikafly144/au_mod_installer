@@ -72,16 +72,33 @@ func writeIPCJSON(w io.Writer, payload any) error {
 	return nil
 }
 
-func (a *App) SendLobbyJoinByPID(pid int, joinInfo LaunchJoinInfo) error {
+const retryLobbyConnectionCount = 15
+
+func (a *App) SendLobbyJoinByPID(pid int, joinInfo LaunchJoinInfo) <-chan error {
+	errCh := make(chan error, 1)
+	go a.sendLobbyJoinByPID(pid, joinInfo, retryLobbyConnectionCount, errCh)
+	return errCh
+}
+
+func (a *App) sendLobbyJoinByPID(pid int, joinInfo LaunchJoinInfo, retryCount int, errCh chan error) {
 	if pid <= 0 {
-		return fmt.Errorf("invalid pid: %d", pid)
+		errCh <- fmt.Errorf("invalid pid: %d", pid)
+		return
 	}
 	slog.Info("Sending lobby join IPC", "pid", pid, "joinInfo", joinInfo)
 	pipeName := fmt.Sprintf(`\\.\pipe\LobbyUtilsPipe-%d`, pid)
 	timeout := 3 * time.Second
 	conn, err := winio.DialPipe(pipeName, &timeout)
 	if err != nil {
-		return fmt.Errorf("failed to connect lobby ipc: %w", err)
+		if retryCount > 0 {
+			slog.Warn("Failed to connect lobby ipc, retrying...", "error", err, "retryCount", retryCount)
+			time.AfterFunc((retryLobbyConnectionCount+1-time.Duration(retryCount))*3*time.Second, func() {
+				a.sendLobbyJoinByPID(pid, joinInfo, retryCount-1, errCh)
+			})
+			return
+		}
+		errCh <- fmt.Errorf("failed to connect lobby ipc: %w", err)
+		return
 	}
 	defer conn.Close()
 
@@ -98,29 +115,35 @@ func (a *App) SendLobbyJoinByPID(pid int, joinInfo LaunchJoinInfo) error {
 		payload["MatchMakerPort"] = joinInfo.MatchMakerPort
 	}
 	if err := writeIPCJSON(conn, payload); err != nil {
-		return err
+		errCh <- err
+		return
 	}
 
 	reader := bufio.NewReader(conn)
 	line, err := reader.ReadString('\n')
 	if err != nil {
-		return fmt.Errorf("failed to read lobby join response: %w", err)
+		errCh <- fmt.Errorf("failed to read lobby join response: %w", err)
+		return
 	}
 	line = strings.TrimSpace(line)
 	if line == "" {
-		return fmt.Errorf("empty lobby join response")
+		errCh <- fmt.Errorf("empty lobby join response")
+		return
 	}
 	var rs ipcResponse
 	if err := json.Unmarshal([]byte(line), &rs); err != nil {
-		return fmt.Errorf("failed to decode lobby join response: %w", err)
+		errCh <- fmt.Errorf("failed to decode lobby join response: %w", err)
+		return
 	}
 	if !rs.Success {
 		if rs.Message != "" {
-			return fmt.Errorf("lobby join failed: %s", rs.Message)
+			errCh <- fmt.Errorf("lobby join failed: %s", rs.Message)
+			return
 		}
-		return fmt.Errorf("lobby join failed")
+		errCh <- fmt.Errorf("lobby join failed")
+		return
 	}
-	return nil
+	errCh <- nil
 }
 
 func (a *App) StartLobbyInfoPolling(pid int, interval time.Duration, onInfo func(*IPCLobbyInfo), onError func(error)) func() {

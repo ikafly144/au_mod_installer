@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"log/slog"
 	"maps"
 	"os"
 	"path/filepath"
@@ -139,13 +140,28 @@ func (a *App) ExecuteLaunch(gamePath string, dllDir string, joinInfo *LaunchJoin
 		}
 	}
 	var directJoinInfo aumgr.DirectJoinInfo
-	if joinInfo != nil {
+	if joinInfo != nil && launcherType != aumgr.LauncherMicrosoft {
 		directJoinInfo = aumgr.DirectJoinInfo{
 			LobbyCode:      joinInfo.LobbyCode,
 			ServerIP:       joinInfo.ServerIP,
 			ServerPort:     joinInfo.ServerPort,
 			MatchMakerIp:   joinInfo.MatchMakerIp,
 			MatchMakerPort: joinInfo.MatchMakerPort,
+		}
+	} else if joinInfo != nil && launcherType == aumgr.LauncherMicrosoft {
+		onStartedOld := onStarted
+		onStarted = func(pid int) error {
+			if errCh := a.SendLobbyJoinByPID(pid, *joinInfo); errCh != nil {
+				go func() {
+					if err := <-errCh; err != nil {
+						slog.Error("Failed to send lobby join info to game process", "error", err)
+					}
+				}()
+			}
+			if err := onStartedOld(pid); err != nil {
+				return err
+			}
+			return nil
 		}
 	}
 	return aumgr.LaunchAmongUs(launcherType, gamePath, dllDir, exchangeCode, directJoinInfo, onStarted)

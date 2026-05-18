@@ -1058,9 +1058,14 @@ func (l *Launcher) handleJoinGameURI(sharedURI string) {
 	}
 	runningProfileID, runningPID := l.currentRunningProfileAndPID()
 	if runningProfile, ok := l.state.Core.ProfileManager.Get(l.runningProfileID); ok && runningPID > 0 && runningProfileID == shared.ID && hasDirectJoinFeature(runningProfile.Versions()) {
-		if err := l.state.Core.SendLobbyJoinByPID(runningPID, *joinInfo); err != nil {
-			dialog.ShowError(err, l.state.Window)
-			return
+		if errCh := l.state.Core.SendLobbyJoinByPID(runningPID, *joinInfo); errCh != nil {
+			go func() {
+				if err := <-errCh; err != nil {
+					fyne.Do(func() {
+						dialog.ShowError(fmt.Errorf("failed to send join request to game process: %w", err), l.state.Window)
+					})
+				}
+			}()
 		}
 		l.state.ShowInfoDialog(
 			lang.LocalizeKey("common.success", "Success"),
