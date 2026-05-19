@@ -276,6 +276,7 @@ func realMain(sharedURI string, sharedArchive string) error {
 	if err := ui.Main(w, version, sharedURI, sharedArchive,
 		ui.WithStateOptions(
 			uicommon.WithRestClient(client),
+			uicommon.WithActivityService(activityService),
 		),
 		ui.WithStateInit(func(s *uicommon.State) {
 			go startIPCListener(s)

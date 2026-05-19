@@ -3,6 +3,7 @@
 package ui
 
 import (
+	"context"
 	"log/slog"
 	"runtime"
 
@@ -92,8 +93,11 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 	if _, err := state.EnableNativeCustomWindowFrame(); err != nil {
 		slog.Warn("Failed to enable native custom window frame", "error", err)
 	}
+
+	ctx, cancel := context.WithCancel(context.Background())
 	onClosed := func() {
 		uicommon.SaveMainWindowSize(w)
+		cancel()
 	}
 	if cleanup, err := state.EnableNativeTextDrop(); err != nil {
 		slog.Warn("Failed to enable native OLE text drop", "error", err)
@@ -101,8 +105,10 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 		onClosed = func() {
 			uicommon.SaveMainWindowSize(w)
 			cleanup()
+			cancel()
 		}
 	}
+	state.Core.StartActivityPolling(ctx)
 	w.SetOnClosed(onClosed)
 	fyne.Do(func() {
 		if uicommon.RestoreMainWindowSize(w) {

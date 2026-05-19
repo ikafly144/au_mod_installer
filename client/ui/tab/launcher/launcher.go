@@ -78,10 +78,6 @@ type Launcher struct {
 
 	canLaunchListener binding.DataListener
 
-	roomShareMu         sync.Mutex
-	roomShareGenerating bool
-	roomShareCache      sharedRoomLinkCache
-
 	content *fyne.Container
 }
 
@@ -109,19 +105,11 @@ const (
 	launcherRunningBadgeSize = float32(24)
 	launcherRunningBadgeGap  = float32(4)
 
-	restoredProcessWatchInterval   = 2 * time.Second
-	roomLinkTrayWidth              = float32(320)
+	restoredProcessWatchInterval = 2 * time.Second
+	roomLinkTrayWidth            = float32(320)
 )
 
 var launcherRunningProfileStrokeColor = color.NRGBA{R: 56, G: 170, B: 92, A: 255}
-
-type sharedRoomLinkCache struct {
-	RoomKey   string
-	URL       string
-	SessionID string
-	HostKey   string
-	ExpiresAt time.Time
-}
 
 func NewLauncherTab(s *uicommon.State) uicommon.Tab {
 	var l Launcher
@@ -176,7 +164,7 @@ func (l *Launcher) init() {
 		fyne.Do(l.refreshProfileHighlights)
 	}
 	l.state.OnGameExited = func(profileID uuid.UUID) {
-		l.invalidateCachedRoomShareAsync()
+		l.state.Core.InvalidateCachedRoomShareAsync()
 		fyne.Do(func() {
 			l.refreshProfileHighlights()
 			l.refreshRoomLinkUI(nil, false)
@@ -363,7 +351,7 @@ func (l *Launcher) refreshRoomLinkUI(info *core.IPCLobbyInfo, running bool) {
 		l.copyRoomLinkButton.Disable()
 		l.shareRoomButton.Disable()
 		l.unpublishRoomButton.Disable()
-		l.invalidateCachedRoomShareAsync()
+		l.state.Core.InvalidateCachedRoomShareAsync()
 		return
 	}
 
@@ -374,15 +362,13 @@ func (l *Launcher) refreshRoomLinkUI(info *core.IPCLobbyInfo, running bool) {
 	l.shareRoomButton.Enable()
 	runningProfileID, _ := l.state.Core.CurrentRunningProfileAndPID()
 	key := roomKeyForCache(room, runningProfileID)
-	l.roomShareMu.Lock()
-	cache := l.roomShareCache
-	l.roomShareMu.Unlock()
+	cache := l.state.Core.GetSharedRoom()
 	if cache.RoomKey != key {
 		l.roomLinkEntry.SetText(lang.LocalizeKey("launcher.join_link.placeholder", "No room shared now"))
 		l.copyRoomLinkButton.Disable()
 		l.unpublishRoomButton.Disable()
 		if cache.SessionID != "" {
-			l.invalidateCachedRoomShareAsync()
+			l.state.Core.InvalidateCachedRoomShareAsync()
 		}
 		return
 	}
@@ -401,21 +387,6 @@ func roomKeyForCache(room commonrest.RoomInfo, profileID uuid.UUID) string {
 	return strings.ToUpper(strings.TrimSpace(room.LobbyCode)) + "|" + strings.TrimSpace(room.ServerIP) + "|" + fmt.Sprint(room.ServerPort) + "|" + profileID.String()
 }
 
-func (l *Launcher) invalidateCachedRoomShareAsync() {
-	l.roomShareMu.Lock()
-	cache := l.roomShareCache
-	l.roomShareCache = sharedRoomLinkCache{}
-	l.roomShareMu.Unlock()
-	if cache.SessionID == "" || cache.HostKey == "" {
-		return
-	}
-	go func() {
-		if err := l.state.Rest.DeleteSharedGame(cache.SessionID, cache.HostKey); err != nil {
-			slog.Debug("Failed to invalidate shared room link", "error", err, "session_id", cache.SessionID)
-		}
-	}()
-}
-
 func (l *Launcher) copyRoomLinkToClipboard() {
 	link := strings.TrimSpace(l.roomLinkEntry.Text)
 	if link == "" {
@@ -429,14 +400,11 @@ func (l *Launcher) copyRoomLinkToClipboard() {
 }
 
 func (l *Launcher) unpublishCurrentRoom() {
-	l.roomShareMu.Lock()
-	cache := l.roomShareCache
+	cache := l.state.Core.GetSharedRoom()
 	if cache.SessionID == "" || cache.HostKey == "" {
-		l.roomShareMu.Unlock()
 		return
 	}
-	l.roomShareCache = sharedRoomLinkCache{}
-	l.roomShareMu.Unlock()
+	l.state.Core.SetSharedRoom(core.SharedRoomLink{})
 
 	if err := l.state.Rest.DeleteSharedGame(cache.SessionID, cache.HostKey); err != nil {
 		slog.Warn("Failed to unpublish room link", "error", err, "session_id", cache.SessionID)
@@ -454,17 +422,12 @@ func (l *Launcher) unpublishCurrentRoom() {
 }
 
 func (l *Launcher) shareCurrentRoom() {
-	l.roomShareMu.Lock()
-	if l.roomShareGenerating {
-		l.roomShareMu.Unlock()
+	if l.state.Core.IsRoomShareGenerating() {
 		return
 	}
-	l.roomShareGenerating = true
-	l.roomShareMu.Unlock()
+	l.state.Core.SetRoomShareGenerating(true)
 	defer func() {
-		l.roomShareMu.Lock()
-		l.roomShareGenerating = false
-		l.roomShareMu.Unlock()
+		l.state.Core.SetRoomShareGenerating(false)
 	}()
 
 	prof, _, ok := l.state.Core.CurrentRunningProfile()
@@ -479,9 +442,7 @@ func (l *Launcher) shareCurrentRoom() {
 	}
 	roomKey := roomKeyForCache(room, prof.ID)
 
-	l.roomShareMu.Lock()
-	cache := l.roomShareCache
-	l.roomShareMu.Unlock()
+	cache := l.state.Core.GetSharedRoom()
 	if cache.RoomKey == roomKey && cache.URL != "" && cache.ExpiresAt.After(time.Now()) {
 		fyne.Do(func() {
 			l.roomLinkTray.Show()
@@ -517,15 +478,13 @@ func (l *Launcher) shareCurrentRoom() {
 	if strings.HasPrefix(rs.URL, "/") {
 		rs.URL = strings.TrimRight(base, "/") + rs.URL
 	}
-	l.roomShareMu.Lock()
-	l.roomShareCache = sharedRoomLinkCache{
+	l.state.Core.SetSharedRoom(core.SharedRoomLink{
 		RoomKey:   roomKey,
 		URL:       rs.URL,
 		SessionID: rs.SessionID,
 		HostKey:   rs.HostKey,
 		ExpiresAt: rs.ExpiresAt,
-	}
-	l.roomShareMu.Unlock()
+	})
 	fyne.Do(func() {
 		l.roomLinkTray.Show()
 		l.setRoomLinkTrayExpanded(true)

@@ -119,9 +119,6 @@ func (a *App) GetLobbyInfo() *IPCLobbyInfo {
 }
 
 func (a *App) StartActivityPolling(ctx context.Context) {
-	if a.ActivityService == nil {
-		return
-	}
 	go func() {
 		ticker := time.NewTicker(2 * time.Second)
 		defer ticker.Stop()
@@ -130,6 +127,7 @@ func (a *App) StartActivityPolling(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
+				slog.Info("updating presence")
 				a.updateRichPresence()
 			}
 		}
@@ -157,10 +155,7 @@ func (a *App) updateRichPresence() {
 		return
 	}
 
-	act, ok := a.ActivityService.CurrentActivity()
-	if !ok || act == nil {
-		act = sdk.NewActivity()
-	}
+	act := sdk.NewActivity()
 	act.SetType(sdk.ActivityTypePlaying)
 	act.SetName("Mod of Us")
 	act.SetDetails(fmt.Sprintf("Playing %s", prof.Name))
@@ -171,10 +166,7 @@ func (a *App) updateRichPresence() {
 		} else {
 			act.SetState("In Lobby")
 		}
-		p := act.Party()
-		if p == nil {
-			p = sdk.NewActivityParty()
-		}
+		p := sdk.NewActivityParty()
 		p.SetID(lobby.MatchMakerIp + ":" + strconv.Itoa(lobby.MatchMakerPort) + "@" + lobby.LobbyCode)
 		if lobby.MaxPlayers > 0 {
 			p.SetMaxSize(lobby.MaxPlayers)
@@ -187,11 +179,8 @@ func (a *App) updateRichPresence() {
 
 	share := a.GetSharedRoom()
 	if share.URL != "" && share.ExpiresAt.After(time.Now()) {
-		secrets := act.Secrets()
-		if secrets == nil {
-			secrets = sdk.NewActivitySecrets()
-		}
-		secrets.SetJoin(share.URL)
+		secrets := sdk.NewActivitySecrets()
+		secrets.SetJoin(share.SessionID)
 		act.SetSecrets(secrets)
 	}
 
