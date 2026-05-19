@@ -90,6 +90,22 @@ func NewState(w fyne.Window, version string, options ...Option) (*State, error) 
 		return nil, err
 	}
 
+	app.OnGameStarted = func(profileID uuid.UUID, pid int) {
+		if s.OnGameStarted != nil {
+			s.OnGameStarted(profileID, pid)
+		}
+	}
+	app.OnGameExited = func(profileID uuid.UUID) {
+		if s.OnGameExited != nil {
+			s.OnGameExited(profileID)
+		}
+	}
+	app.OnLobbyInfoUpdated = func(info *core.IPCLobbyInfo) {
+		if s.OnLobbyInfoUpdated != nil {
+			s.OnLobbyInfoUpdated(info)
+		}
+	}
+
 	return &s, nil
 }
 
@@ -123,6 +139,7 @@ type State struct {
 	OnDroppedURIs           func([]fyne.URI)
 	OnGameStarted           func(profileID uuid.UUID, pid int)
 	OnGameExited            func(profileID uuid.UUID)
+	OnLobbyInfoUpdated      func(info *core.IPCLobbyInfo)
 	OnProfileMetricsUpdated func(profileID uuid.UUID)
 
 	pendingJoinInfo *core.LaunchJoinInfo

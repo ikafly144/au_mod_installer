@@ -2,16 +2,13 @@ package launcher
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"image"
 	"image/color"
 	imagedraw "image/draw"
 	"image/png"
-	"io"
 	"log/slog"
-	"net/http"
 	neturl "net/url"
 	"os"
 	"path/filepath"
@@ -34,7 +31,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ikafly144/au_mod_installer/client/core"
-	clientrest "github.com/ikafly144/au_mod_installer/client/rest"
 	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
 	commonrest "github.com/ikafly144/au_mod_installer/common/rest"
 	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
@@ -82,16 +78,6 @@ type Launcher struct {
 
 	canLaunchListener binding.DataListener
 
-	runningProfileMu   sync.Mutex
-	runningProfileID   uuid.UUID
-	launchingProfileID uuid.UUID
-	launchingProfile   bool
-	runningDirectJoin  bool
-	runningGamePID     int
-	runningStartedAt   time.Time
-	lobbyPollStop      func()
-	lobbyInfo          *core.IPCLobbyInfo
-
 	roomShareMu         sync.Mutex
 	roomShareGenerating bool
 	roomShareCache      sharedRoomLinkCache
@@ -123,9 +109,6 @@ const (
 	launcherRunningBadgeSize = float32(24)
 	launcherRunningBadgeGap  = float32(4)
 
-	profileArchiveDownloadTimeout  = 30 * time.Second
-	profileArchiveDownloadMaxBytes = int64(64 << 20)
-	lobbyPollInterval              = 2 * time.Second
 	restoredProcessWatchInterval   = 2 * time.Second
 	roomLinkTrayWidth              = float32(320)
 )
@@ -190,10 +173,20 @@ func (l *Launcher) init() {
 		l.handleDroppedURIs(uris)
 	}
 	l.state.OnGameStarted = func(profileID uuid.UUID, pid int) {
-		l.onGameStarted(profileID, pid)
+		fyne.Do(l.refreshProfileHighlights)
 	}
 	l.state.OnGameExited = func(profileID uuid.UUID) {
-		l.onGameExited(profileID)
+		l.invalidateCachedRoomShareAsync()
+		fyne.Do(func() {
+			l.refreshProfileHighlights()
+			l.refreshRoomLinkUI(nil, false)
+		})
+	}
+	l.state.OnLobbyInfoUpdated = func(info *core.IPCLobbyInfo) {
+		slog.Info("Received lobby info", "info", fmt.Sprintf("%+v", info))
+		fyne.Do(func() {
+			l.refreshRoomLinkUI(info, true)
+		})
 	}
 	l.state.OnProfileMetricsUpdated = func(profileID uuid.UUID) {
 		fyne.Do(func() {
@@ -246,18 +239,21 @@ func (l *Launcher) restoreRunningProfiles() {
 			continue
 		}
 		directJoinEnabled := info.DirectJoinEnabled
-		if !directJoinEnabled && hasDirectJoinFeature(prof.Versions()) {
+		if !directJoinEnabled && l.state.Core.HasDirectJoinFeature(prof.Versions()) {
 			directJoinEnabled = true
 		}
 		slog.Info("Restoring running profile from lock file", "profile_id", info.ProfileID, "game_pid", info.GamePID, "direct_join", directJoinEnabled, "play_started_at", info.PlayStartedAt)
-		l.setRunningDirectJoin(directJoinEnabled)
-		l.setRunningPlayStartedAt(info.PlayStartedAt)
-		l.setRunningProfile(info.ProfileID)
+		l.state.Core.SetRunningDirectJoin(directJoinEnabled)
+		l.state.Core.SetRunningPlayStartedAt(info.PlayStartedAt)
+		l.state.Core.SetRunningProfile(info.ProfileID)
 		restored = true
-		if l.state.OnGameStarted != nil {
-			l.state.OnGameStarted(info.ProfileID, info.GamePID)
-		}
-		l.watchRestoredRunningProfile(info.ProfileID, info.GamePID, info.PlayStartedAt)
+		l.state.Core.OnGameStartedInternal(info.ProfileID, info.GamePID)
+		l.state.Core.WatchRestoredRunningProfile(info.ProfileID, info.GamePID, info.PlayStartedAt, restoredProcessWatchInterval, func() {
+			fyne.Do(l.checkLaunchState)
+			if err := l.state.UpdateProfileLaunchMetrics(info.ProfileID, info.PlayStartedAt, time.Now()); err != nil {
+				l.state.SetError(err)
+			}
+		})
 		fyne.Do(l.checkLaunchState)
 	}
 }
@@ -333,7 +329,7 @@ func (l *Launcher) newRunningProfileBadge() *fyne.Container {
 func (l *Launcher) applyProfileBorderStyle(bg *canvas.Rectangle, profileID uuid.UUID) {
 	bg.StrokeColor = theme.Color(theme.ColorNameButton)
 	bg.StrokeWidth = 1
-	if l.isProfileRunning(profileID) {
+	if l.state.Core.IsProfileRunning(profileID) {
 		bg.StrokeColor = launcherRunningProfileStrokeColor
 		bg.StrokeWidth = 2
 		return
@@ -344,191 +340,8 @@ func (l *Launcher) applyProfileBorderStyle(bg *canvas.Rectangle, profileID uuid.
 	}
 }
 
-func (l *Launcher) isDirectJoinEnabledForRunningProfile() bool {
-	l.runningProfileMu.Lock()
-	defer l.runningProfileMu.Unlock()
-	return l.runningDirectJoin
-}
-
-func (l *Launcher) setRunningDirectJoin(enabled bool) {
-	l.runningProfileMu.Lock()
-	l.runningDirectJoin = enabled
-	l.runningProfileMu.Unlock()
-}
-
-func (l *Launcher) setRunningPlayStartedAt(startedAt time.Time) {
-	l.runningProfileMu.Lock()
-	l.runningStartedAt = startedAt
-	l.runningProfileMu.Unlock()
-}
-
-func hasDirectJoinFeature(versions []modmgr.ModVersion) bool {
-	for _, v := range versions {
-		if v.HasFeature(modmgr.FeatureDirectJoin) {
-			return true
-		}
-	}
-	return false
-}
-
-func (l *Launcher) onGameStarted(profileID uuid.UUID, pid int) {
-	l.runningProfileMu.Lock()
-	wasRunning := l.runningProfileID == profileID && l.runningGamePID > 0
-	l.runningGamePID = pid
-	directJoin := l.runningDirectJoin
-	isRunning := l.runningProfileID == profileID && l.runningGamePID > 0
-	l.runningProfileMu.Unlock()
-	if wasRunning != isRunning {
-		fyne.Do(l.refreshProfileHighlights)
-	}
-	if !directJoin || pid <= 0 || !l.state.Core.IsLobbyInfoAvailable() {
-		fyne.Do(func() {
-			l.refreshRoomLinkUI(nil, false)
-		})
-		return
-	}
-	l.startLobbyPolling(pid)
-}
-
-func (l *Launcher) onGameExited(profileID uuid.UUID) {
-	l.stopLobbyPolling()
-	l.runningProfileMu.Lock()
-	wasRunning := l.runningProfileID == profileID && l.runningGamePID > 0
-	l.runningGamePID = 0
-	l.runningDirectJoin = false
-	l.runningStartedAt = time.Time{}
-	isRunning := l.runningProfileID == profileID && l.runningGamePID > 0
-	l.runningProfileMu.Unlock()
-	l.invalidateCachedRoomShareAsync()
-	fyne.Do(func() {
-		if wasRunning != isRunning {
-			l.refreshProfileHighlights()
-		}
-		l.refreshRoomLinkUI(nil, false)
-	})
-}
-
-func (l *Launcher) isCurrentRunningProcess(profileID uuid.UUID, pid int) bool {
-	l.runningProfileMu.Lock()
-	defer l.runningProfileMu.Unlock()
-	return l.runningProfileID == profileID && l.runningGamePID == pid
-}
-
-func (l *Launcher) watchRestoredRunningProfile(profileID uuid.UUID, pid int, startedAt time.Time) {
-	if profileID == uuid.Nil || pid <= 0 {
-		return
-	}
-	go func() {
-		ticker := time.NewTicker(restoredProcessWatchInterval)
-		defer ticker.Stop()
-		for range ticker.C {
-			if !l.isCurrentRunningProcess(profileID, pid) {
-				return
-			}
-			running, err := aumgr.IsProcessRunning(pid)
-			if err != nil {
-				slog.Debug("Failed to check restored game process state", "profile_id", profileID, "pid", pid, "error", err)
-				continue
-			}
-			if running {
-				continue
-			}
-			if !l.isCurrentRunningProcess(profileID, pid) {
-				return
-			}
-			l.onGameExited(profileID)
-			l.clearRunningProfile(profileID)
-			fyne.Do(l.checkLaunchState)
-			if err := l.state.UpdateProfileLaunchMetrics(profileID, startedAt, time.Now()); err != nil {
-				l.state.SetError(err)
-			}
-			return
-		}
-	}()
-}
-
-func (l *Launcher) startLobbyPolling(pid int) {
-	l.stopLobbyPolling()
-	stop := l.state.Core.StartLobbyInfoPolling(pid, lobbyPollInterval, func(info *core.IPCLobbyInfo) {
-		slog.Info("Received lobby info", "info", fmt.Sprintf("%+v", info))
-		fyne.Do(func() {
-			l.refreshRoomLinkUI(info, true)
-		})
-	}, func(err error) {
-		slog.Debug("Lobby polling failed", "error", err)
-	})
-	l.runningProfileMu.Lock()
-	l.lobbyPollStop = stop
-	l.runningProfileMu.Unlock()
-}
-
-func (l *Launcher) stopLobbyPolling() {
-	l.runningProfileMu.Lock()
-	stop := l.lobbyPollStop
-	l.lobbyPollStop = nil
-	l.runningProfileMu.Unlock()
-	if stop != nil {
-		stop()
-	}
-}
-
-func (l *Launcher) currentRoomInfo(info *core.IPCLobbyInfo) (commonrest.RoomInfo, bool) {
-	if info == nil {
-		return commonrest.RoomInfo{}, false
-	}
-	if !info.IsConnected || (info.IsHost != nil && !*info.IsHost) {
-		return commonrest.RoomInfo{}, false
-	}
-	if strings.TrimSpace(info.LobbyCode) == "" {
-		return commonrest.RoomInfo{}, false
-	}
-	if info.ServerIP == "" || info.ServerPort <= 0 {
-		return commonrest.RoomInfo{}, false
-	}
-	room := commonrest.RoomInfo{
-		LobbyCode:      strings.TrimSpace(info.LobbyCode),
-		ServerIP:       strings.TrimSpace(info.ServerIP),
-		ServerPort:     uint16(info.ServerPort),
-		MatchMakerIp:   strings.TrimSpace(info.MatchMakerIp),
-		MatchMakerPort: uint16(info.MatchMakerPort),
-	}
-	return room, true
-}
-
-func roomKeyForCache(room commonrest.RoomInfo, profileID uuid.UUID) string {
-	return strings.ToUpper(strings.TrimSpace(room.LobbyCode)) + "|" + strings.TrimSpace(room.ServerIP) + "|" + fmt.Sprint(room.ServerPort) + "|" + profileID.String()
-}
-
-func (l *Launcher) currentRunningProfileAndPID() (uuid.UUID, int) {
-	l.runningProfileMu.Lock()
-	defer l.runningProfileMu.Unlock()
-	return l.runningProfileID, l.runningGamePID
-}
-
-func (l *Launcher) profileByID(profileID uuid.UUID) (profile.Profile, bool) {
-	for _, prof := range l.profiles {
-		if prof.ID == profileID {
-			return prof, true
-		}
-	}
-	return profile.Profile{}, false
-}
-
-func (l *Launcher) currentRunningProfile() (profile.Profile, int, bool) {
-	profileID, runningPID := l.currentRunningProfileAndPID()
-	if profileID == uuid.Nil {
-		return profile.Profile{}, 0, false
-	}
-	prof, ok := l.profileByID(profileID)
-	if !ok {
-		return profile.Profile{}, 0, false
-	}
-	return prof, runningPID, true
-}
-
 func (l *Launcher) refreshRoomLinkUI(info *core.IPCLobbyInfo, running bool) {
-	l.lobbyInfo = info
-	if !running || !l.isDirectJoinEnabledForRunningProfile() {
+	if !running || !l.state.Core.IsDirectJoinEnabledForRunningProfile() {
 		if l.roomLinkTray != nil {
 			l.roomLinkTray.Hide()
 		}
@@ -539,7 +352,7 @@ func (l *Launcher) refreshRoomLinkUI(info *core.IPCLobbyInfo, running bool) {
 		l.unpublishRoomButton.Disable()
 		return
 	}
-	room, ok := l.currentRoomInfo(info)
+	room, ok := l.state.Core.CurrentRoomInfo(info)
 	if !ok {
 		if l.roomLinkTray != nil {
 			l.roomLinkTray.Hide()
@@ -559,7 +372,7 @@ func (l *Launcher) refreshRoomLinkUI(info *core.IPCLobbyInfo, running bool) {
 		l.content.Refresh()
 	}
 	l.shareRoomButton.Enable()
-	runningProfileID, _ := l.currentRunningProfileAndPID()
+	runningProfileID, _ := l.state.Core.CurrentRunningProfileAndPID()
 	key := roomKeyForCache(room, runningProfileID)
 	l.roomShareMu.Lock()
 	cache := l.roomShareCache
@@ -582,6 +395,10 @@ func (l *Launcher) refreshRoomLinkUI(info *core.IPCLobbyInfo, running bool) {
 		l.copyRoomLinkButton.Disable()
 		l.unpublishRoomButton.Disable()
 	}
+}
+
+func roomKeyForCache(room commonrest.RoomInfo, profileID uuid.UUID) string {
+	return strings.ToUpper(strings.TrimSpace(room.LobbyCode)) + "|" + strings.TrimSpace(room.ServerIP) + "|" + fmt.Sprint(room.ServerPort) + "|" + profileID.String()
 }
 
 func (l *Launcher) invalidateCachedRoomShareAsync() {
@@ -650,12 +467,12 @@ func (l *Launcher) shareCurrentRoom() {
 		l.roomShareMu.Unlock()
 	}()
 
-	prof, _, ok := l.currentRunningProfile()
+	prof, _, ok := l.state.Core.CurrentRunningProfile()
 	if !ok {
 		l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("launcher.join_link.no_running_profile", "起動中のプロファイルが見つかりません。")))
 		return
 	}
-	room, ok := l.currentRoomInfo(l.lobbyInfo)
+	room, ok := l.state.Core.CurrentRoomInfo(l.state.Core.GetLobbyInfo())
 	if !ok {
 		l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("launcher.join_link.no_room", "部屋情報を取得できません。部屋に参加してから再試行してください。")))
 		return
@@ -931,10 +748,6 @@ func (l *Launcher) importProfileFromArchiveURI(uri fyne.URI) {
 		dialog.ShowError(errors.New(lang.LocalizeKey("profile.import_drop_unsupported", "Dropped item is not supported.")), l.state.Window)
 		return
 	}
-	if !strings.EqualFold(uri.Extension(), ".aupack") {
-		dialog.ShowError(errors.New(lang.LocalizeKey("profile.import_drop_unsupported", "Dropped item is not supported.")), l.state.Window)
-		return
-	}
 
 	reader, err := storage.Reader(uri)
 	if err != nil {
@@ -943,24 +756,7 @@ func (l *Launcher) importProfileFromArchiveURI(uri fyne.URI) {
 	}
 	defer reader.Close()
 
-	tempFile, err := os.CreateTemp("", "mod-of-us-profile-*.aupack")
-	if err != nil {
-		dialog.ShowError(fmt.Errorf("failed to create temp file for dropped archive: %w", err), l.state.Window)
-		return
-	}
-	defer os.Remove(tempFile.Name())
-	if _, err := io.Copy(tempFile, reader); err != nil {
-		dialog.ShowError(fmt.Errorf("failed to save dropped archive: %w", err), l.state.Window)
-		return
-	}
-
-	stat, err := tempFile.Stat()
-	if err != nil {
-		dialog.ShowError(fmt.Errorf("failed to stat temp file: %w", err), l.state.Window)
-		return
-	}
-
-	shared, iconPNG, err := l.state.Core.HandleSharedProfileArchive(tempFile, stat.Size())
+	shared, iconPNG, err := l.state.Core.HandleImportReader(reader, uri.Extension())
 	if err != nil {
 		dialog.ShowError(err, l.state.Window)
 		return
@@ -1025,45 +821,14 @@ func (l *Launcher) handleJoinGameURI(sharedURI string) {
 		return
 	}
 
-	client := clientrest.NewClient(joinURI.ServerBase)
-	rs, err := client.GetJoinGameDownload(joinURI.SessionID)
+	shared, iconPNG, joinInfo, err := l.state.Core.HandleJoinGameDownload(joinURI.SessionID, joinURI.ServerBase)
 	if err != nil {
 		dialog.ShowError(err, l.state.Window)
 		return
 	}
 
-	tmpFile, err := os.CreateTemp("", "mod-of-us-join-*.aupack")
-	if err != nil {
-		dialog.ShowError(err, l.state.Window)
-		return
-	}
-	defer os.Remove(tmpFile.Name())
-	if _, err := tmpFile.Write(rs.Aupack); err != nil {
-		_ = tmpFile.Close()
-		dialog.ShowError(err, l.state.Window)
-		return
-	}
-	stat, err := tmpFile.Stat()
-	if err != nil {
-		_ = tmpFile.Close()
-		dialog.ShowError(err, l.state.Window)
-		return
-	}
-	shared, iconPNG, err := l.state.Core.HandleSharedProfileArchive(tmpFile, stat.Size())
-	_ = tmpFile.Close()
-	if err != nil {
-		dialog.ShowError(err, l.state.Window)
-		return
-	}
-	joinInfo := &core.LaunchJoinInfo{
-		LobbyCode:      rs.Room.LobbyCode,
-		ServerIP:       rs.Room.ServerIP,
-		ServerPort:     rs.Room.ServerPort,
-		MatchMakerIp:   rs.Room.MatchMakerIp,
-		MatchMakerPort: rs.Room.MatchMakerPort,
-	}
-	runningProfileID, runningPID := l.currentRunningProfileAndPID()
-	if runningProfile, ok := l.state.Core.ProfileManager.Get(l.runningProfileID); ok && runningPID > 0 && runningProfileID == shared.ID && hasDirectJoinFeature(runningProfile.Versions()) {
+	runningProfileID, runningPID := l.state.Core.CurrentRunningProfileAndPID()
+	if runningProfile, ok := l.state.Core.ProfileManager.Get(runningProfileID); ok && runningPID > 0 && runningProfileID == shared.ID && l.state.Core.HasDirectJoinFeature(runningProfile.Versions()) {
 		if errCh := l.state.Core.SendLobbyJoinByPID(runningPID, *joinInfo); errCh != nil {
 			go func() {
 				if err := <-errCh; err != nil {
@@ -1119,7 +884,7 @@ func (l *Launcher) importProfileFromArchiveURL(archiveURL string) {
 	})
 
 	go func() {
-		path, err := l.downloadArchiveURLToTempFile(archiveURL, loadingProgress)
+		path, err := l.state.Core.DownloadArchiveURLToTempFile(archiveURL, loadingProgress)
 		fyne.Do(func() {
 			if loadingDialog != nil {
 				loadingDialog.Hide()
@@ -1136,64 +901,6 @@ func (l *Launcher) importProfileFromArchiveURL(archiveURL string) {
 			l.importProfileFromArchiveFile(path)
 		})
 	}()
-}
-
-func (l *Launcher) downloadArchiveURLToTempFile(archiveURL string, progressListener progress.Progress) (string, error) {
-	parsedURL, err := neturl.Parse(archiveURL)
-	if err != nil {
-		return "", fmt.Errorf("failed to parse archive URL: %w", err)
-	}
-	if !strings.EqualFold(parsedURL.Scheme, "http") && !strings.EqualFold(parsedURL.Scheme, "https") {
-		return "", fmt.Errorf("unsupported archive URL scheme: %s", parsedURL.Scheme)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), profileArchiveDownloadTimeout)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, parsedURL.String(), nil)
-	if err != nil {
-		return "", fmt.Errorf("failed to create archive request: %w", err)
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("failed to download archive: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("failed to download archive: unexpected status %s", resp.Status)
-	}
-	if resp.ContentLength > profileArchiveDownloadMaxBytes {
-		return "", fmt.Errorf("archive is too large: %d bytes (max %d)", resp.ContentLength, profileArchiveDownloadMaxBytes)
-	}
-	if progressListener != nil {
-		progressListener.SetValue(0)
-		progressListener.Start()
-		defer progressListener.Done()
-	}
-
-	tempFile, err := os.CreateTemp("", "mod-of-us-profile-url-*.aupack")
-	if err != nil {
-		return "", fmt.Errorf("failed to create temp archive file: %w", err)
-	}
-	tempPath := tempFile.Name()
-	buf := progress.NewProgressWriter(0, 1, resp.ContentLength, progressListener, tempFile)
-	written, copyErr := io.Copy(buf, io.LimitReader(resp.Body, profileArchiveDownloadMaxBytes+1))
-	buf.Complete()
-	closeErr := tempFile.Close()
-	if copyErr != nil {
-		_ = os.Remove(tempPath)
-		return "", fmt.Errorf("failed to save downloaded archive: %w", copyErr)
-	}
-	if closeErr != nil {
-		_ = os.Remove(tempPath)
-		return "", fmt.Errorf("failed to finalize downloaded archive: %w", closeErr)
-	}
-	if written > profileArchiveDownloadMaxBytes {
-		_ = os.Remove(tempPath)
-		return "", fmt.Errorf("archive is too large: more than %d bytes", profileArchiveDownloadMaxBytes)
-	}
-	return tempPath, nil
 }
 
 func (l *Launcher) confirmAndImportProfile(prof *profile.SharedProfile, iconPNG []byte) {
@@ -1219,71 +926,18 @@ func (l *Launcher) confirmAndImportProfile(prof *profile.SharedProfile, iconPNG 
 }
 
 func (l *Launcher) importProfile(shared *profile.SharedProfile, iconPNG []byte) {
-	prof := profile.Profile{
-		ID:          shared.ID,
-		Name:        shared.Name,
-		Author:      shared.Author,
-		Description: shared.Description,
-		UpdatedAt:   time.Now(),
-	}
-
-	if p, ok := l.state.ProfileManager.Get(shared.ID); ok {
-		prof.PlayDurationNS = p.PlayDurationNS
-		prof.LastLaunchedAt = p.LastLaunchedAt
-	}
-
-	// Fetch mod version infos
-	for modID, versionID := range shared.ModVersions {
-		info, err := l.state.Rest.GetModVersion(modID, versionID)
-		if err != nil {
-			dialog.ShowError(fmt.Errorf("failed to fetch mod version info for %s:%s: %w", modID, versionID, err), l.state.Window)
-			return
-		}
-		prof.AddModVersion(*info)
-	}
-
-	if err := l.state.ProfileManager.Add(prof); err != nil {
+	_, err := l.state.Core.ImportSharedProfile(shared, iconPNG)
+	if err != nil {
 		dialog.ShowError(err, l.state.Window)
 		return
-	}
-	if len(iconPNG) > 0 {
-		if err := l.state.ProfileManager.SaveIconPNG(prof.ID, iconPNG); err != nil {
-			dialog.ShowError(err, l.state.Window)
-			return
-		}
 	}
 	l.refreshProfiles()
 }
 
 func (l *Launcher) importProfileWithJoinInfo(shared *profile.SharedProfile, iconPNG []byte, joinInfo *core.LaunchJoinInfo) error {
-	prof := profile.Profile{
-		ID:          shared.ID,
-		Name:        shared.Name,
-		Author:      shared.Author,
-		Description: shared.Description,
-		UpdatedAt:   time.Now(),
-	}
-
-	if p, ok := l.state.ProfileManager.Get(shared.ID); ok {
-		prof.PlayDurationNS = p.PlayDurationNS
-		prof.LastLaunchedAt = p.LastLaunchedAt
-	}
-
-	for modID, versionID := range shared.ModVersions {
-		info, err := l.state.Rest.GetModVersion(modID, versionID)
-		if err != nil {
-			return fmt.Errorf("failed to fetch mod version info for %s:%s: %w", modID, versionID, err)
-		}
-		prof.AddModVersion(*info)
-	}
-
-	if err := l.state.ProfileManager.Add(prof); err != nil {
+	prof, err := l.state.Core.ImportSharedProfile(shared, iconPNG)
+	if err != nil {
 		return err
-	}
-	if len(iconPNG) > 0 {
-		if err := l.state.ProfileManager.SaveIconPNG(prof.ID, iconPNG); err != nil {
-			return err
-		}
 	}
 
 	l.refreshProfiles()
@@ -1360,7 +1014,7 @@ func (l *Launcher) setupProfileList() {
 			img := imgArea.Objects[1].(*canvas.Image)
 			runningBadge := imgArea.Objects[2]
 			l.refreshProfileIconCanvas(img, prof, int(launcherListThumbMinSize))
-			if l.isProfileRunning(prof.ID) {
+			if l.state.Core.IsProfileRunning(prof.ID) {
 				runningBadge.Show()
 			} else {
 				runningBadge.Hide()
@@ -1620,7 +1274,7 @@ func (l *Launcher) refreshProfileGrid() {
 		}
 
 		runningBadge := l.newRunningProfileBadge()
-		if !l.isProfileRunning(p.ID) {
+		if !l.state.Core.IsProfileRunning(p.ID) {
 			runningBadge.Hide()
 		}
 
@@ -1733,14 +1387,14 @@ func (l *Launcher) runLaunch() {
 		l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("launcher.error.no_profile", "Please select a profile to launch.")))
 		return
 	}
-	if l.isAnyProfileBusy() {
+	if l.state.Core.IsAnyProfileBusy() {
 		l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("error.game_already_running", "Already running.")))
 		return
 	}
-	l.setRunningDirectJoin(false)
+	l.state.Core.SetRunningDirectJoin(false)
 
 	launchDialog, launchProgress := l.newLaunchProgressDialog()
-	l.setLaunchingProfile(targetProfile.ID, true)
+	l.state.Core.SetLaunchingProfile(targetProfile.ID, true)
 	l.checkLaunchState()
 	l.launchButton.Disable()
 	if err := l.state.CanInstall.Set(false); err != nil {
@@ -1755,7 +1409,7 @@ func (l *Launcher) runLaunch() {
 		var launchErr error
 		progressShown := true
 		defer func() {
-			l.setLaunchingProfile(targetProfile.ID, false)
+			l.state.Core.SetLaunchingProfile(targetProfile.ID, false)
 			fyne.DoAndWait(func() {
 				if progressShown {
 					launchDialog.Hide()
@@ -1798,17 +1452,17 @@ func (l *Launcher) runLaunch() {
 			launchDialog.Hide()
 			progressShown = false
 		})
-		l.setRunningDirectJoin(hasDirectJoinFeature(resolvedVersions))
-		l.setLaunchingProfile(targetProfile.ID, false)
-		l.setRunningProfile(targetProfile.ID)
+		l.state.Core.SetRunningDirectJoin(l.state.Core.HasDirectJoinFeature(resolvedVersions))
+		l.state.Core.SetLaunchingProfile(targetProfile.ID, false)
+		l.state.Core.SetRunningProfile(targetProfile.ID)
 		fyne.DoAndWait(l.checkLaunchState)
 
 		// Proceed to Launch
-		l.state.Launch(path, hasDirectJoinFeature(resolvedVersions))
-		l.stopLobbyPolling()
-		l.setRunningDirectJoin(false)
-		l.setRunningPlayStartedAt(time.Time{})
-		l.clearRunningProfile(targetProfile.ID)
+		l.state.Launch(path, l.state.Core.HasDirectJoinFeature(resolvedVersions))
+		l.state.Core.StopLobbyPolling()
+		l.state.Core.SetRunningDirectJoin(false)
+		l.state.Core.SetRunningPlayStartedAt(time.Time{})
+		l.state.Core.ClearRunningProfile(targetProfile.ID)
 		fyne.DoAndWait(l.checkLaunchState)
 	}()
 }
@@ -1823,7 +1477,7 @@ func (l *Launcher) newLaunchProgressDialog() (*dialog.CustomDialog, *progress.Fy
 }
 
 func (l *Launcher) checkLaunchState() {
-	runningProfileID, launching := l.currentBusyProfile()
+	runningProfileID, launching := l.state.Core.CurrentBusyProfile()
 	if runningProfileID != uuid.Nil && launching {
 		l.launchButton.SetText(lang.LocalizeKey("launcher.launch.preparing", "Preparing launch..."))
 		l.launchButton.SetIcon(theme.MediaStopIcon())
@@ -1862,80 +1516,8 @@ func (l *Launcher) checkLaunchState() {
 	l.launchButton.Enable()
 }
 
-func (l *Launcher) setRunningProfile(profileID uuid.UUID) {
-	if profileID == uuid.Nil {
-		return
-	}
-	l.runningProfileMu.Lock()
-	changed := l.runningProfileID != profileID
-	l.runningProfileID = profileID
-	l.runningProfileMu.Unlock()
-	if changed {
-		fyne.Do(l.refreshProfileHighlights)
-	}
-}
-
-func (l *Launcher) clearRunningProfile(profileID uuid.UUID) {
-	l.runningProfileMu.Lock()
-	changed := false
-	if l.runningProfileID == profileID {
-		l.runningProfileID = uuid.Nil
-		changed = true
-	}
-	l.runningProfileMu.Unlock()
-	if changed {
-		fyne.Do(l.refreshProfileHighlights)
-	}
-}
-
-func (l *Launcher) setLaunchingProfile(profileID uuid.UUID, launching bool) {
-	l.runningProfileMu.Lock()
-	l.launchingProfile = launching
-	if launching {
-		l.launchingProfileID = profileID
-	} else if l.launchingProfileID == profileID {
-		l.launchingProfileID = uuid.Nil
-	}
-	l.runningProfileMu.Unlock()
-}
-
-func (l *Launcher) currentBusyProfile() (uuid.UUID, bool) {
-	l.runningProfileMu.Lock()
-	defer l.runningProfileMu.Unlock()
-	if l.launchingProfile {
-		return l.launchingProfileID, true
-	}
-	return l.runningProfileID, false
-}
-
-func (l *Launcher) isAnyProfileBusy() bool {
-	runningProfileID, launching := l.currentBusyProfile()
-	return launching || runningProfileID != uuid.Nil
-}
-
-func (l *Launcher) isProfileBusy(profileID uuid.UUID) bool {
-	if profileID == uuid.Nil {
-		return false
-	}
-	l.runningProfileMu.Lock()
-	defer l.runningProfileMu.Unlock()
-	if l.launchingProfile && l.launchingProfileID == profileID {
-		return true
-	}
-	return l.runningProfileID == profileID
-}
-
-func (l *Launcher) isProfileRunning(profileID uuid.UUID) bool {
-	if profileID == uuid.Nil {
-		return false
-	}
-	l.runningProfileMu.Lock()
-	defer l.runningProfileMu.Unlock()
-	return l.runningProfileID == profileID && l.runningGamePID > 0
-}
-
 func (l *Launcher) syncProfile(prof profile.Profile) {
-	if l.isProfileBusy(prof.ID) {
+	if l.state.Core.IsProfileBusy(prof.ID) {
 		dialog.ShowError(errors.New(lang.LocalizeKey("error.game_already_running", "Already running.")), l.state.Window)
 		return
 	}
@@ -2160,7 +1742,7 @@ func formatPlayDuration(d time.Duration) string {
 }
 
 func (l *Launcher) showProfileMenuAt(pos fyne.Position, prof profile.Profile) {
-	isBusy := l.isProfileBusy(prof.ID)
+	isBusy := l.state.Core.IsProfileBusy(prof.ID)
 	editItem := fyne.NewMenuItem(lang.LocalizeKey("profile.edit", "Edit"), func() {
 		l.openProfileEditor(prof)
 	})

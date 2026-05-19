@@ -2,23 +2,32 @@ package core
 
 import (
 	"compress/zlib"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/ikafly144/au_mod_installer/client/activity"
 	"github.com/ikafly144/au_mod_installer/client/rest"
 	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
 	"github.com/ikafly144/au_mod_installer/pkg/profile"
+	"github.com/ikafly144/au_mod_installer/pkg/progress"
 )
 
 const (
-	ProfileVersion = "v1"
+	ProfileVersion                 = "v1"
+	ProfileArchiveDownloadTimeout  = 30 * time.Second
+	ProfileArchiveDownloadMaxBytes = int64(64 << 20)
 )
 
 type App struct {
@@ -30,6 +39,28 @@ type App struct {
 	EpicApi            *aumgr.EpicApi
 
 	ActivityService *activity.ActivityService
+
+	// Running profile state
+	runningProfileMu   sync.Mutex
+	runningProfileID   uuid.UUID
+	launchingProfileID uuid.UUID
+	launchingProfile   bool
+	runningDirectJoin  bool
+	runningGamePID     int
+	runningStartedAt   time.Time
+	lobbyPollStop      func()
+	lobbyInfo          *IPCLobbyInfo
+
+	// Callbacks for state changes
+	OnGameStarted       func(profileID uuid.UUID, pid int)
+	OnGameExited        func(profileID uuid.UUID)
+	OnLobbyInfoUpdated  func(info *IPCLobbyInfo)
+}
+
+func (a *App) GetLobbyInfo() *IPCLobbyInfo {
+	a.runningProfileMu.Lock()
+	defer a.runningProfileMu.Unlock()
+	return a.lobbyInfo
 }
 
 func New(version string, restClient rest.Client, activityService *activity.ActivityService) (*App, error) {
@@ -146,6 +177,161 @@ func (a *App) ExportProfile(prof profile.Profile) (string, error) {
 
 func (a *App) ExportProfileArchive(prof profile.Profile, iconPNG []byte) ([]byte, error) {
 	return profile.EncodeSharedArchive(prof.MakeShared(), iconPNG)
+}
+
+func (a *App) DownloadArchiveURLToTempFile(archiveURL string, progressListener progress.Progress) (string, error) {
+	parsedURL, err := url.Parse(archiveURL)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse archive URL: %w", err)
+	}
+	if !strings.EqualFold(parsedURL.Scheme, "http") && !strings.EqualFold(parsedURL.Scheme, "https") {
+		return "", fmt.Errorf("unsupported archive URL scheme: %s", parsedURL.Scheme)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), ProfileArchiveDownloadTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, parsedURL.String(), nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create archive request: %w", err)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to download archive: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("failed to download archive: unexpected status %s", resp.Status)
+	}
+	if resp.ContentLength > ProfileArchiveDownloadMaxBytes {
+		return "", fmt.Errorf("archive is too large: %d bytes (max %d)", resp.ContentLength, ProfileArchiveDownloadMaxBytes)
+	}
+	if progressListener != nil {
+		progressListener.SetValue(0)
+		progressListener.Start()
+		defer progressListener.Done()
+	}
+
+	tempFile, err := os.CreateTemp("", "mod-of-us-profile-url-*.aupack")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp archive file: %w", err)
+	}
+	tempPath := tempFile.Name()
+	buf := progress.NewProgressWriter(0, 1, resp.ContentLength, progressListener, tempFile)
+	written, copyErr := io.Copy(buf, io.LimitReader(resp.Body, ProfileArchiveDownloadMaxBytes+1))
+	buf.Complete()
+	closeErr := tempFile.Close()
+	if copyErr != nil {
+		_ = os.Remove(tempPath)
+		return "", fmt.Errorf("failed to save downloaded archive: %w", copyErr)
+	}
+	if closeErr != nil {
+		_ = os.Remove(tempPath)
+		return "", fmt.Errorf("failed to finalize downloaded archive: %w", closeErr)
+	}
+	if written > ProfileArchiveDownloadMaxBytes {
+		_ = os.Remove(tempPath)
+		return "", fmt.Errorf("archive is too large: more than %d bytes", ProfileArchiveDownloadMaxBytes)
+	}
+	return tempPath, nil
+}
+
+func (a *App) HandleJoinGameDownload(sessionID string, serverBase string) (*profile.SharedProfile, []byte, *LaunchJoinInfo, error) {
+	client := rest.NewClient(serverBase)
+	rs, err := client.GetJoinGameDownload(sessionID)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	tmpFile, err := os.CreateTemp("", "mod-of-us-join-*.aupack")
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	defer os.Remove(tmpFile.Name())
+	if _, err := tmpFile.Write(rs.Aupack); err != nil {
+		_ = tmpFile.Close()
+		return nil, nil, nil, err
+	}
+	stat, err := tmpFile.Stat()
+	if err != nil {
+		_ = tmpFile.Close()
+		return nil, nil, nil, err
+	}
+	shared, iconPNG, err := a.HandleSharedProfileArchive(tmpFile, stat.Size())
+	_ = tmpFile.Close()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	joinInfo := &LaunchJoinInfo{
+		LobbyCode:      rs.Room.LobbyCode,
+		ServerIP:       rs.Room.ServerIP,
+		ServerPort:     rs.Room.ServerPort,
+		MatchMakerIp:   rs.Room.MatchMakerIp,
+		MatchMakerPort: rs.Room.MatchMakerPort,
+	}
+	return shared, iconPNG, joinInfo, nil
+}
+
+func (a *App) HandleImportReader(reader io.Reader, extension string) (*profile.SharedProfile, []byte, error) {
+	if !strings.EqualFold(extension, ".aupack") {
+		return nil, nil, fmt.Errorf("unsupported file extension: %s", extension)
+	}
+
+	tempFile, err := os.CreateTemp("", "mod-of-us-profile-*.aupack")
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create temp file: %w", err)
+	}
+	tempPath := tempFile.Name()
+	defer os.Remove(tempPath)
+	if _, err := io.Copy(tempFile, reader); err != nil {
+		_ = tempFile.Close()
+		return nil, nil, fmt.Errorf("failed to save archive: %w", err)
+	}
+
+	stat, err := tempFile.Stat()
+	if err != nil {
+		_ = tempFile.Close()
+		return nil, nil, fmt.Errorf("failed to stat temp file: %w", err)
+	}
+
+	shared, iconPNG, err := a.HandleSharedProfileArchive(tempFile, stat.Size())
+	_ = tempFile.Close()
+	return shared, iconPNG, err
+}
+
+func (a *App) ImportSharedProfile(shared *profile.SharedProfile, iconPNG []byte) (*profile.Profile, error) {
+	prof := profile.Profile{
+		ID:          shared.ID,
+		Name:        shared.Name,
+		Author:      shared.Author,
+		Description: shared.Description,
+		UpdatedAt:   time.Now(),
+	}
+
+	if p, ok := a.ProfileManager.Get(shared.ID); ok {
+		prof.PlayDurationNS = p.PlayDurationNS
+		prof.LastLaunchedAt = p.LastLaunchedAt
+	}
+
+	// Fetch mod version infos
+	for modID, versionID := range shared.ModVersions {
+		info, err := a.Rest.GetModVersion(modID, versionID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch mod version info for %s:%s: %w", modID, versionID, err)
+		}
+		prof.AddModVersion(*info)
+	}
+
+	if err := a.ProfileManager.Add(prof); err != nil {
+		return nil, err
+	}
+	if len(iconPNG) > 0 {
+		if err := a.ProfileManager.SaveIconPNG(prof.ID, iconPNG); err != nil {
+			return nil, err
+		}
+	}
+	return &prof, nil
 }
 
 type JoinGameLink struct {
