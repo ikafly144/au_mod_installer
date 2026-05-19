@@ -476,7 +476,7 @@ func (l *Launcher) currentRoomInfo(info *core.IPCLobbyInfo) (commonrest.RoomInfo
 	if info == nil {
 		return commonrest.RoomInfo{}, false
 	}
-	if !info.IsConnected {
+	if !info.IsConnected || (info.IsHost != nil && !*info.IsHost) {
 		return commonrest.RoomInfo{}, false
 	}
 	if strings.TrimSpace(info.LobbyCode) == "" {
@@ -993,19 +993,25 @@ func (l *Launcher) checkSharedURI() {
 		case strings.EqualFold(parsed.Scheme, "http"), strings.EqualFold(parsed.Scheme, "https"):
 			l.importProfileFromArchiveURL(parsed.String())
 			return
-		case strings.EqualFold(parsed.Scheme, "mod-of-us") && strings.EqualFold(parsed.Host, "join_game"):
-			l.handleJoinGameURI(sharedURI)
+		case strings.EqualFold(parsed.Scheme, "mod-of-us"):
+			switch strings.ToLower(parsed.Host) {
+			case "join_game":
+				l.handleJoinGameURI(sharedURI)
+				return
+			case "profile":
+				prof, err := l.state.Core.HandleSharedProfile(sharedURI)
+				if err != nil {
+					dialog.ShowError(err, l.state.Window)
+					return
+				}
+				l.confirmAndImportProfile(prof, nil)
+			default:
+				slog.Info("Unknown mod-of-us URI host", "host", parsed.Host)
+			}
 			return
 		}
 	}
 
-	prof, err := l.state.Core.HandleSharedProfile(sharedURI)
-	if err != nil {
-		dialog.ShowError(err, l.state.Window)
-		return
-	}
-
-	l.confirmAndImportProfile(prof, nil)
 }
 
 func (l *Launcher) handleJoinGameURI(sharedURI string) {

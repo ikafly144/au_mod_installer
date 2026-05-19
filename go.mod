@@ -62,6 +62,7 @@ require (
 	github.com/google/go-querystring v1.2.0 // indirect
 	github.com/hack-pad/go-indexeddb v0.3.2 // indirect
 	github.com/hack-pad/safejs v0.1.1 // indirect
+	github.com/ikafly144/discord_social_sdk v0.0.0-20260519121645-5a21fdd67596 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/pgx/v5 v5.9.0 // indirect

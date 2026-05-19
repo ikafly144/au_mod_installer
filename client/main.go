@@ -13,13 +13,16 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/lang"
 	"github.com/Microsoft/go-winio"
+	sdk "github.com/ikafly144/discord_social_sdk"
 	"github.com/nightlyone/lockfile"
 	"github.com/sqweek/dialog"
 	"github.com/zzl/go-win32api/v2/win32"
@@ -27,6 +30,7 @@ import (
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 
+	"github.com/ikafly144/au_mod_installer/client/activity"
 	"github.com/ikafly144/au_mod_installer/client/rest"
 	"github.com/ikafly144/au_mod_installer/client/ui"
 	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
@@ -156,6 +160,32 @@ func realMain(sharedURI string, sharedArchive string) error {
 
 	a := app.New()
 
+	social := sdk.NewClient()
+	social.AddLogCallback(sdk.LoggingSeverityInfo, func(s string, ls sdk.LoggingSeverity) {
+		level := slog.LevelInfo
+		switch ls {
+		case sdk.LoggingSeverityVerbose:
+			level = slog.LevelDebug
+		case sdk.LoggingSeverityWarning:
+			level = slog.LevelWarn
+		case sdk.LoggingSeverityError:
+			level = slog.LevelError
+		}
+		s = "[Discord SDK] " + s
+		slog.Log(context.Background(), level, s)
+	})
+	social.SetApplicationID(APPLICATION_ID)
+
+	slog.Info("Connecting to Discord")
+	social.Connect()
+
+	go func() {
+		for {
+			social.RunCallbacks()
+			time.Sleep(100 * time.Millisecond)
+		}
+	}()
+
 	flag.StringVar(&localMode, "local", "", "Path to local mods.json file for local mode")
 	flag.StringVar(&server, "server", DefaultServer, "URL of the mod server")
 	flag.BoolVar(&offline, "offline", false, "Run in offline mode (only uninstallation and management of installed mods are available)")
@@ -194,6 +224,20 @@ func realMain(sharedURI string, sharedArchive string) error {
 	}
 
 	w := a.NewWindow(lang.LocalizeKey("app.name", "Mod of Us") + " " + version)
+
+	social.RegisterLaunchCommand(APPLICATION_ID, "mod-of-us://launch")
+
+	activityService := activity.NewActivityService(social)
+	activityService.SetIdleActivity(func() *sdk.Activity {
+		act := sdk.NewActivity()
+		act.SetType(sdk.ActivityTypePlaying)
+		act.SetName("Mod of Us")
+		act.SetState(lang.LocalizeKey("discord.status.idle", "Idle"))
+		act.SetDetails(lang.LocalizeKey("discord.status.idle_details", "Not doing anything in particular"))
+		return act
+	}, func(et sdk.ErrorType) {
+		slog.Warn("Failed to set idle activity", "et", et)
+	})
 
 	var client rest.Client
 	if localMode != "" {
@@ -241,6 +285,8 @@ func realMain(sharedURI string, sharedArchive string) error {
 		dialog.Message(lang.LocalizeKey("error.ui_initialization_failed", "Failed to initialize UI: %s"), err.Error()).Title(lang.LocalizeKey("app.error", "Error")).Error()
 		return err
 	}
+
+	runtime.KeepAlive(social)
 	return nil
 }
 

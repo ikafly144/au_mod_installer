@@ -13,6 +13,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 	"github.com/google/uuid"
 
+	"github.com/ikafly144/au_mod_installer/client/activity"
 	"github.com/ikafly144/au_mod_installer/client/core"
 	"github.com/ikafly144/au_mod_installer/client/rest"
 	"github.com/ikafly144/au_mod_installer/pkg/profile"
@@ -21,12 +22,19 @@ import (
 type Option func(*Config)
 
 type Config struct {
-	rest rest.Client
+	rest            rest.Client
+	activityService *activity.ActivityService
 }
 
 func WithRestClient(c rest.Client) func(*Config) {
 	return func(cfg *Config) {
 		cfg.rest = c
+	}
+}
+
+func WithActivityService(a *activity.ActivityService) func(*Config) {
+	return func(cfg *Config) {
+		cfg.activityService = a
 	}
 }
 
@@ -36,7 +44,7 @@ func NewState(w fyne.Window, version string, options ...Option) (*State, error) 
 		option(&cfg)
 	}
 
-	app, err := core.New(version, cfg.rest)
+	app, err := core.New(version, cfg.rest, cfg.activityService)
 	if err != nil {
 		return nil, err
 	}

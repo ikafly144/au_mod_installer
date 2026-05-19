@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/ikafly144/au_mod_installer/client/activity"
 	"github.com/ikafly144/au_mod_installer/client/rest"
 	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
 	"github.com/ikafly144/au_mod_installer/pkg/profile"
@@ -27,9 +28,11 @@ type App struct {
 	ProfileManager     *profile.Manager
 	EpicSessionManager *aumgr.EpicSessionManager
 	EpicApi            *aumgr.EpicApi
+
+	ActivityService *activity.ActivityService
 }
 
-func New(version string, restClient rest.Client) (*App, error) {
+func New(version string, restClient rest.Client, activityService *activity.ActivityService) (*App, error) {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user config dir: %w", err)
@@ -58,6 +61,7 @@ func New(version string, restClient rest.Client) (*App, error) {
 		ProfileManager:     profileManager,
 		EpicSessionManager: epicSessionManager,
 		EpicApi:            aumgr.NewEpicApi(),
+		ActivityService:    activityService,
 	}, nil
 }
 
