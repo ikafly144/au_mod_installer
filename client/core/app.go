@@ -7,10 +7,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -22,6 +24,7 @@ import (
 	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
 	"github.com/ikafly144/au_mod_installer/pkg/profile"
 	"github.com/ikafly144/au_mod_installer/pkg/progress"
+	sdk "github.com/ikafly144/discord_social_sdk"
 )
 
 const (
@@ -52,15 +55,151 @@ type App struct {
 	lobbyInfo          *IPCLobbyInfo
 
 	// Callbacks for state changes
-	OnGameStarted       func(profileID uuid.UUID, pid int)
-	OnGameExited        func(profileID uuid.UUID)
-	OnLobbyInfoUpdated  func(info *IPCLobbyInfo)
+	OnGameStarted      func(profileID uuid.UUID, pid int)
+	OnGameExited       func(profileID uuid.UUID)
+	OnLobbyInfoUpdated func(info *IPCLobbyInfo)
+
+	// Shared room state
+	roomShareMu         sync.Mutex
+	roomShareGenerating bool
+	roomShareCache      SharedRoomLink
+}
+
+type SharedRoomLink struct {
+	RoomKey   string
+	URL       string
+	SessionID string
+	HostKey   string
+	ExpiresAt time.Time
+}
+
+func (a *App) GetSharedRoom() SharedRoomLink {
+	a.roomShareMu.Lock()
+	defer a.roomShareMu.Unlock()
+	return a.roomShareCache
+}
+
+func (a *App) SetSharedRoom(link SharedRoomLink) {
+	a.roomShareMu.Lock()
+	a.roomShareCache = link
+	a.roomShareMu.Unlock()
+}
+
+func (a *App) SetRoomShareGenerating(generating bool) {
+	a.roomShareMu.Lock()
+	a.roomShareGenerating = generating
+	a.roomShareMu.Unlock()
+}
+
+func (a *App) IsRoomShareGenerating() bool {
+	a.roomShareMu.Lock()
+	defer a.roomShareMu.Unlock()
+	return a.roomShareGenerating
+}
+
+func (a *App) InvalidateCachedRoomShareAsync() {
+	a.roomShareMu.Lock()
+	cache := a.roomShareCache
+	a.roomShareCache = SharedRoomLink{}
+	a.roomShareMu.Unlock()
+	if cache.SessionID == "" || cache.HostKey == "" {
+		return
+	}
+	go func() {
+		if err := a.Rest.DeleteSharedGame(cache.SessionID, cache.HostKey); err != nil {
+			slog.Warn("Failed to invalidate shared room link", "error", err)
+		}
+	}()
 }
 
 func (a *App) GetLobbyInfo() *IPCLobbyInfo {
 	a.runningProfileMu.Lock()
 	defer a.runningProfileMu.Unlock()
 	return a.lobbyInfo
+}
+
+func (a *App) StartActivityPolling(ctx context.Context) {
+	if a.ActivityService == nil {
+		return
+	}
+	go func() {
+		ticker := time.NewTicker(2 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				a.updateRichPresence()
+			}
+		}
+	}()
+}
+
+func (a *App) updateRichPresence() {
+	if a.ActivityService == nil {
+		return
+	}
+
+	a.runningProfileMu.Lock()
+	profileID := a.runningProfileID
+	lobby := a.lobbyInfo
+	a.runningProfileMu.Unlock()
+
+	if profileID == uuid.Nil {
+		a.ActivityService.ClearActivity()
+		return
+	}
+
+	prof, ok := a.ProfileManager.Get(profileID)
+	if !ok {
+		a.ActivityService.ClearActivity()
+		return
+	}
+
+	act, ok := a.ActivityService.CurrentActivity()
+	if !ok || act == nil {
+		act = sdk.NewActivity()
+	}
+	act.SetType(sdk.ActivityTypePlaying)
+	act.SetName("Mod of Us")
+	act.SetDetails(fmt.Sprintf("Playing %s", prof.Name))
+
+	if lobby != nil && lobby.IsConnected {
+		if lobby.LobbyCode != "" {
+			act.SetState(fmt.Sprintf("In Lobby (%s)", lobby.LobbyCode))
+		} else {
+			act.SetState("In Lobby")
+		}
+		p := act.Party()
+		if p == nil {
+			p = sdk.NewActivityParty()
+		}
+		p.SetID(lobby.MatchMakerIp + ":" + strconv.Itoa(lobby.MatchMakerPort) + "@" + lobby.LobbyCode)
+		if lobby.MaxPlayers > 0 {
+			p.SetMaxSize(lobby.MaxPlayers)
+			p.SetCurrentSize(lobby.JoinedPlayers)
+		}
+		act.SetParty(p)
+	} else {
+		act.SetState("In Main Menu")
+	}
+
+	share := a.GetSharedRoom()
+	if share.URL != "" && share.ExpiresAt.After(time.Now()) {
+		secrets := act.Secrets()
+		if secrets == nil {
+			secrets = sdk.NewActivitySecrets()
+		}
+		secrets.SetJoin(share.URL)
+		act.SetSecrets(secrets)
+	}
+
+	a.ActivityService.SetActivity(act, func(et sdk.ErrorType) {
+		if et != sdk.ErrorTypeNone {
+			slog.Warn("Failed to set activity", "error", et)
+		}
+	})
 }
 
 func New(version string, restClient rest.Client, activityService *activity.ActivityService) (*App, error) {
