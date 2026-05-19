@@ -130,7 +130,6 @@ func (a *App) StartActivityPolling(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				slog.Info("updating presence")
 				a.updateRichPresence()
 			}
 		}
@@ -164,7 +163,11 @@ func (a *App) updateRichPresence() {
 	act.SetDetails(fmt.Sprintf("Playing %s", prof.Name))
 
 	if lobby != nil && lobby.IsConnected {
-		act.SetState(lang.LocalizeKey("discord.status.in_lobby", "In Lobby")) // TODO: More detailed state based on GameState?
+		if lobby.GameState == "Started" {
+			act.SetState(lang.LocalizeKey("discord.status.in_game", "In Game"))
+		} else {
+			act.SetState(lang.LocalizeKey("discord.status.in_lobby", "In Lobby")) // TODO: More detailed state based on GameState?
+		}
 		p := sdk.NewActivityParty()
 		p.SetID(hex.EncodeToString(new(sha256.Sum256([]byte(lobby.MatchMakerIp + ":" + strconv.Itoa(lobby.MatchMakerPort) + "@" + lobby.LobbyCode)))[:]))
 		if lobby.MaxPlayers > 0 {
@@ -177,7 +180,7 @@ func (a *App) updateRichPresence() {
 	}
 
 	share := a.GetSharedRoom()
-	if share.URL != "" && share.ExpiresAt.After(time.Now()) {
+	if lobby.GameState == "Joined" && share.URL != "" && share.ExpiresAt.After(time.Now()) {
 		secrets := sdk.NewActivitySecrets()
 		secrets.SetJoin(share.URL)
 		act.SetSecrets(secrets)
