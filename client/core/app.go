@@ -180,7 +180,7 @@ func (a *App) updateRichPresence() {
 	share := a.GetSharedRoom()
 	if share.URL != "" && share.ExpiresAt.After(time.Now()) {
 		secrets := sdk.NewActivitySecrets()
-		secrets.SetJoin(share.SessionID)
+		secrets.SetJoin(share.URL)
 		act.SetSecrets(secrets)
 	}
 
@@ -213,7 +213,7 @@ func New(version string, restClient rest.Client, activityService *activity.Activ
 		return nil, fmt.Errorf("failed to create epic session manager: %w", err)
 	}
 
-	return &App{
+	a := &App{
 		Version:            version,
 		ConfigDir:          appConfigDir,
 		Rest:               restClient,
@@ -221,7 +221,9 @@ func New(version string, restClient rest.Client, activityService *activity.Activ
 		EpicSessionManager: epicSessionManager,
 		EpicApi:            aumgr.NewEpicApi(),
 		ActivityService:    activityService,
-	}, nil
+	}
+
+	return a, nil
 }
 
 func (a *App) DetectGamePath() (string, error) {

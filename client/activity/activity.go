@@ -21,6 +21,10 @@ type ActivityService struct {
 	currentActivity *sdk.Activity
 }
 
+func (s *ActivityService) Client() *sdk.Client {
+	return s.client
+}
+
 func (s *ActivityService) SetIdleActivity(provider func() *sdk.Activity, callback func(sdk.ErrorType)) {
 	s.idleActivityProvider = provider
 	s.idleActivityCallback = callback

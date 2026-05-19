@@ -149,6 +149,12 @@ func NewLauncherTab(s *uicommon.State) uicommon.Tab {
 }
 
 func (l *Launcher) init() {
+
+	client := l.state.Core.ActivityService.Client()
+	client.SetActivityJoinCallback(func(s string) {
+		l.handleJoinGameURI(s)
+	})
+
 	l.state.OnSharedURIReceived = func(uri string) {
 		l.state.SharedURI = uri
 		fyne.Do(l.checkSharedURI)
