@@ -161,6 +161,11 @@ func realMain(sharedURI string, sharedArchive string) error {
 	a := app.New()
 
 	social := sdk.NewClient()
+	activityService := activity.NewActivityService(social)
+	social.SetActivityJoinCallback(func(s string) {
+		slog.Info("Received join activity callback", "uri", s)
+		activityService.PushQueue(s)
+	})
 	social.AddLogCallback(sdk.LoggingSeverityInfo, func(s string, ls sdk.LoggingSeverity) {
 		level := slog.LevelInfo
 		switch ls {
@@ -175,9 +180,6 @@ func realMain(sharedURI string, sharedArchive string) error {
 		slog.Log(context.Background(), level, s)
 	})
 	social.SetApplicationID(APPLICATION_ID)
-
-	slog.Info("Connecting to Discord")
-	social.Connect()
 
 	go func() {
 		for {
@@ -224,10 +226,11 @@ func realMain(sharedURI string, sharedArchive string) error {
 	}
 
 	w := a.NewWindow(lang.LocalizeKey("app.name", "Mod of Us") + " " + version)
+	if path, err := os.Executable(); err == nil {
 
-	social.RegisterLaunchCommand(APPLICATION_ID, "mod-of-us://launch")
+		social.RegisterLaunchCommand(APPLICATION_ID, path)
+	}
 
-	activityService := activity.NewActivityService(social)
 	activityService.SetIdleActivity(func() *sdk.Activity {
 		act := sdk.NewActivity()
 		act.SetType(sdk.ActivityTypePlaying)
@@ -236,7 +239,9 @@ func realMain(sharedURI string, sharedArchive string) error {
 		act.SetDetails(lang.LocalizeKey("discord.status.idle_details", "Not doing anything in particular"))
 		return act
 	}, func(et sdk.ErrorType) {
-		slog.Warn("Failed to set idle activity", "et", et)
+		if et != sdk.ErrorTypeNone {
+			slog.Warn("Failed to set idle activity", "et", et)
+		}
 	})
 
 	var client rest.Client

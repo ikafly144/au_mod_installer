@@ -108,11 +108,16 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 			cancel()
 		}
 	}
+	state.Core.ActivityService.Client().Connect()
 	state.Core.StartActivityPolling(ctx)
 	w.SetOnClosed(onClosed)
 	fyne.Do(func() {
 		if uicommon.RestoreMainWindowSize(w) {
 			w.CenterOnScreen()
+		}
+		slog.Info("Application started")
+		for s, ok := state.Core.ActivityService.PopQueue(); ok; s, ok = state.Core.ActivityService.PopQueue() {
+			l.HandleJoinLink(s)
 		}
 	})
 	runtime.LockOSThread()

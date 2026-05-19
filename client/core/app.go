@@ -471,6 +471,7 @@ type JoinGameLink struct {
 }
 
 func (a *App) ParseJoinGameURI(uri string) (*JoinGameLink, error) {
+	slog.Info("parsing join game URI", "uri", uri)
 	parsed, err := url.Parse(uri)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse join game URI: %w", err)

@@ -2,6 +2,7 @@ package activity
 
 import (
 	"log/slog"
+	"sync"
 
 	sdk "github.com/ikafly144/discord_social_sdk"
 )
@@ -19,10 +20,30 @@ type ActivityService struct {
 	idleActivityCallback func(sdk.ErrorType)
 
 	currentActivity *sdk.Activity
+
+	queueMu sync.Mutex
+	queue   []string
 }
 
 func (s *ActivityService) Client() *sdk.Client {
 	return s.client
+}
+
+func (s *ActivityService) PushQueue(uri string) {
+	s.queueMu.Lock()
+	s.queue = append(s.queue, uri)
+	s.queueMu.Unlock()
+}
+
+func (s *ActivityService) PopQueue() (string, bool) {
+	s.queueMu.Lock()
+	defer s.queueMu.Unlock()
+	if len(s.queue) == 0 {
+		return "", false
+	}
+	uri := s.queue[0]
+	s.queue = s.queue[1:]
+	return uri, true
 }
 
 func (s *ActivityService) SetIdleActivity(provider func() *sdk.Activity, callback func(sdk.ErrorType)) {

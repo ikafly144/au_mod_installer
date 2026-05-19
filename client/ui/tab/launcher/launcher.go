@@ -9,6 +9,7 @@ import (
 	imagedraw "image/draw"
 	"image/png"
 	"log/slog"
+	"net/url"
 	neturl "net/url"
 	"os"
 	"path/filepath"
@@ -111,7 +112,7 @@ const (
 
 var launcherRunningProfileStrokeColor = color.NRGBA{R: 56, G: 170, B: 92, A: 255}
 
-func NewLauncherTab(s *uicommon.State) uicommon.Tab {
+func NewLauncherTab(s *uicommon.State) *Launcher {
 	var l Launcher
 	revision := fyne.CurrentApp().Metadata().Custom["revision"]
 	revision = revision[:min(7, len(revision))]
@@ -148,12 +149,22 @@ func NewLauncherTab(s *uicommon.State) uicommon.Tab {
 	return &l
 }
 
-func (l *Launcher) init() {
+func (l *Launcher) HandleJoinLink(s string) {
+	uri, err := url.Parse(s)
+	if err != nil {
+		slog.Error("Failed to parse join URI", "error", err, "uri", s)
+		return
+	}
+	gameLink := &core.JoinGameLink{
+		SessionID:  uri.Query().Get("session_id"),
+		ServerBase: l.state.Rest.ServerBaseURL(),
+	}
+	l.handleGameLink(gameLink)
+}
 
+func (l *Launcher) init() {
 	client := l.state.Core.ActivityService.Client()
-	client.SetActivityJoinCallback(func(s string) {
-		l.handleJoinGameURI(s)
-	})
+	client.SetActivityJoinCallback(l.HandleJoinLink)
 
 	l.state.OnSharedURIReceived = func(uri string) {
 		l.state.SharedURI = uri
@@ -785,7 +796,10 @@ func (l *Launcher) handleJoinGameURI(sharedURI string) {
 		l.state.ShowErrorDialog(errors.New(joinURI.Error))
 		return
 	}
+	l.handleGameLink(joinURI)
+}
 
+func (l *Launcher) handleGameLink(joinURI *core.JoinGameLink) {
 	shared, iconPNG, joinInfo, err := l.state.Core.HandleJoinGameDownload(joinURI.SessionID, joinURI.ServerBase)
 	if err != nil {
 		dialog.ShowError(err, l.state.Window)
