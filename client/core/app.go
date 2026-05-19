@@ -3,7 +3,9 @@ package core
 import (
 	"compress/zlib"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"fyne.io/fyne/v2/lang"
 	"github.com/google/uuid"
 
 	"github.com/ikafly144/au_mod_installer/client/activity"
@@ -161,20 +164,16 @@ func (a *App) updateRichPresence() {
 	act.SetDetails(fmt.Sprintf("Playing %s", prof.Name))
 
 	if lobby != nil && lobby.IsConnected {
-		if lobby.LobbyCode != "" {
-			act.SetState(fmt.Sprintf("In Lobby (%s)", lobby.LobbyCode))
-		} else {
-			act.SetState("In Lobby")
-		}
+		act.SetState(lang.LocalizeKey("discord.status.in_lobby", "In Lobby")) // TODO: More detailed state based on GameState?
 		p := sdk.NewActivityParty()
-		p.SetID(lobby.MatchMakerIp + ":" + strconv.Itoa(lobby.MatchMakerPort) + "@" + lobby.LobbyCode)
+		p.SetID(hex.EncodeToString(new(sha256.Sum256([]byte(lobby.MatchMakerIp + ":" + strconv.Itoa(lobby.MatchMakerPort) + "@" + lobby.LobbyCode)))[:]))
 		if lobby.MaxPlayers > 0 {
 			p.SetMaxSize(lobby.MaxPlayers)
 			p.SetCurrentSize(lobby.JoinedPlayers)
 		}
 		act.SetParty(p)
 	} else {
-		act.SetState("In Main Menu")
+		act.SetState(lang.LocalizeKey("discord.status.in_main_menu", "In Main Menu"))
 	}
 
 	share := a.GetSharedRoom()

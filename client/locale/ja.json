@@ -255,5 +255,8 @@
     "server.error.read_failed": "regioninfo.json の読み込みに失敗しました",
     "server.error.parse_failed": "regioninfo.json の解析に失敗しました",
     "server.delete_confirm_title": "サーバーを削除",
-    "server.delete_confirm_message": "選択中のサーバーを削除しますか？"
+    "server.delete_confirm_message": "選択中のサーバーを削除しますか？",
+    "discord.status.idle": "アイドル",
+    "discord.status.idle_details": "ゲームを起動していません",
+    "discord.status.in_lobby": "ロビーにいる"
 }

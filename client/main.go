@@ -236,7 +236,7 @@ func realMain(sharedURI string, sharedArchive string) error {
 		act.SetType(sdk.ActivityTypePlaying)
 		act.SetName("Mod of Us")
 		act.SetState(lang.LocalizeKey("discord.status.idle", "Idle"))
-		act.SetDetails(lang.LocalizeKey("discord.status.idle_details", "Not doing anything in particular"))
+		act.SetDetails(lang.LocalizeKey("discord.status.idle_details", "Not currently running the game"))
 		return act
 	}, func(et sdk.ErrorType) {
 		if et != sdk.ErrorTypeNone {
