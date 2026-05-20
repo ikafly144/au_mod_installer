@@ -19,6 +19,7 @@ type ActivityService struct {
 	idleActivityProvider func() *sdk.Activity
 	idleActivityCallback func(sdk.ErrorType)
 
+	idleActivity    *sdk.Activity
 	currentActivity *sdk.Activity
 
 	queueMu sync.Mutex
@@ -55,6 +56,7 @@ func (s *ActivityService) SetIdleActivity(provider func() *sdk.Activity, callbac
 func (s *ActivityService) updateIdleActivity() {
 	if s.idleActivityProvider != nil && s.currentActivity == nil {
 		activity := s.idleActivityProvider()
+		s.idleActivity = activity
 		if activity != nil {
 			callback := s.idleActivityCallback
 			if callback == nil {
@@ -72,17 +74,18 @@ func (s *ActivityService) SetActivity(activity *sdk.Activity, callback func(sdk.
 		panic("activity cannot be nil")
 	}
 	s.currentActivity = activity
+	if s.idleActivity != nil && activity != s.idleActivity {
+		s.idleActivity = nil
+	}
 	s.client.UpdateRichPresence(activity, func(err sdk.ErrorType) {
 		if callback != nil {
 			callback(err)
 		}
 	})
-	s.updateIdleActivity()
 }
 
 func (s *ActivityService) ClearActivity() {
 	s.currentActivity = nil
-	s.client.ClearRichPresence()
 	s.updateIdleActivity()
 }
 

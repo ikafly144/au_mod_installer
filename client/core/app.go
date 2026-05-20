@@ -168,22 +168,21 @@ func (a *App) updateRichPresence() {
 		} else {
 			act.SetState(lang.LocalizeKey("discord.status.in_lobby", "In Lobby")) // TODO: More detailed state based on GameState?
 		}
-		p := sdk.NewActivityParty()
-		p.SetID(hex.EncodeToString(new(sha256.Sum256([]byte(lobby.MatchMakerIp + ":" + strconv.Itoa(lobby.MatchMakerPort) + "@" + lobby.LobbyCode)))[:]))
-		if lobby.MaxPlayers > 0 {
+		if lobby.MaxPlayers > 0 && lobby.JoinedPlayers > 0 {
+			p := sdk.NewActivityParty()
+			p.SetID(strings.ToLower(lobby.GameState) + "/" + hex.EncodeToString(new(sha256.Sum256([]byte(lobby.MatchMakerIp + ":" + strconv.Itoa(lobby.MatchMakerPort) + "@" + lobby.LobbyCode)))[:]))
 			p.SetMaxSize(lobby.MaxPlayers)
 			p.SetCurrentSize(lobby.JoinedPlayers)
+			act.SetParty(p)
 		}
-		act.SetParty(p)
+		share := a.GetSharedRoom()
+		if lobby.GameState == "Joined" && share.URL != "" && share.ExpiresAt.After(time.Now()) {
+			secrets := sdk.NewActivitySecrets()
+			secrets.SetJoin(share.URL)
+			act.SetSecrets(secrets)
+		}
 	} else {
 		act.SetState(lang.LocalizeKey("discord.status.in_main_menu", "In Main Menu"))
-	}
-
-	share := a.GetSharedRoom()
-	if lobby.GameState == "Joined" && share.URL != "" && share.ExpiresAt.After(time.Now()) {
-		secrets := sdk.NewActivitySecrets()
-		secrets.SetJoin(share.URL)
-		act.SetSecrets(secrets)
 	}
 
 	a.ActivityService.SetActivity(act, func(et sdk.ErrorType) {
