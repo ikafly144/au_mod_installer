@@ -57,9 +57,9 @@ type Settings struct {
 }
 
 const (
-	displayScaleMin  = float32(0.75)
+	displayScaleMin  = float32(0.5)
 	displayScaleMax  = float32(2.0)
-	displayScaleStep = float32(0.05)
+	displayScaleStep = float32(0.1)
 
 	projectLicenseURL = "https://github.com/ikafly144/au_mod_installer/blob/master/LICENSE"
 )
