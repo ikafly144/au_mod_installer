@@ -10,7 +10,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/google/go-github/v86/github"
+	"github.com/google/go-github/v87/github"
 
 	"github.com/ikafly144/au_mod_installer/common/githubrelease"
 )
@@ -85,10 +85,15 @@ func main() {
 	}
 	owner, repo := parts[0], parts[1]
 
-	ctx := context.Background()
-	client := github.NewClient(nil)
+	var opts []github.ClientOptionsFunc
 	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
-		client = client.WithAuthToken(token)
+		opts = append(opts, github.WithAuthToken(token))
+	}
+	ctx := context.Background()
+	client, err := github.NewClient(opts...)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to create GitHub client: %v\n", err)
+		os.Exit(1)
 	}
 
 	if *listReleases {

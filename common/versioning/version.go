@@ -8,13 +8,14 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"runtime"
 	"strings"
 
-	"github.com/google/go-github/v86/github"
+	"github.com/google/go-github/v87/github"
 	"github.com/minio/selfupdate"
 	"golang.org/x/mod/semver"
 )
@@ -26,7 +27,11 @@ var (
 )
 
 func CheckForUpdates(ctx context.Context, branch Branch, currentVersion string) (releaseTag string, latestStable string, err error) {
-	client := github.NewClient(http.DefaultClient)
+	var opts []github.ClientOptionsFunc
+	client, err := github.NewClient(opts...)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to create GitHub client: %w", err)
+	}
 	opt := &github.ListOptions{
 		PerPage: 10,
 		Page:    1,
@@ -75,7 +80,11 @@ outer:
 }
 
 func Update(ctx context.Context, tag string) error {
-	client := github.NewClient(http.DefaultClient)
+	var opts []github.ClientOptionsFunc
+	client, err := github.NewClient(opts...)
+	if err != nil {
+		return fmt.Errorf("failed to create GitHub client: %w", err)
+	}
 	release, _, err := client.Repositories.GetReleaseByTag(ctx, repoOwner, repoName, tag)
 	if err != nil {
 		return err
@@ -93,7 +102,7 @@ func Update(ctx context.Context, tag string) error {
 		if asset.GetName() == "checksums.txt" {
 			resp, err := http.Get(asset.GetBrowserDownloadURL())
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to download checksums.txt: %w", err)
 			}
 			defer resp.Body.Close()
 			buf := new(strings.Builder)
@@ -101,7 +110,7 @@ func Update(ctx context.Context, tag string) error {
 			var sha256Hash [32]byte
 			if hashStr, ok := strings.CutPrefix(asset.GetDigest(), "sha256:"); ok {
 				if _, err := hex.Decode(sha256Hash[:], []byte(hashStr)); err != nil {
-					return err
+					return fmt.Errorf("failed to decode checksum: %w", err)
 				}
 			}
 			hasher := sha256.New()
