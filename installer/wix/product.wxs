@@ -1,5 +1,9 @@
-﻿<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
-  <Package Name="!(loc.ProductName)" Language="1041" Version="$(var.ProductVersion)" Manufacturer="!(loc.ManufacturerName)" UpgradeCode="{3C7B19C3-5A2D-4C4E-8B71-88D8F8DE18B2}"><Icon Id="appIcon" SourceFile="$(var.SourceDir)\\client\\icon.ico" />
+﻿<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+  xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util"
+  xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <Package Name="!(loc.ProductName)" Language="1041" Version="$(var.ProductVersion)" Manufacturer="!(loc.ManufacturerName)" UpgradeCode="{3C7B19C3-5A2D-4C4E-8B71-88D8F8DE18B2}">
+    <Icon Id="appIcon" SourceFile="$(var.SourceDir)\\client\\icon.ico" />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of this application is already installed." />
     <Property Id="ARPPRODUCTICON" Value="appIcon" />
 
     <!-- Exit dialog checkbox to launch the app -->
@@ -21,29 +25,29 @@
     </UI>
 
     <WixVariable Id="WixUILicenseRtf" Value="$(var.LicenseRtfPath)" />
-    
+
     <!-- Installer images (uncomment and provide BMP files in the same directory as this file) -->
     <!-- <WixVariable Id="WixUIDialogBmp" Value="background.bmp" /> -->
     <!-- <WixVariable Id="WixUIBannerBmp" Value="banner.bmp" /> -->
-  
+
     <StandardDirectory Id="LocalAppDataFolder">
-        <Directory Id="INSTALLFOLDER" Name="!(loc.InstallFolder)">
-          <Component Id="MainExe" Guid="{B2D5A99B-0D56-40C8-94B3-8FB3A8A6D7E4}">
-            <File Id="ModOfUsExe" Source="$(var.SourceDir)\\Mod of Us.exe" KeyPath="yes" />
-          </Component>
-          <Component Id="DiscordSdkDll" Guid="{1B9E7135-9326-4E38-8C96-3C4B16F6E4F9}">
-            <File Id="DiscordSdkDllFile" Source="$(var.SourceDir)\\discord_partner_sdk.dll" KeyPath="yes" />
-          </Component>
-        </Directory>
-      </StandardDirectory>
-      <StandardDirectory Id="ProgramMenuFolder">
-        <Directory Id="ProgramMenuDir" Name="!(loc.InstallFolder)">
-          <Component Id="StartMenuShortcut" Guid="{E2EF6B58-4FD5-46E0-9C4A-C0B1E2C4C2B1}">
-            <Shortcut Id="StartMenuShortcut" Name="!(loc.ShortcutName)" Target="[INSTALLFOLDER]Mod of Us.exe" WorkingDirectory="INSTALLFOLDER" />
-            <RemoveFolder Id="RemoveProgramMenuDir" On="uninstall" />
-            <RegistryValue Root="HKCU" Key="Software\\ikafly144\\ModOfUs" Name="installed" Type="integer" Value="1" KeyPath="yes" />
-          </Component>
-        </Directory>
-      </StandardDirectory>
-    </Package>
+      <Directory Id="INSTALLFOLDER" Name="!(loc.InstallFolder)">
+        <Component Id="MainExe" Guid="{B2D5A99B-0D56-40C8-94B3-8FB3A8A6D7E4}">
+          <File Id="ModOfUsExe" Source="$(var.SourceDir)\\Mod of Us.exe" KeyPath="yes" />
+        </Component>
+        <Component Id="DiscordSdkDll" Guid="{1B9E7135-9326-4E38-8C96-3C4B16F6E4F9}">
+          <File Id="DiscordSdkDllFile" Source="$(var.SourceDir)\\discord_partner_sdk.dll" KeyPath="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ProgramMenuDir" Name="!(loc.InstallFolder)">
+        <Component Id="StartMenuShortcut" Guid="{E2EF6B58-4FD5-46E0-9C4A-C0B1E2C4C2B1}">
+          <Shortcut Id="StartMenuShortcut" Name="!(loc.ShortcutName)" Target="[INSTALLFOLDER]Mod of Us.exe" WorkingDirectory="INSTALLFOLDER" />
+          <RemoveFolder Id="RemoveProgramMenuDir" On="uninstall" />
+          <RegistryValue Root="HKCU" Key="Software\\ikafly144\\ModOfUs" Name="installed" Type="integer" Value="1" KeyPath="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+  </Package>
 </Wix>

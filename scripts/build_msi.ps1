@@ -34,6 +34,9 @@ function Get-MsiVersion {
     while ($numbers.Count -lt 3) {
         $numbers += 0
     }
+    if ($numbers[0] -gt 255 -or $numbers[1] -gt 255 -or $numbers[2] -gt 255) {
+        throw "Version parts must be between 0 and 255 for MSI compatibility."
+    }
 
     return ($numbers -join ".")
 }
@@ -102,7 +105,8 @@ if ($dotnetCmd) {
     if (-not ($env:PATH -split ';' | Where-Object { $_ -eq $globalTools })) {
         $env:PATH = "$globalTools;$env:PATH"
     }
-} else {
+}
+else {
     $wixCmd = Get-Command wix -ErrorAction SilentlyContinue
     if (-not $wixCmd) {
         throw "WiX not found and dotnet is unavailable. Install dotnet and run 'dotnet tool install --global wix --version 7.*'."
