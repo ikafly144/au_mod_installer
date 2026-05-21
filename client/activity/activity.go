@@ -71,7 +71,8 @@ func (s *ActivityService) updateIdleActivity() {
 
 func (s *ActivityService) SetActivity(activity *sdk.Activity, callback func(sdk.ErrorType)) {
 	if activity == nil {
-		panic("activity cannot be nil")
+		slog.Warn("SetActivity called with nil activity")
+		return
 	}
 	s.currentActivity = activity
 	if s.idleActivity != nil && activity != s.idleActivity {

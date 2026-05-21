@@ -162,6 +162,7 @@ func (a *App) updateRichPresence() {
 	act.SetType(sdk.ActivityTypePlaying)
 	act.SetName("Mod of Us")
 	act.SetDetails(fmt.Sprintf("Playing %s", prof.Name))
+	act.SetSupportedPlatforms(sdk.ActivityGamePlatformsDesktop)
 
 	if lobby != nil && lobby.IsConnected {
 		if lobby.GameState == "Started" {
@@ -174,6 +175,7 @@ func (a *App) updateRichPresence() {
 			p.SetID(strings.ToLower(lobby.GameState) + "/" + hex.EncodeToString(new(sha256.Sum256([]byte(lobby.MatchMakerIp + ":" + strconv.Itoa(lobby.MatchMakerPort) + "@" + lobby.LobbyCode)))[:]))
 			p.SetMaxSize(lobby.MaxPlayers)
 			p.SetCurrentSize(lobby.JoinedPlayers)
+			p.SetPrivacy(sdk.ActivityPartyPrivacyPublic)
 			act.SetParty(p)
 		}
 		share := a.GetSharedRoom()
