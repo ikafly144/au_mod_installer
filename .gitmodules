@@ -1,0 +1,3 @@
+[submodule "mus-libs"]
+	path = mus-libs
+	url = https://github.com/ikafly144/mus-libs.git

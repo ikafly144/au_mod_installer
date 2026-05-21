@@ -82,6 +82,11 @@ $clientStage = Join-Path $stagePath 'client'
 if (-not (Test-Path $clientStage)) { New-Item -Path $clientStage -ItemType Directory | Out-Null }
 Copy-Item -Path $iconPath -Destination (Join-Path $clientStage (Split-Path $iconPath -Leaf)) -Force
 
+$licenseRtfPath = Join-Path $repoRoot "installer\wix\LICENSE.rtf"
+if (Test-Path $licenseRtfPath) {
+    Copy-Item -Path $licenseRtfPath -Destination $stagePath -Force
+}
+
 $dotnetCmd = Get-Command dotnet -ErrorAction SilentlyContinue
 if ($dotnetCmd) {
     Write-Host "Installing or updating WiX dotnet global tool (v7)..."
@@ -93,7 +98,7 @@ if ($dotnetCmd) {
             Write-Warning "Failed to install WiX dotnet tool; will try to use system 'wix' if available."
         }
     }
-    $globalTools = Join-Path $env:USERPROFILE '.dotnet\\tools'
+    $globalTools = Join-Path $env:USERPROFILE '.dotnet\tools'
     if (-not ($env:PATH -split ';' | Where-Object { $_ -eq $globalTools })) {
         $env:PATH = "$globalTools;$env:PATH"
     }
@@ -119,16 +124,24 @@ if ($LASTEXITCODE -ne 0) {
     throw "Failed to install WiX Util extension."
 }
 
+$wxlPath = Join-Path $repoRoot "installer\wix\locale_ja.wxl"
+
+# Use absolute path for SourceDir and LicenseRtf to avoid directory change issues
 $wixArgs = @(
     "build",
     "-nologo",
     "-acceptEula", "wix7",
     "-ext", "WixToolset.UI.wixext", "-ext", "WixToolset.Util.wixext",
+    "-culture", "ja-JP",
     "-d", "SourceDir=$stagePath",
     "-d", "ProductVersion=$msiVersion",
+    "-d", "LicenseRtfPath=$licenseRtfPath",
     "-out", $outputPath,
     $wxsPath
 )
+if (Test-Path $wxlPath) {
+    $wixArgs += $wxlPath
+}
 
 Write-Host "Building MSI version $msiVersion"
 & wix @wixArgs
