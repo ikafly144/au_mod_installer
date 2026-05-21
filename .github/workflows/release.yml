@@ -27,12 +27,8 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
-      - name: Checkout mus-libs
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          repository: ikafly144/mus-libs
           token: ${{ secrets.MUS_LIBS_PAT }}
-          path: mus-libs
+          submodules: recursive
       - name: Stage Discord SDK DLL
         run: |
           $dll = Get-ChildItem -Path mus-libs -Recurse -Filter discord_partner_sdk.dll | Select-Object -First 1

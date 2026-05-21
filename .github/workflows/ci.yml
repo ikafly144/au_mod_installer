@@ -28,6 +28,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          token: ${{ secrets.MUS_LIBS_PAT }}
+          submodules: recursive
+      - name: Stage Discord SDK DLL
+        run: |
+          mkdir -p lib
+          dll=$(find mus-libs -name "discord_partner_sdk.dll" | head -n 1)
+          if [ -z "$dll" ]; then echo "discord_partner_sdk.dll not found in mus-libs" && exit 1; fi
+          cp "$dll" lib/discord_partner_sdk.dll
       - name: Cache golangci-lint cache
         id: cache-golangci-lint
         env:
@@ -50,6 +59,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          token: ${{ secrets.MUS_LIBS_PAT }}
+          submodules: recursive
+      - name: Stage Discord SDK DLL
+        run: |
+          mkdir -p lib
+          dll=$(find mus-libs -name "discord_partner_sdk.dll" | head -n 1)
+          if [ -z "$dll" ]; then echo "discord_partner_sdk.dll not found in mus-libs" && exit 1; fi
+          cp "$dll" lib/discord_partner_sdk.dll
       - name: Cache Go modules
         id: cache-go-mod
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
