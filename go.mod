@@ -27,7 +27,6 @@ require (
 )
 
 require (
-	aead.dev/minisign v0.3.0 // indirect
 	fyne.io/systray v1.12.1 // indirect
 	fyne.io/tools v1.7.1 // indirect
 	github.com/BurntSushi/toml v1.5.0 // indirect
