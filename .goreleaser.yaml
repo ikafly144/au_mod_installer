@@ -41,7 +41,9 @@ builds:
       post:
         - pwsh -NoProfile -File scripts/build_msi.ps1 -Version {{ .Version }} -BuildDirName {{ .ProjectName }}_{{ .Target }}
 
-archives: []
+archives:
+  - formats:
+      - binary
 
 checksum:
   name_template: "checksums.txt"
