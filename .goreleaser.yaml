@@ -39,7 +39,7 @@ builds:
     mod_timestamp: "{{ .CommitTimestamp }}"
     hooks:
       post:
-        - pwsh -NoProfile -File scripts/build_msi.ps1 -Version {{ .Version }}
+        - pwsh -NoProfile -File scripts/build_msi.ps1 -Version {{ .Version }} -BuildDirName {{ .ProjectName }}_{{ .Target }}
 
 archives: []
 

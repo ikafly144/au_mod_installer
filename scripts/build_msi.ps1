@@ -50,6 +50,15 @@ $stagePath = Join-Path $distPath "wix"
 $outputPath = Join-Path $distPath $OutputName
 
 if (-not (Test-Path $exePath)) {
+    $candidate = Get-ChildItem -Path $distPath -Directory -ErrorAction SilentlyContinue | Where-Object {
+        Test-Path (Join-Path $_.FullName $BinaryName)
+    } | Select-Object -First 1
+    if ($candidate) {
+        $buildPath = $candidate.FullName
+        $exePath = Join-Path $buildPath $BinaryName
+    }
+}
+if (-not (Test-Path $exePath)) {
     throw "Executable not found: $exePath"
 }
 if (-not (Test-Path $dllPath)) {
@@ -71,12 +80,38 @@ Copy-Item -Path $exePath -Destination $stagePath -Force
 Copy-Item -Path $dllPath -Destination $stagePath -Force
 Copy-Item -Path $iconPath -Destination $stagePath -Force
 
+$wixCmd = Get-Command wix -ErrorAction SilentlyContinue
+if (-not $wixCmd) {
+    $dotnetCmd = Get-Command dotnet -ErrorAction SilentlyContinue
+    if (-not $dotnetCmd) {
+        throw "WiX not found and dotnet is unavailable. Install dotnet and run 'dotnet tool install --global wix --version 7.*'."
+    }
+    Write-Host "Installing WiX tool..."
+    dotnet tool install --global wix --version 7.*
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to install WiX tool."
+    }
+    $env:PATH = "$env:USERPROFILE\\.dotnet\\tools;$env:PATH"
+}
+
+& wix eula accept wix7 | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    throw "Failed to accept WiX EULA (wix7)."
+}
+
+Write-Host "Ensuring WiX UI extension is installed..."
+& wix extension add WixToolset.UI.wixext
+if ($LASTEXITCODE -ne 0) {
+    throw "Failed to install WiX UI extension."
+}
+
 $wixArgs = @(
     "build",
     "-nologo",
+    "-acceptEula", "wix7",
     "-ext", "WixToolset.UI.wixext",
-    "-dSourceDir=$stagePath",
-    "-dProductVersion=$msiVersion",
+    "-d", "SourceDir=$stagePath",
+    "-d", "ProductVersion=$msiVersion",
     "-out", $outputPath,
     $wxsPath
 )
