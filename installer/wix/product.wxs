@@ -10,6 +10,8 @@
     <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="!(loc.LaunchAppText)" />
     <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
 
+    <MediaTemplate EmbedCab="yes" />
+
     <Feature Id="MainFeature" Title="!(loc.FeatureMainTitle)" Level="1">
       <ComponentRef Id="MainExe" />
       <ComponentRef Id="DiscordSdkDll" />
