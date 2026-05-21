@@ -10,7 +10,6 @@ import (
 	"image/png"
 	"log/slog"
 	"net/url"
-	neturl "net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -760,7 +759,7 @@ func (l *Launcher) checkSharedURI() {
 		return
 	}
 
-	if parsed, err := neturl.Parse(sharedURI); err == nil {
+	if parsed, err := url.Parse(sharedURI); err == nil {
 		switch {
 		case strings.EqualFold(parsed.Scheme, "http"), strings.EqualFold(parsed.Scheme, "https"):
 			l.importProfileFromArchiveURL(parsed.String())

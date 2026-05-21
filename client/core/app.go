@@ -22,12 +22,13 @@ import (
 	"fyne.io/fyne/v2/lang"
 	"github.com/google/uuid"
 
+	sdk "github.com/ikafly144/discord_social_sdk"
+
 	"github.com/ikafly144/au_mod_installer/client/activity"
 	"github.com/ikafly144/au_mod_installer/client/rest"
 	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
 	"github.com/ikafly144/au_mod_installer/pkg/profile"
 	"github.com/ikafly144/au_mod_installer/pkg/progress"
-	sdk "github.com/ikafly144/discord_social_sdk"
 )
 
 const (
