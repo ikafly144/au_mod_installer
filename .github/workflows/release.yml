@@ -29,6 +29,7 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.MUS_LIBS_PAT }}
           submodules: recursive
+          persist-credentials: false
       - name: Stage Discord SDK DLL
         run: |
           $dll = Get-ChildItem -Path mus-libs -Recurse -Filter discord_partner_sdk.dll | Select-Object -First 1

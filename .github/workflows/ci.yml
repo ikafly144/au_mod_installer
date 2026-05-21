@@ -31,6 +31,7 @@ jobs:
         with:
           token: ${{ secrets.MUS_LIBS_PAT }}
           submodules: recursive
+          persist-credentials: false
       - name: Stage Discord SDK DLL
         run: |
           mkdir -p lib
