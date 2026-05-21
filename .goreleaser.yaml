@@ -29,11 +29,6 @@ builds:
       - amd64
     env:
       - CGO_ENABLED=1
-      - >-
-        {{- if eq .Os "windows" }}
-          {{- if eq .Arch "amd64" }}CC=x86_64-w64-mingw32-gcc{{ end }}
-          {{- if eq .Arch "386" }}CC=i686-w64-mingw32-gcc{{ end }}
-        {{- end }}
     main: ./client
     ldflags:
       - -s -w -H=windowsgui
@@ -42,28 +37,17 @@ builds:
       - -v
     binary: Mod of Us
     mod_timestamp: "{{ .CommitTimestamp }}"
+    hooks:
+      post:
+        - pwsh -NoProfile -File scripts/build_msi.ps1 -Version {{ .Version }}
 
-archives:
-  - formats: [tar.gz, binary]
-    # this name template makes the OS and Arch compatible with the results of `uname`.
-    name_template: >-
-      {{ .ProjectName }}_
-      {{- .Os }}_
-      {{- if eq .Arch "amd64" }}x86_64
-      {{- else if eq .Arch "386" }}i386
-      {{- else }}{{ .Arch }}{{ end }}
-      {{- if .Arm }}v{{ .Arm }}{{ end }}
-    # use zip for windows archives
-    files:
-      - LICENSE*
-      - README*
-    format_overrides:
-      - goos: windows
-        formats: [zip, binary]
+archives: []
 
 checksum:
   name_template: "checksums.txt"
   algorithm: sha256
+  extra_files:
+    - glob: dist/*.msi
 
 changelog:
   use: github
@@ -95,6 +79,8 @@ release:
   github:
     name: au_mod_installer
     owner: ikafly144
+  extra_files:
+    - glob: dist/*.msi
 
 announce:
   skip: '{{ or .IsSnapshot ( ne .Prerelease "" ) }}'

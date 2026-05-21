@@ -18,7 +18,7 @@ jobs:
   goreleaser:
     env:
       cache-name: cache-go-mod
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - name: Configure Git
         run: |
@@ -27,10 +27,29 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
+      - name: Checkout mus-libs
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ikafly144/mus-libs
+          token: ${{ secrets.MUS_LIBS_PAT }}
+          path: mus-libs
+      - name: Stage Discord SDK DLL
+        run: |
+          $dll = Get-ChildItem -Path mus-libs -Recurse -Filter discord_partner_sdk.dll | Select-Object -First 1
+          if (-not $dll) { throw "discord_partner_sdk.dll not found in mus-libs" }
+          Copy-Item $dll.FullName -Destination lib\discord_partner_sdk.dll -Force
       - name: Set up MinGW
         uses: egor-tensin/setup-mingw@41b837e47d7f85214629d255b9c4bc3fcbe9fd63 # v3.0
         with:
           platform: x64
+      - name: Set up .NET
+        uses: actions/setup-dotnet@9d04f2ee8f25c48c6765f5a4d2c16802c93e7c7f # v4.3.1
+        with:
+          dotnet-version: "8.0.x"
+      - name: Install WiX v7
+        run: |
+          dotnet tool install --global wix --version 7.*
+          echo "$env:USERPROFILE\\.dotnet\\tools" >> $env:GITHUB_PATH
       - name: Set up Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
@@ -41,8 +60,8 @@ jobs:
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
+            ~\AppData\Local\go-build
+            ~\go\pkg\mod
           key: ${{ runner.os }}-go-crossbuild-windows-amd64-${{ hashFiles('**/go.sum') }}-${{ hashFiles('**/*.go') }}
           restore-keys: |
             ${{ runner.os }}-go-crossbuild-windows-amd64-${{ hashFiles('**/go.sum') }}-
@@ -53,36 +72,28 @@ jobs:
             ${{ runner.os }}-
       - name: Generate assets
         run: go generate ./client
-      - name: Prebuild for Windows cross-compilation
-        if: steps.restore-cache.outputs.cache-hit != 'true'
-        run: |
-          echo "Cache miss - prebuilding standard library for Windows"
-          CGO_ENABLED=1 GOOS=windows GOARCH=amd64 CC=x86_64-w64-mingw32-gcc \
-            go build -v -trimpath ./client
-        env:
-          GOCACHE: /home/runner/.cache/go-build
       - name: Get previous stable release
         id: get_previous_stable
         run: |
-          CURRENT_TAG=${GITHUB_REF_NAME}
-          echo "Current tag: $CURRENT_TAG"
+          $currentTag = $env:GITHUB_REF_NAME
+          Write-Host "Current tag: $currentTag"
 
-          # List tags, filter out pre-releases (containing '-'), exclude current tag, sort version, take last
-          PREVIOUS_STABLE=$(git tag -l "v*" | grep -v "-" | grep -v "^$CURRENT_TAG$" | sort -V | tail -n 1)
-          echo "Previous stable release: $PREVIOUS_STABLE"
-          if [[ -z "$PREVIOUS_STABLE" ]]; then
-            echo "No previous stable release found."
-            echo "previous_stable=" >> $GITHUB_OUTPUT
+          $tags = git tag -l "v*" | Where-Object { $_ -notmatch "-" -and $_ -ne $currentTag }
+          $sorted = $tags | Sort-Object { [version]($_.TrimStart("v")) }
+          $previousStable = $sorted | Select-Object -Last 1
+
+          if (-not $previousStable) {
+            Write-Host "No previous stable release found."
+            "previous_stable=" >> $env:GITHUB_OUTPUT
             exit 0
-          fi
+          }
 
-          if [[ "$CURRENT_TAG" != *"-"* ]]; then
-            echo "previous_stable=$PREVIOUS_STABLE" >> $GITHUB_OUTPUT
-          else
-            echo "Current release is a pre-release"
-            echo "Skip setting previous_stable."
-            echo "previous_stable=" >> $GITHUB_OUTPUT
-          fi
+          if ($currentTag -notmatch "-") {
+            "previous_stable=$previousStable" >> $env:GITHUB_OUTPUT
+          } else {
+            Write-Host "Current release is a pre-release"
+            "previous_stable=" >> $env:GITHUB_OUTPUT
+          }
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@5daf1e915a5f0af01ddbcd89a43b8061ff4f1a89 # v7.2.2
         with:
@@ -101,40 +112,34 @@ jobs:
           subject-checksums: ./dist/checksums.txt
       - name: Output Release Summary
         run: |
-          echo "## Release Summary" >> $GITHUB_STEP_SUMMARY
-          echo "Release: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
-          # Release notes link
-          echo "Release Notes: [View on GitHub](${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ github.ref_name }})" >> $GITHUB_STEP_SUMMARY
-          # List artifacts
-          echo "### Artifacts" >> $GITHUB_STEP_SUMMARY
-          for file in dist/*; do
-            if [ -f "$file" ]; then
-              echo "- $(basename "$file")" >> $GITHUB_STEP_SUMMARY
-            fi
-          done
-          echo "" >> $GITHUB_STEP_SUMMARY
-          # Include metadata.json content
-          if [ -f dist/metadata.json ]; then
-            echo "### Metadata" >> $GITHUB_STEP_SUMMARY
-            echo '```json' >> $GITHUB_STEP_SUMMARY
-            cat dist/metadata.json >> $GITHUB_STEP_SUMMARY
-            echo '' >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-          fi
-          # Cache state
-          echo "### Cache State" >> $GITHUB_STEP_SUMMARY
-          if [ "${{ steps.restore-cache.outputs.cache-hit }}" == "true" ]; then
-            echo "Go module cache was restored from cache." >> $GITHUB_STEP_SUMMARY
-          else
-            echo "Go module cache was not restored from cache." >> $GITHUB_STEP_SUMMARY
-          fi
-          echo "Cache prime key: ${{ steps.restore-cache.outputs.cache-primary-key }}" >> $GITHUB_STEP_SUMMARY
-          echo "Cache matched key: ${{ steps.restore-cache.outputs.cache-matched-key }}" >> $GITHUB_STEP_SUMMARY
+          "## Release Summary" >> $env:GITHUB_STEP_SUMMARY
+          "Release: ${{ github.ref_name }}" >> $env:GITHUB_STEP_SUMMARY
+          "Release Notes: [View on GitHub](${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ github.ref_name }})" >> $env:GITHUB_STEP_SUMMARY
+          "### Artifacts" >> $env:GITHUB_STEP_SUMMARY
+          Get-ChildItem -Path dist -File | ForEach-Object {
+            "- $($_.Name)" >> $env:GITHUB_STEP_SUMMARY
+          }
+          "" >> $env:GITHUB_STEP_SUMMARY
+          if (Test-Path dist/metadata.json) {
+            "### Metadata" >> $env:GITHUB_STEP_SUMMARY
+            "```json" >> $env:GITHUB_STEP_SUMMARY
+            Get-Content dist/metadata.json >> $env:GITHUB_STEP_SUMMARY
+            "" >> $env:GITHUB_STEP_SUMMARY
+            "```" >> $env:GITHUB_STEP_SUMMARY
+          }
+          "### Cache State" >> $env:GITHUB_STEP_SUMMARY
+          if ("${{ steps.restore-cache.outputs.cache-hit }}" -eq "true") {
+            "Go module cache was restored from cache." >> $env:GITHUB_STEP_SUMMARY
+          } else {
+            "Go module cache was not restored from cache." >> $env:GITHUB_STEP_SUMMARY
+          }
+          "Cache prime key: ${{ steps.restore-cache.outputs.cache-primary-key }}" >> $env:GITHUB_STEP_SUMMARY
+          "Cache matched key: ${{ steps.restore-cache.outputs.cache-matched-key }}" >> $env:GITHUB_STEP_SUMMARY
       - name: Save Go module cache
         if: always()
         uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
+            ~\AppData\Local\go-build
+            ~\go\pkg\mod
           key: ${{ runner.os }}-go-crossbuild-windows-amd64-${{ hashFiles('**/go.sum') }}-${{ hashFiles('**/*.go') }}

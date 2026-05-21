@@ -207,10 +207,15 @@ func realMain(sharedURI string, sharedArchive string) error {
 		yes := (&dialog.MsgBuilder{Msg: lang.LocalizeKey("update.available", "New version \"{{.Version}}\" is available. Click 'Yes' to update.", map[string]any{"Version": tag})}).Title(lang.LocalizeKey("update.title", "Update Available")).YesNo()
 		if yes {
 			slog.Info("Updating to new version", "version", tag)
-			if err := versioning.Update(context.Background(), tag); err != nil {
+			installerLaunched, err := versioning.Update(context.Background(), tag)
+			if err != nil {
 				slog.Error("Failed to update", "error", err)
 				(&dialog.MsgBuilder{Msg: lang.LocalizeKey("update.failed", "Update failed: {{.Error}}", map[string]any{"Error": err.Error()})}).Title(lang.LocalizeKey("app.error", "Error")).Error()
 				return err
+			}
+			if installerLaunched {
+				slog.Info("Installer launched, exiting to allow update")
+				return nil
 			}
 			execCmd := exec.Command(os.Args[0], os.Args[1:]...)
 			execCmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
