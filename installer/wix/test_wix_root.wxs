@@ -1,0 +1,9 @@
+﻿<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="TestApp" Language="1033" Version="1.0.0.0" Manufacturer="TestCo" UpgradeCode="{D7F8A8A0-1234-4B8F-9E5B-6A7B8C9D0E1F}">
+    <Feature Id="ProductFeature" Title="TestApp" Level="1" />
+  
+      <StandardDirectory Id="ProgramFilesFolder">
+        <Directory Id="INSTALLFOLDER" Name="TestApp" />
+      </StandardDirectory>
+    </Package>
+</Wix>

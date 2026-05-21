@@ -1,46 +1,12 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
-  <?define ProductVersion="0.0.0" ?>
-
-  <Package
-    Name="Mod of Us - Among Us Mod Manager"
-    Manufacturer="ikafly144"
-    Version="$(var.ProductVersion)"
-    UpgradeCode="{3C7B19C3-5A2D-4C4E-8B71-88D8F8DE18B2}"
-    InstallScope="perUser"
-    InstallPrivileges="limited"
-    Compressed="yes">
-    <SummaryInformation Description="Mod of Us - Among Us Mod Manager" />
-    <MajorUpgrade DowngradeErrorMessage="A newer version of Mod of Us is already installed." />
-    <MediaTemplate />
-
-    <Icon Id="appIcon" SourceFile="$(var.SourceDir)\icon.ico" />
+﻿<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <Package Name="Mod of Us - Among Us Mod Manager" Language="1041" Version="$(var.ProductVersion)" Manufacturer="ikafly144" UpgradeCode="{3C7B19C3-5A2D-4C4E-8B71-88D8F8DE18B2}"><Icon Id="appIcon" SourceFile="$(var.SourceDir)\\client\\icon.ico" />
     <Property Id="ARPPRODUCTICON" Value="appIcon" />
 
-    <StandardDirectory Id="LocalAppDataFolder">
-      <Directory Id="INSTALLFOLDER" Name="Mod of Us">
-        <Component Id="MainExe" Guid="{B2D5A99B-0D56-40C8-94B3-8FB3A8A6D7E4}">
-          <File Id="ModOfUsExe" Source="$(var.SourceDir)\Mod of Us.exe" KeyPath="yes" />
-        </Component>
-        <Component Id="DiscordSdkDll" Guid="{1B9E7135-9326-4E38-8C96-3C4B16F6E4F9}">
-          <File Id="DiscordSdkDllFile" Source="$(var.SourceDir)\discord_partner_sdk.dll" KeyPath="yes" />
-        </Component>
-      </Directory>
-    </StandardDirectory>
+    <!-- Exit dialog checkbox to launch the app -->
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Launch Mod of Us after setup" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="0" />
 
-    <StandardDirectory Id="ProgramMenuFolder">
-      <Directory Id="ProgramMenuDir" Name="Mod of Us">
-        <Component Id="StartMenuShortcut" Guid="{E2EF6B58-4FD5-46E0-9C4A-C0B1E2C4C2B1}">
-          <Shortcut
-            Id="StartMenuShortcut"
-            Name="Mod of Us"
-            Target="[#ModOfUsExe]"
-            WorkingDirectory="INSTALLFOLDER" />
-          <RemoveFolder Id="RemoveProgramMenuDir" On="uninstall" />
-          <RegistryValue Root="HKCU" Key="Software\ikafly144\ModOfUs" Name="installed" Type="integer" Value="1" KeyPath="yes" />
-        </Component>
-      </Directory>
-    </StandardDirectory>
+    
 
     <Feature Id="MainFeature" Title="Mod of Us" Level="1">
       <ComponentRef Id="MainExe" />
@@ -48,6 +14,33 @@
       <ComponentRef Id="StartMenuShortcut" />
     </Feature>
 
-    <UIRef Id="WixUI_Minimal" />
-  </Package>
+    <!-- Custom action to launch the application if checkbox selected -->
+    <CustomAction Id="LaunchApplication" FileRef="ModOfUsExe" ExeCommand="" Return="asyncNoWait" Impersonate="yes" />
+
+    <InstallExecuteSequence>
+      <Custom Action="LaunchApplication" After="InstallFinalize" Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 AND NOT Installed" />
+    </InstallExecuteSequence>
+
+    <UIRef Id="WixUI_ExitDialogOptionalCheckbox" />
+  
+      <StandardDirectory Id="LocalAppDataFolder">
+        <Directory Id="INSTALLFOLDER" Name="Mod of Us">
+          <Component Id="MainExe" Guid="{B2D5A99B-0D56-40C8-94B3-8FB3A8A6D7E4}">
+            <File Id="ModOfUsExe" Source="$(var.SourceDir)\\Mod of Us.exe" KeyPath="yes" />
+          </Component>
+          <Component Id="DiscordSdkDll" Guid="{1B9E7135-9326-4E38-8C96-3C4B16F6E4F9}">
+            <File Id="DiscordSdkDllFile" Source="$(var.SourceDir)\\discord_partner_sdk.dll" KeyPath="yes" />
+          </Component>
+        </Directory>
+      </StandardDirectory>
+      <StandardDirectory Id="ProgramMenuFolder">
+        <Directory Id="ProgramMenuDir" Name="Mod of Us">
+          <Component Id="StartMenuShortcut" Guid="{E2EF6B58-4FD5-46E0-9C4A-C0B1E2C4C2B1}">
+            <Shortcut Id="StartMenuShortcut" Name="Mod of Us" Target="[INSTALLFOLDER]Mod of Us.exe" WorkingDirectory="INSTALLFOLDER" />
+            <RemoveFolder Id="RemoveProgramMenuDir" On="uninstall" />
+            <RegistryValue Root="HKCU" Key="Software\\ikafly144\\ModOfUs" Name="installed" Type="integer" Value="1" KeyPath="yes" />
+          </Component>
+        </Directory>
+      </StandardDirectory>
+    </Package>
 </Wix>

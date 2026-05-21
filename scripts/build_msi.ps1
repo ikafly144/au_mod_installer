@@ -78,20 +78,30 @@ New-Item -Path $stagePath -ItemType Directory | Out-Null
 
 Copy-Item -Path $exePath -Destination $stagePath -Force
 Copy-Item -Path $dllPath -Destination $stagePath -Force
-Copy-Item -Path $iconPath -Destination $stagePath -Force
+$clientStage = Join-Path $stagePath 'client'
+if (-not (Test-Path $clientStage)) { New-Item -Path $clientStage -ItemType Directory | Out-Null }
+Copy-Item -Path $iconPath -Destination (Join-Path $clientStage (Split-Path $iconPath -Leaf)) -Force
 
-$wixCmd = Get-Command wix -ErrorAction SilentlyContinue
-if (-not $wixCmd) {
-    $dotnetCmd = Get-Command dotnet -ErrorAction SilentlyContinue
-    if (-not $dotnetCmd) {
+$dotnetCmd = Get-Command dotnet -ErrorAction SilentlyContinue
+if ($dotnetCmd) {
+    Write-Host "Installing or updating WiX dotnet global tool (v7)..."
+    # Try update first; if that fails, try install
+    & dotnet tool update --global wix --version 7.* 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        & dotnet tool install --global wix --version 7.*
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "Failed to install WiX dotnet tool; will try to use system 'wix' if available."
+        }
+    }
+    $globalTools = Join-Path $env:USERPROFILE '.dotnet\\tools'
+    if (-not ($env:PATH -split ';' | Where-Object { $_ -eq $globalTools })) {
+        $env:PATH = "$globalTools;$env:PATH"
+    }
+} else {
+    $wixCmd = Get-Command wix -ErrorAction SilentlyContinue
+    if (-not $wixCmd) {
         throw "WiX not found and dotnet is unavailable. Install dotnet and run 'dotnet tool install --global wix --version 7.*'."
     }
-    Write-Host "Installing WiX tool..."
-    dotnet tool install --global wix --version 7.*
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to install WiX tool."
-    }
-    $env:PATH = "$env:USERPROFILE\\.dotnet\\tools;$env:PATH"
 }
 
 & wix eula accept wix7 | Out-Null
@@ -99,17 +109,21 @@ if ($LASTEXITCODE -ne 0) {
     throw "Failed to accept WiX EULA (wix7)."
 }
 
-Write-Host "Ensuring WiX UI extension is installed..."
+Write-Host "Ensuring WiX UI and util extensions are installed..."
 & wix extension add WixToolset.UI.wixext
 if ($LASTEXITCODE -ne 0) {
     throw "Failed to install WiX UI extension."
+}
+& wix extension add WixToolset.Util.wixext
+if ($LASTEXITCODE -ne 0) {
+    throw "Failed to install WiX Util extension."
 }
 
 $wixArgs = @(
     "build",
     "-nologo",
     "-acceptEula", "wix7",
-    "-ext", "WixToolset.UI.wixext",
+    "-ext", "WixToolset.UI.wixext", "-ext", "WixToolset.Util.wixext",
     "-d", "SourceDir=$stagePath",
     "-d", "ProductVersion=$msiVersion",
     "-out", $outputPath,
