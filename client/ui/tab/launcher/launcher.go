@@ -380,6 +380,10 @@ func (l *Launcher) refreshRoomLinkUI(info *core.IPCLobbyInfo, running bool) {
 	key := roomKeyForCache(room, runningProfileID)
 	cache := l.state.Core.GetSharedRoom()
 	if cache.RoomKey != key {
+		if fyne.CurrentApp().Preferences().BoolWithFallback("auto_sharing", true) {
+			l.shareCurrentRoom()
+			return
+		}
 		l.roomLinkEntry.SetText(lang.LocalizeKey("launcher.join_link.placeholder", "No room shared now"))
 		l.copyRoomLinkButton.Disable()
 		l.unpublishRoomButton.Disable()
@@ -391,7 +395,11 @@ func (l *Launcher) refreshRoomLinkUI(info *core.IPCLobbyInfo, running bool) {
 	if cache.URL != "" && cache.ExpiresAt.After(time.Now()) {
 		l.roomLinkEntry.SetText(cache.URL)
 		l.copyRoomLinkButton.Enable()
-		l.unpublishRoomButton.Enable()
+		if fyne.CurrentApp().Preferences().BoolWithFallback("auto_sharing", true) {
+			l.unpublishRoomButton.Disable()
+		} else {
+			l.unpublishRoomButton.Enable()
+		}
 	} else {
 		l.roomLinkEntry.SetText(lang.LocalizeKey("launcher.join_link.placeholder", "No room shared now"))
 		l.copyRoomLinkButton.Disable()
