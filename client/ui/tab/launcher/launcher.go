@@ -383,6 +383,7 @@ func (l *Launcher) refreshRoomLinkUI(info *core.IPCLobbyInfo, running bool) {
 	cache := l.state.Core.GetSharedRoom()
 	if cache.RoomKey != key {
 		if fyne.CurrentApp().Preferences().BoolWithFallback("auto_sharing", true) {
+			l.state.Core.InvalidateCachedRoomShareAsync()
 			l.shareCurrentRoom(false)
 			return
 		}
