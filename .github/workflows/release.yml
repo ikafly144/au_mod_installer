@@ -108,10 +108,17 @@ jobs:
         with:
           subject-checksums: ./dist/checksums.txt
       - name: Output Release Summary
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          CACHE_HIT: ${{ steps.restore-cache.outputs.cache-hit }}
+          CACHE_PRIMARY_KEY: ${{ steps.restore-cache.outputs.cache-primary-key }}
+          CACHE_MATCHED_KEY: ${{ steps.restore-cache.outputs.cache-matched-key }}
         run: |
           "## Release Summary" >> $env:GITHUB_STEP_SUMMARY
-          "Release: ${{ github.ref_name }}" >> $env:GITHUB_STEP_SUMMARY
-          "Release Notes: [View on GitHub](${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ github.ref_name }})" >> $env:GITHUB_STEP_SUMMARY
+          "Release: $env:GITHUB_REF_NAME" >> $env:GITHUB_STEP_SUMMARY
+          "Release Notes: [View on GitHub]($env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/releases/tag/$env:GITHUB_REF_NAME)" >> $env:GITHUB_STEP_SUMMARY
           "### Artifacts" >> $env:GITHUB_STEP_SUMMARY
           Get-ChildItem -Path dist -File | ForEach-Object {
             "- $($_.Name)" >> $env:GITHUB_STEP_SUMMARY
@@ -125,13 +132,13 @@ jobs:
             "```" >> $env:GITHUB_STEP_SUMMARY
           }
           "### Cache State" >> $env:GITHUB_STEP_SUMMARY
-          if ("${{ steps.restore-cache.outputs.cache-hit }}" -eq "true") {
+          if ("$env:CACHE_HIT" -eq "true") {
             "Go module cache was restored from cache." >> $env:GITHUB_STEP_SUMMARY
           } else {
             "Go module cache was not restored from cache." >> $env:GITHUB_STEP_SUMMARY
           }
-          "Cache prime key: ${{ steps.restore-cache.outputs.cache-primary-key }}" >> $env:GITHUB_STEP_SUMMARY
-          "Cache matched key: ${{ steps.restore-cache.outputs.cache-matched-key }}" >> $env:GITHUB_STEP_SUMMARY
+          "Cache prime key: $env:CACHE_PRIMARY_KEY" >> $env:GITHUB_STEP_SUMMARY
+          "Cache matched key: $env:CACHE_MATCHED_KEY" >> $env:GITHUB_STEP_SUMMARY
       - name: Save Go module cache
         if: always()
         uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
