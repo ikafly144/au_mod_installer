@@ -61,6 +61,10 @@ func (c *OfflineClient) DeleteSharedGame(sessionID, hostKey string) error {
 	return errors.New("offline mode: delete shared game not available")
 }
 
+func (c *OfflineClient) UpdateSharedGameExpiration(sessionID, hostKey string) (*rest.ShareGameResponse, error) {
+	return nil, errors.New("offline mode: update shared game expiration not available")
+}
+
 func (c *OfflineClient) GetJoinGameDownload(sessionID string) (*rest.JoinGameDownloadResponse, error) {
 	return nil, errors.New("offline mode: join game download not available")
 }

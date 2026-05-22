@@ -32,7 +32,6 @@ import (
 
 	"github.com/ikafly144/au_mod_installer/client/core"
 	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
-	commonrest "github.com/ikafly144/au_mod_installer/common/rest"
 	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 	"github.com/ikafly144/au_mod_installer/pkg/profile"
@@ -377,7 +376,7 @@ func (l *Launcher) refreshRoomLinkUI(info *core.IPCLobbyInfo, running bool) {
 	}
 	l.shareRoomButton.Enable()
 	runningProfileID, _ := l.state.Core.CurrentRunningProfileAndPID()
-	key := roomKeyForCache(room, runningProfileID)
+	key := core.RoomKeyForCache(room, runningProfileID)
 	cache := l.state.Core.GetSharedRoom()
 	if cache.RoomKey != key {
 		if fyne.CurrentApp().Preferences().BoolWithFallback("auto_sharing", true) {
@@ -405,10 +404,6 @@ func (l *Launcher) refreshRoomLinkUI(info *core.IPCLobbyInfo, running bool) {
 		l.copyRoomLinkButton.Disable()
 		l.unpublishRoomButton.Disable()
 	}
-}
-
-func roomKeyForCache(room commonrest.RoomInfo, profileID uuid.UUID) string {
-	return strings.ToUpper(strings.TrimSpace(room.LobbyCode)) + "|" + strings.TrimSpace(room.ServerIP) + "|" + fmt.Sprint(room.ServerPort) + "|" + profileID.String()
 }
 
 func (l *Launcher) copyRoomLinkToClipboard() {
@@ -464,7 +459,7 @@ func (l *Launcher) shareCurrentRoom() {
 		l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("launcher.join_link.no_room", "部屋情報を取得できません。部屋に参加してから再試行してください。")))
 		return
 	}
-	roomKey := roomKeyForCache(room, prof.ID)
+	roomKey := core.RoomKeyForCache(room, prof.ID)
 
 	cache := l.state.Core.GetSharedRoom()
 	if cache.RoomKey == roomKey && cache.URL != "" && cache.ExpiresAt.After(time.Now()) {

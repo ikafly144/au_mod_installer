@@ -141,6 +141,10 @@ func (f *FileClient) DeleteSharedGame(sessionID, hostKey string) error {
 	return fmt.Errorf("local mode: delete shared game not available")
 }
 
+func (f *FileClient) UpdateSharedGameExpiration(sessionID, hostKey string) (*rest.ShareGameResponse, error) {
+	return nil, fmt.Errorf("local mode: update shared game expiration not available")
+}
+
 func (f *FileClient) GetJoinGameDownload(sessionID string) (*rest.JoinGameDownloadResponse, error) {
 	return nil, fmt.Errorf("local mode: join game download not available")
 }

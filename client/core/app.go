@@ -26,6 +26,7 @@ import (
 
 	"github.com/ikafly144/au_mod_installer/client/activity"
 	"github.com/ikafly144/au_mod_installer/client/rest"
+	commonrest "github.com/ikafly144/au_mod_installer/common/rest"
 	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
 	"github.com/ikafly144/au_mod_installer/pkg/profile"
 	"github.com/ikafly144/au_mod_installer/pkg/progress"
@@ -116,6 +117,52 @@ func (a *App) InvalidateCachedRoomShareAsync() {
 	}()
 }
 
+func (a *App) HeartbeatRoomShareAsync() {
+	a.roomShareMu.Lock()
+	cache := a.roomShareCache
+	a.roomShareMu.Unlock()
+	if cache.SessionID == "" || cache.HostKey == "" {
+		return
+	}
+
+	// Check if current room matches
+	a.runningProfileMu.Lock()
+	profileID := a.runningProfileID
+	lobby := a.lobbyInfo
+	a.runningProfileMu.Unlock()
+
+	room, ok := a.CurrentRoomInfo(lobby)
+	if !ok {
+		return
+	}
+	roomKey := RoomKeyForCache(room, profileID)
+	if cache.RoomKey != roomKey {
+		return
+	}
+
+	// Only heartbeat if it expires within 30 minutes
+	if cache.ExpiresAt.After(time.Now().Add(30 * time.Minute)) {
+		return
+	}
+
+	go func() {
+		rs, err := a.Rest.UpdateSharedGameExpiration(cache.SessionID, cache.HostKey)
+		if err != nil {
+			slog.Warn("Failed to heartbeat shared room link", "error", err)
+			return
+		}
+		a.roomShareMu.Lock()
+		if a.roomShareCache.SessionID == cache.SessionID {
+			a.roomShareCache.ExpiresAt = rs.ExpiresAt
+		}
+		a.roomShareMu.Unlock()
+	}()
+}
+
+func RoomKeyForCache(room commonrest.RoomInfo, profileID uuid.UUID) string {
+	return strings.ToUpper(strings.TrimSpace(room.LobbyCode)) + "|" + strings.TrimSpace(room.ServerIP) + "|" + fmt.Sprint(room.ServerPort) + "|" + profileID.String()
+}
+
 func (a *App) GetLobbyInfo() *IPCLobbyInfo {
 	a.runningProfileMu.Lock()
 	defer a.runningProfileMu.Unlock()
@@ -149,6 +196,8 @@ func (a *App) updateRichPresence() {
 
 	if profileID == uuid.Nil {
 		a.ActivityService.ClearActivity()
+		// Auto-stop sharing when game ends
+		a.InvalidateCachedRoomShareAsync()
 		return
 	}
 
@@ -184,6 +233,8 @@ func (a *App) updateRichPresence() {
 			secrets.SetJoin(share.URL)
 			act.SetSecrets(secrets)
 		}
+		// Heartbeat sharing if active
+		a.HeartbeatRoomShareAsync()
 	} else {
 		act.SetState(lang.LocalizeKey("discord.status.in_main_menu", "In Main Menu"))
 	}

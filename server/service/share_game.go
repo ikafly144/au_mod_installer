@@ -169,6 +169,30 @@ func (m *shareGameManager) delete(sessionID, hostKey string) error {
 	return nil
 }
 
+func (m *shareGameManager) updateExpiration(sessionID, hostKey string) (*restcommon.ShareGameResponse, error) {
+	now := time.Now()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.cleanupLocked(now)
+
+	s, ok := m.sessions[sessionID]
+	if !ok {
+		return nil, ErrShareGameNotFound
+	}
+	if s.HostKey != hostKey {
+		return nil, ErrShareGameUnauthorized
+	}
+
+	s.ExpiresAt = now.Add(shareGameTTL)
+
+	return &restcommon.ShareGameResponse{
+		URL:       "/join_game?session_id=" + sessionID,
+		SessionID: sessionID,
+		HostKey:   hostKey,
+		ExpiresAt: s.ExpiresAt,
+	}, nil
+}
+
 func (m *shareGameManager) allowRateLocked(ip string, now time.Time) error {
 	state, ok := m.rateByIP[ip]
 	if !ok || now.Sub(state.WindowStart) >= shareGameRateWindow {

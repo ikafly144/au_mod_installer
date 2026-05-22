@@ -14,6 +14,7 @@ var (
 	EndpointGetModVersionList   = NewEndpoint("GET", "/mod/:mod_id/versions")
 	EndpointGetModVersionDetail = NewEndpoint("GET", "/mod/:mod_id/version/:version_id")
 	EndpointShareGame           = NewEndpoint("POST", "/share_game")
+	EndpointUpdateShareGame     = NewEndpoint("PUT", "/share_game")
 	EndpointDeleteShareGame     = NewEndpoint("DELETE", "/share_game")
 	EndpointJoinGame            = NewEndpoint("GET", "/join_game")
 )
