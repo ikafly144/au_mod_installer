@@ -32,7 +32,7 @@ jobs:
           persist-credentials: false
       - name: Stage Discord SDK DLL
         run: |
-          $dll = Get-ChildItem -Path mus-libs -Recurse -Filter discord_partner_sdk.dll | Select-Object -First 1
+          $dll = Get-ChildItem -Path mus-libs -Recurse -Filter discord_partner_sdk.dll | Sort-Object FullName | Select-Object -First 1
           if (-not $dll) { throw "discord_partner_sdk.dll not found in mus-libs" }
           Copy-Item $dll.FullName -Destination lib\discord_partner_sdk.dll -Force
       - name: Set up MinGW
