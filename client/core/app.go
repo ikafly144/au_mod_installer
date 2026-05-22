@@ -237,6 +237,9 @@ func (a *App) updateRichPresence() {
 		a.HeartbeatRoomShareAsync()
 	} else {
 		act.SetState(lang.LocalizeKey("discord.status.in_main_menu", "In Main Menu"))
+		timestamp := sdk.NewActivityTimestamps()
+		timestamp.SetStart(uint64(prof.LastLaunchedAt.UnixMilli()))
+		act.SetTimestamps(timestamp)
 	}
 
 	a.ActivityService.SetActivity(act, func(et sdk.ErrorType) {
