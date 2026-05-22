@@ -79,7 +79,6 @@ release:
   github:
     name: au_mod_installer
     owner: ikafly144
-  skip_upload: true
   extra_files:
     - glob: dist/*.msi
 
