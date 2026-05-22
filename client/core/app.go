@@ -210,6 +210,7 @@ func (a *App) updateRichPresence() {
 	a.runningProfileMu.Lock()
 	profileID := a.runningProfileID
 	lobby := a.lobbyInfo
+	runningStartedAt := a.runningStartedAt
 	a.runningProfileMu.Unlock()
 
 	if profileID == uuid.Nil {
@@ -230,6 +231,12 @@ func (a *App) updateRichPresence() {
 	act.SetName("Mod of Us")
 	act.SetDetails(fmt.Sprintf("Playing %s", prof.Name))
 	act.SetSupportedPlatforms(sdk.ActivityGamePlatformsDesktop)
+
+	if !runningStartedAt.IsZero() {
+		timestamp := sdk.NewActivityTimestamps()
+		timestamp.SetStart(uint64(runningStartedAt.UnixMilli()))
+		act.SetTimestamps(timestamp)
+	}
 
 	if lobby != nil && lobby.IsConnected {
 		if lobby.GameState == "Started" {
@@ -255,9 +262,6 @@ func (a *App) updateRichPresence() {
 		a.HeartbeatRoomShareAsync()
 	} else {
 		act.SetState(lang.LocalizeKey("discord.status.in_main_menu", "In Main Menu"))
-		timestamp := sdk.NewActivityTimestamps()
-		timestamp.SetStart(uint64(prof.LastLaunchedAt.UnixMilli()))
-		act.SetTimestamps(timestamp)
 	}
 
 	a.ActivityService.SetActivity(act, func(et sdk.ErrorType) {
