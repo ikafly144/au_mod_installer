@@ -8,12 +8,12 @@ require (
 	github.com/Microsoft/go-winio v0.6.2
 	github.com/TheTitanrain/w32 v0.0.0-20200114052255-2654d97dbd3d
 	github.com/gin-gonic/gin v1.12.0
-	github.com/google/go-github/v86 v86.0.0
+	github.com/google/go-github/v87 v87.0.0
 	github.com/google/uuid v1.6.0
+	github.com/ikafly144/discord_social_sdk v0.0.0-20260521190916-73789ea2f611
 	github.com/jchv/go-webview2 v0.0.0-20260205173254-56598839c808
 	github.com/josephspurrier/goversioninfo v1.7.0
 	github.com/mcuadros/go-version v0.0.0-20190830083331-035f6764e8d2
-	github.com/minio/selfupdate v0.6.0
 	github.com/nightlyone/lockfile v1.0.0
 	github.com/rs/zerolog v1.35.1
 	github.com/sqweek/dialog v0.0.0-20240226140203-065105509627
@@ -27,7 +27,6 @@ require (
 )
 
 require (
-	aead.dev/minisign v0.3.0 // indirect
 	fyne.io/systray v1.12.1 // indirect
 	fyne.io/tools v1.7.1 // indirect
 	github.com/BurntSushi/toml v1.5.0 // indirect

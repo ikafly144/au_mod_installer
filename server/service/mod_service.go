@@ -48,6 +48,10 @@ func (s *ModService) DeleteSharedGame(sessionID, hostKey string) error {
 	return s.shareGame.delete(sessionID, hostKey)
 }
 
+func (s *ModService) UpdateSharedGameExpiration(sessionID, hostKey string) (*restcommon.ShareGameResponse, error) {
+	return s.shareGame.updateExpiration(sessionID, hostKey)
+}
+
 func (s *ModService) GetJoinGameDownload(sessionID string) (*restcommon.JoinGameDownloadResponse, error) {
 	return s.shareGame.getDownload(sessionID)
 }

@@ -28,6 +28,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          token: ${{ secrets.MUS_LIBS_PAT }}
+          submodules: recursive
+          persist-credentials: false
+      - name: Stage Discord SDK DLL
+        run: |
+          mkdir -p lib
+          dlls=$(find mus-libs -name "discord_partner_sdk.dll")
+          count=$(echo "$dlls" | grep -c .)
+          if [ "$count" -eq 0 ]; then
+            echo "discord_partner_sdk.dll not found in mus-libs"
+            exit 1
+          fi
+          if [ "$count" -ne 1 ]; then
+            echo "multiple discord_partner_sdk.dll files found; please ensure exactly one match:"
+            echo "$dlls"
+            exit 1
+          fi
+          cp "$dlls" lib/discord_partner_sdk.dll
       - name: Cache golangci-lint cache
         id: cache-golangci-lint
         env:
@@ -50,6 +69,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          token: ${{ secrets.MUS_LIBS_PAT }}
+          submodules: recursive
+          persist-credentials: false
+      - name: Stage Discord SDK DLL
+        run: |
+          mkdir -p lib
+          dlls=$(find mus-libs -name "discord_partner_sdk.dll")
+          count=$(echo "$dlls" | grep -c .)
+          if [ "$count" -eq 0 ]; then
+            echo "discord_partner_sdk.dll not found in mus-libs"
+            exit 1
+          fi
+          if [ "$count" -ne 1 ]; then
+            echo "multiple discord_partner_sdk.dll files found; please ensure exactly one match:"
+            echo "$dlls"
+            exit 1
+          fi
+          cp "$dlls" lib/discord_partner_sdk.dll
       - name: Cache Go modules
         id: cache-go-mod
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5

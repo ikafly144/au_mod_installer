@@ -16,6 +16,7 @@ type Client interface {
 	GetModThumbnail(modID string) ([]byte, error)
 	CheckForUpdates(installedVersions map[string]string) (map[string]*modmgr.ModVersion, error)
 	ShareGame(aupack []byte, room rest.RoomInfo) (*rest.ShareGameResponse, error)
+	UpdateSharedGameExpiration(sessionID, hostKey string) (*rest.ShareGameResponse, error)
 	DeleteSharedGame(sessionID, hostKey string) error
 	GetJoinGameDownload(sessionID string) (*rest.JoinGameDownloadResponse, error)
 }

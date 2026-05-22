@@ -103,6 +103,17 @@ func (a *App) PrepareLaunch(gamePath string, profileID uuid.UUID) (string, func(
 	}
 
 	cleanup := func() error {
+		if aumgr.DetectLauncherType(gamePath) == aumgr.LauncherMicrosoft {
+			// Remove winhttp.dll and doorstop_config.ini
+			winHttpPath := filepath.Join(gamePath, "winhttp.dll")
+			if err := os.Remove(winHttpPath); err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("failed to remove winhttp.dll: %w", err)
+			}
+			configPath := filepath.Join(gamePath, "doorstop_config.ini")
+			if err := os.Remove(configPath); err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("failed to remove doorstop_config.ini: %w", err)
+			}
+		}
 		return nil
 	}
 	return profileDir, cleanup, nil

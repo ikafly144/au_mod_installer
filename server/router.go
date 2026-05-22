@@ -200,6 +200,29 @@ func router(srv *service.ModService, pathPrefix string, basePath string) http.Ha
 		}
 		ctx.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
+
+	api.PUT(rest.EndpointUpdateShareGame.Route, func(ctx *gin.Context) {
+		sessionID := strings.TrimSpace(ctx.Query("session_id"))
+		hostKey := strings.TrimSpace(ctx.Query("host_key"))
+		if sessionID == "" || hostKey == "" {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "session_id and host_key are required"})
+			return
+		}
+		rs, err := srv.UpdateSharedGameExpiration(sessionID, hostKey)
+		if err != nil {
+			switch err {
+			case service.ErrShareGameNotFound:
+				ctx.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+			case service.ErrShareGameUnauthorized:
+				ctx.JSON(http.StatusForbidden, gin.H{"error": "invalid host key"})
+			default:
+				slog.ErrorContext(ctx, "Failed to update shared game expiration", "error", err, "session_id", sessionID)
+				ctx.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update shared game expiration"})
+			}
+			return
+		}
+		ctx.JSON(http.StatusOK, rs)
+	})
 	api.GET(rest.EndpointJoinGame.Route, func(ctx *gin.Context) {
 		sessionID := strings.TrimSpace(ctx.Query("session_id"))
 		if sessionID == "" {

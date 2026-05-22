@@ -16,6 +16,9 @@ type IPCLobbyInfo struct {
 	IsInGame       *bool  `json:"IsInGame"`
 	MatchMakerIp   string `json:"MatchMakerIp"`
 	MatchMakerPort int    `json:"MatchMakerPort"`
+
+	JoinedPlayers int `json:"JoinedPlayers"`
+	MaxPlayers    int `json:"MaxPlayers"`
 }
 
 func (i *IPCLobbyInfo) String() string {
@@ -41,6 +44,10 @@ func (i *IPCLobbyInfo) String() string {
 	fmt.Fprint(b, ", ")
 	fmt.Fprintf(b, "MatchMakerIp: %s, ", i.MatchMakerIp)
 	fmt.Fprintf(b, "MatchMakerPort: %d", i.MatchMakerPort)
+
+	fmt.Fprint(b, ", ")
+	fmt.Fprintf(b, "JoinedPlayers: %d, ", i.JoinedPlayers)
+	fmt.Fprintf(b, "MaxPlayers: %d", i.MaxPlayers)
 	fmt.Fprint(b, "}")
 	return b.String()
 }

@@ -126,6 +126,17 @@ func (c *clientImpl) DeleteSharedGame(sessionID, hostKey string) error {
 	return c.do(rest.EndpointDeleteShareGame.Compile(values), nil, nil, 1)
 }
 
+func (c *clientImpl) UpdateSharedGameExpiration(sessionID, hostKey string) (*rest.ShareGameResponse, error) {
+	values := make(url.Values)
+	values.Set("session_id", sessionID)
+	values.Set("host_key", hostKey)
+	var rs rest.ShareGameResponse
+	if err := c.do(rest.EndpointUpdateShareGame.Compile(values), nil, &rs, 1); err != nil {
+		return nil, err
+	}
+	return &rs, nil
+}
+
 func (c *clientImpl) GetJoinGameDownload(sessionID string) (*rest.JoinGameDownloadResponse, error) {
 	values := make(url.Values)
 	values.Set("session_id", sessionID)

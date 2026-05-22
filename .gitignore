@@ -5,8 +5,13 @@
 *.dll
 *.so
 *.dylib
+*.lib
 build/
 bin/
+
+*.msi
+*.wixpdb
+*.wixobj
 
 # Test binary, built with `go test -c`
 *.test

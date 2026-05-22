@@ -7,6 +7,7 @@ Mod of Us is a mod manager for the game "Among Us". It allows players to easily 
 ### Latest Release
 
 You can download the latest version of Mod of Us from the [releases page](https://github.com/ikafly144/au_mod_installer/releases/latest).
+Windows releases are distributed as an MSI installer.
 
 ### Build from Source
 
@@ -15,6 +16,11 @@ To build Mod of Us from source, ensure you have [Go](https://golang.org/dl/) ins
 ```bash
 git clone https://github.com/ikafly144/au_mod_installer.git
 cd au_mod_installer
+```
+
+The Discord SDK DLL is required at build time. Obtain `discord_partner_sdk.dll` from the private `ikafly144/mus-libs` repository and place it in `lib/`.
+
+```bash
 go build ./client
 ```
 
