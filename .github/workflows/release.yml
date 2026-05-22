@@ -117,29 +117,30 @@ jobs:
           CACHE_PRIMARY_KEY: ${{ steps.restore-cache.outputs.cache-primary-key }}
           CACHE_MATCHED_KEY: ${{ steps.restore-cache.outputs.cache-matched-key }}
         run: |
-          "## Release Summary" >> $env:GITHUB_STEP_SUMMARY
-          "Release: $env:GITHUB_REF_NAME" >> $env:GITHUB_STEP_SUMMARY
-          "Release Notes: [View on GitHub]($env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/releases/tag/$env:GITHUB_REF_NAME)" >> $env:GITHUB_STEP_SUMMARY
-          "### Artifacts" >> $env:GITHUB_STEP_SUMMARY
-          Get-ChildItem -Path dist -File | ForEach-Object {
-            "- $($_.Name)" >> $env:GITHUB_STEP_SUMMARY
-          }
-          "" >> $env:GITHUB_STEP_SUMMARY
-          if (Test-Path dist/metadata.json) {
-            "### Metadata" >> $env:GITHUB_STEP_SUMMARY
-            "```json" >> $env:GITHUB_STEP_SUMMARY
-            Get-Content dist/metadata.json >> $env:GITHUB_STEP_SUMMARY
-            "" >> $env:GITHUB_STEP_SUMMARY
-            "```" >> $env:GITHUB_STEP_SUMMARY
-          }
-          "### Cache State" >> $env:GITHUB_STEP_SUMMARY
-          if ("$env:CACHE_HIT" -eq "true") {
-            "Go module cache was restored from cache." >> $env:GITHUB_STEP_SUMMARY
+          $summaryPath = $env:GITHUB_STEP_SUMMARY
+          Add-Content -Path $summaryPath -Value '## Release Summary'
+          Add-Content -Path $summaryPath -Value "Release: $env:GITHUB_REF_NAME"
+          Add-Content -Path $summaryPath -Value "Release Notes: [View on GitHub]($env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/releases/tag/$env:GITHUB_REF_NAME)"
+          Add-Content -Path $summaryPath -Value '### Artifacts'
+          if (Test-Path dist) {
+            Get-ChildItem -Path dist -File | ForEach-Object { Add-Content -Path $summaryPath -Value ("- {0}" -f $_.Name) }
           } else {
-            "Go module cache was not restored from cache." >> $env:GITHUB_STEP_SUMMARY
+            Add-Content -Path $summaryPath -Value '- (no dist directory)'
           }
-          "Cache prime key: $env:CACHE_PRIMARY_KEY" >> $env:GITHUB_STEP_SUMMARY
-          "Cache matched key: $env:CACHE_MATCHED_KEY" >> $env:GITHUB_STEP_SUMMARY
+          if (Test-Path dist/metadata.json) {
+            Add-Content -Path $summaryPath -Value '### Metadata'
+            Add-Content -Path $summaryPath -Value '```json'
+            Get-Content dist/metadata.json | ForEach-Object { Add-Content -Path $summaryPath -Value $_ }
+            Add-Content -Path $summaryPath -Value '```'
+          }
+          Add-Content -Path $summaryPath -Value '### Cache State'
+          if ($env:CACHE_HIT -eq 'true') {
+            Add-Content -Path $summaryPath -Value 'Go module cache was restored from cache.'
+          } else {
+            Add-Content -Path $summaryPath -Value 'Go module cache was not restored from cache.'
+          }
+          Add-Content -Path $summaryPath -Value "Cache prime key: $env:CACHE_PRIMARY_KEY"
+          Add-Content -Path $summaryPath -Value "Cache matched key: $env:CACHE_MATCHED_KEY"
       - name: Save Go module cache
         if: always()
         uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
