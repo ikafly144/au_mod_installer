@@ -110,6 +110,9 @@ func Update(ctx context.Context, tag string) (bool, error) {
 				return false, fmt.Errorf("failed to download checksums.txt: %w", err)
 			}
 			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				return false, fmt.Errorf("failed to download checksums.txt: status code %d", resp.StatusCode)
+			}
 			buf := new(strings.Builder)
 
 			var sha256Hash [32]byte
@@ -154,6 +157,9 @@ func Update(ctx context.Context, tag string) (bool, error) {
 		return false, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return false, fmt.Errorf("failed to download MSI: status code %d", resp.StatusCode)
+	}
 	hasher := sha256.New()
 	tempFile, err := os.CreateTemp("", "mod-of-us-*.msi")
 	if err != nil {
