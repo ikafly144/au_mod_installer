@@ -120,7 +120,7 @@ func NewLauncherTab(s *uicommon.State) *Launcher {
 	l = Launcher{
 		state:                  s,
 		launchButton:           widget.NewButtonWithIcon(lang.LocalizeKey("launcher.launch", "Launch"), theme.MediaPlayIcon(), l.runLaunch),
-		shareRoomButton:        widget.NewButtonWithIcon(lang.LocalizeKey("launcher.join_link.create", "Create Join Link"), theme.MailForwardIcon(), l.shareCurrentRoom),
+		shareRoomButton:        widget.NewButtonWithIcon(lang.LocalizeKey("launcher.join_link.create", "Create Join Link"), theme.MailForwardIcon(), func() { l.shareCurrentRoom(true) }),
 		copyRoomLinkButton:     widget.NewButtonWithIcon(lang.LocalizeKey("launcher.join_link.copy", "Copy Link"), theme.ContentCopyIcon(), l.copyRoomLinkToClipboard),
 		unpublishRoomButton:    widget.NewButtonWithIcon(lang.LocalizeKey("launcher.join_link.unpublish", "Stop Sharing"), theme.MediaStopIcon(), l.unpublishCurrentRoom),
 		roomLinkEntry:          widget.NewLabel(""),
@@ -380,7 +380,7 @@ func (l *Launcher) refreshRoomLinkUI(info *core.IPCLobbyInfo, running bool) {
 	cache := l.state.Core.GetSharedRoom()
 	if cache.RoomKey != key {
 		if fyne.CurrentApp().Preferences().BoolWithFallback("auto_sharing", true) {
-			l.shareCurrentRoom()
+			l.shareCurrentRoom(false)
 			return
 		}
 		l.roomLinkEntry.SetText(lang.LocalizeKey("launcher.join_link.placeholder", "No room shared now"))
@@ -440,7 +440,7 @@ func (l *Launcher) unpublishCurrentRoom() {
 	)
 }
 
-func (l *Launcher) shareCurrentRoom() {
+func (l *Launcher) shareCurrentRoom(copyToClipboard bool) {
 	if l.state.Core.IsRoomShareGenerating() {
 		return
 	}
@@ -470,7 +470,9 @@ func (l *Launcher) shareCurrentRoom() {
 			l.copyRoomLinkButton.Enable()
 			l.unpublishRoomButton.Enable()
 		})
-		l.copyRoomLinkToClipboard()
+		if copyToClipboard {
+			l.copyRoomLinkToClipboard()
+		}
 		return
 	}
 
@@ -510,8 +512,10 @@ func (l *Launcher) shareCurrentRoom() {
 		l.roomLinkEntry.SetText(rs.URL)
 		l.copyRoomLinkButton.Enable()
 		l.unpublishRoomButton.Enable()
-		l.copyRoomLinkToClipboard()
 	})
+	if copyToClipboard {
+		fyne.Do(l.copyRoomLinkToClipboard)
+	}
 }
 
 func (l *Launcher) shareProfile(prof profile.Profile) {
