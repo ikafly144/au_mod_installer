@@ -38,6 +38,7 @@ import (
 type Settings struct {
 	state                   *uicommon.State
 	BranchSelect            *widget.Select
+	AutoSharingCheck        *widget.Check
 	DisplayScaleSlider      *widget.Slider
 	DisplayScaleSelect      *widget.Select
 	ClearCacheButton        *widget.Button
@@ -109,6 +110,11 @@ func NewSettings(state *uicommon.State) *Settings {
 	currentBranch := fyne.CurrentApp().Preferences().StringWithFallback("core.update_branch", "stable")
 	branchSelect.SetSelected(currentBranch)
 
+	autoSharingCheck := widget.NewCheck(lang.LocalizeKey("settings.auto_sharing", "Auto Sharing"), func(checked bool) {
+		fyne.CurrentApp().Preferences().SetBool("auto_sharing", checked)
+	})
+	autoSharingCheck.Checked = fyne.CurrentApp().Preferences().BoolWithFallback("auto_sharing", true)
+
 	currentScale := normalizedDisplayScale(fyne.CurrentApp().Settings().Scale())
 	displayScaleValues, displayScaleOptions := availableDisplayScales(currentScale)
 	displayScaleSelect := widget.NewSelect(displayScaleOptions, nil)
@@ -133,6 +139,7 @@ func NewSettings(state *uicommon.State) *Settings {
 	s := &Settings{
 		state:                    state,
 		BranchSelect:             branchSelect,
+		AutoSharingCheck:         autoSharingCheck,
 		DisplayScaleSlider:       displayScaleSlider,
 		DisplayScaleSelect:       displayScaleSelect,
 		epicAccountLabel:         widget.NewLabel(""),
@@ -245,6 +252,14 @@ func (s *Settings) Tab() (*container.TabItem, error) {
 			lang.LocalizeKey("settings.update_channel", "Update Channel"),
 			"",
 			settingsEntry(lang.LocalizeKey("settings.select_update_channel", "Select Update Channel"), s.BranchSelect),
+		),
+		widget.NewCard(
+			lang.LocalizeKey("settings.auto_sharing", "Auto Sharing"),
+			"",
+			container.NewVBox(
+				s.AutoSharingCheck,
+				widget.NewLabelWithStyle(lang.LocalizeKey("settings.auto_sharing_hint", "Automatically generate and update join link when joining a room."), fyne.TextAlignLeading, fyne.TextStyle{Italic: true}),
+			),
 		),
 		widget.NewCard(
 			lang.LocalizeKey("settings.display_scale", "Display Scale"),
