@@ -137,8 +137,11 @@ func NewLauncherTab(s *uicommon.State) *Launcher {
 	}
 	l.createProfileButton.Importance = widget.HighImportance
 	l.shareRoomButton.Importance = widget.MediumImportance
+	l.shareRoomButton.Disable()
 	l.copyRoomLinkButton.Importance = widget.LowImportance
+	l.copyRoomLinkButton.Disable()
 	l.unpublishRoomButton.Importance = widget.LowImportance
+	l.unpublishRoomButton.Disable()
 	l.roomLinkEntry.Selectable = true
 	l.roomLinkEntry.Wrapping = fyne.TextWrapOff
 
@@ -468,7 +471,11 @@ func (l *Launcher) shareCurrentRoom(copyToClipboard bool) {
 			l.setRoomLinkTrayExpanded(true)
 			l.roomLinkEntry.SetText(cache.URL)
 			l.copyRoomLinkButton.Enable()
-			l.unpublishRoomButton.Enable()
+			if fyne.CurrentApp().Preferences().BoolWithFallback("auto_sharing", true) {
+				l.unpublishRoomButton.Disable()
+			} else {
+				l.unpublishRoomButton.Enable()
+			}
 		})
 		if copyToClipboard {
 			l.copyRoomLinkToClipboard()
@@ -511,7 +518,11 @@ func (l *Launcher) shareCurrentRoom(copyToClipboard bool) {
 		l.setRoomLinkTrayExpanded(true)
 		l.roomLinkEntry.SetText(rs.URL)
 		l.copyRoomLinkButton.Enable()
-		l.unpublishRoomButton.Enable()
+		if fyne.CurrentApp().Preferences().BoolWithFallback("auto_sharing", true) {
+			l.unpublishRoomButton.Disable()
+		} else {
+			l.unpublishRoomButton.Enable()
+		}
 	})
 	if copyToClipboard {
 		fyne.Do(l.copyRoomLinkToClipboard)
