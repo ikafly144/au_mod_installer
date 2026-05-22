@@ -69,22 +69,27 @@ func (s *State) Launch(path string, directJoinEnabled bool) {
 
 	startedAt := time.Now()
 	joinInfo := s.TakePendingJoinInfo()
+	var launchSucceeded bool
 	if err := s.Core.ExecuteLaunch(path, profileDir, joinInfo, func(pid int) error {
 		if err := profileLock.SetGamePID(pid, startedAt, directJoinEnabled); err != nil {
 			return err
 		}
 		s.Core.SetRunningPlayStartedAt(startedAt)
 		s.Core.OnGameStartedInternal(activeProfileID, pid)
+		launchSucceeded = true
 		return nil
 	}); err != nil {
 		s.ShowErrorDialog(errors.New(lang.LocalizeKey("launch.error.launch_failed", "Failed to launch Among Us: ") + err.Error()))
 		slog.Warn("Failed to launch Among Us", "error", err)
 	}
+
 	s.Core.OnGameExitedInternal(activeProfileID)
-	finishedAt := time.Now()
-	if activeProfileID != uuid.Nil {
-		if err := s.UpdateProfileLaunchMetrics(activeProfileID, startedAt, finishedAt); err != nil {
-			s.SetError(err)
+	if launchSucceeded {
+		finishedAt := time.Now()
+		if activeProfileID != uuid.Nil {
+			if err := s.UpdateProfileLaunchMetrics(activeProfileID, startedAt, finishedAt); err != nil {
+				s.SetError(err)
+			}
 		}
 	}
 	_ = s.CanLaunch.Set(true)
