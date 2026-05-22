@@ -41,9 +41,7 @@ builds:
       post:
         - pwsh -NoProfile -File scripts/build_msi.ps1 -Version {{ .Version }} -BuildDirName {{ .ProjectName }}_{{ .Target }}
 
-archives:
-  - formats:
-      - binary
+archives: []
 
 checksum:
   name_template: "checksums.txt"
@@ -81,6 +79,7 @@ release:
   github:
     name: au_mod_installer
     owner: ikafly144
+  skip_upload: true
   extra_files:
     - glob: dist/*.msi
 
