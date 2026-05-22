@@ -110,7 +110,7 @@ func NewSettings(state *uicommon.State) *Settings {
 	currentBranch := fyne.CurrentApp().Preferences().StringWithFallback("core.update_branch", "stable")
 	branchSelect.SetSelected(currentBranch)
 
-	autoSharingCheck := widget.NewCheck(lang.LocalizeKey("settings.auto_sharing", "Auto Sharing"), func(checked bool) {
+	autoSharingCheck := widget.NewCheck(lang.LocalizeKey("settings.auto_sharing_label", "Enable Room Auto Sharing"), func(checked bool) {
 		fyne.CurrentApp().Preferences().SetBool("auto_sharing", checked)
 	})
 	autoSharingCheck.Checked = fyne.CurrentApp().Preferences().BoolWithFallback("auto_sharing", true)
