@@ -101,7 +101,11 @@ func Update(ctx context.Context, tag string) (bool, error) {
 			continue
 		}
 		if asset.GetName() == "checksums.txt" {
-			resp, err := http.Get(asset.GetBrowserDownloadURL())
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, asset.GetBrowserDownloadURL(), nil)
+			if err != nil {
+				return false, fmt.Errorf("failed to create request for checksums.txt: %w", err)
+			}
+			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
 				return false, fmt.Errorf("failed to download checksums.txt: %w", err)
 			}
@@ -141,7 +145,11 @@ func Update(ctx context.Context, tag string) (bool, error) {
 	if len(checkSum) == 0 {
 		return false, errors.New("checksum for MSI not found in checksums.txt")
 	}
-	resp, err := http.Get(binaryAsset.GetBrowserDownloadURL())
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, binaryAsset.GetBrowserDownloadURL(), nil)
+	if err != nil {
+		return false, err
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return false, err
 	}
