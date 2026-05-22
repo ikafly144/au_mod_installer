@@ -32,9 +32,10 @@ jobs:
           persist-credentials: false
       - name: Stage Discord SDK DLL
         run: |
-          $dll = Get-ChildItem -Path mus-libs -Recurse -Filter discord_partner_sdk.dll | Sort-Object FullName | Select-Object -First 1
-          if (-not $dll) { throw "discord_partner_sdk.dll not found in mus-libs" }
-          Copy-Item $dll.FullName -Destination lib\discord_partner_sdk.dll -Force
+          $dlls = @(Get-ChildItem -Path mus-libs -Recurse -Filter discord_partner_sdk.dll)
+          if ($dlls.Count -eq 0) { throw "discord_partner_sdk.dll not found in mus-libs" }
+          elseif ($dlls.Count -ne 1) { throw "multiple discord_partner_sdk.dll files found; please ensure exactly one match" }
+          else { Copy-Item $dlls[0].FullName -Destination lib\discord_partner_sdk.dll -Force }
       - name: Set up MinGW
         uses: egor-tensin/setup-mingw@41b837e47d7f85214629d255b9c4bc3fcbe9fd63 # v3.0
         with:
