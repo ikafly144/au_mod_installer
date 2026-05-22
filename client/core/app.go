@@ -76,6 +76,7 @@ type SharedRoomLink struct {
 	SessionID string
 	HostKey   string
 	ExpiresAt time.Time
+	InFlight  bool
 }
 
 func (a *App) GetSharedRoom() SharedRoomLink {
@@ -119,11 +120,12 @@ func (a *App) InvalidateCachedRoomShareAsync() {
 
 func (a *App) HeartbeatRoomShareAsync() {
 	a.roomShareMu.Lock()
-	cache := a.roomShareCache
-	a.roomShareMu.Unlock()
-	if cache.SessionID == "" || cache.HostKey == "" {
+	if a.roomShareCache.InFlight || a.roomShareCache.SessionID == "" || a.roomShareCache.HostKey == "" {
+		a.roomShareMu.Unlock()
 		return
 	}
+	cache := a.roomShareCache
+	a.roomShareMu.Unlock()
 
 	// Check if current room matches
 	a.runningProfileMu.Lock()
@@ -145,7 +147,23 @@ func (a *App) HeartbeatRoomShareAsync() {
 		return
 	}
 
+	a.roomShareMu.Lock()
+	if a.roomShareCache.SessionID != cache.SessionID || a.roomShareCache.InFlight {
+		a.roomShareMu.Unlock()
+		return
+	}
+	a.roomShareCache.InFlight = true
+	a.roomShareMu.Unlock()
+
 	go func() {
+		defer func() {
+			a.roomShareMu.Lock()
+			if a.roomShareCache.SessionID == cache.SessionID {
+				a.roomShareCache.InFlight = false
+			}
+			a.roomShareMu.Unlock()
+		}()
+
 		rs, err := a.Rest.UpdateSharedGameExpiration(cache.SessionID, cache.HostKey)
 		if err != nil {
 			slog.Warn("Failed to heartbeat shared room link", "error", err)
