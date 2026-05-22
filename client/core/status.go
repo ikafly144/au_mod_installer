@@ -127,9 +127,14 @@ func (a *App) StopLobbyPolling() {
 	a.runningProfileMu.Lock()
 	stop := a.lobbyPollStop
 	a.lobbyPollStop = nil
+	a.lobbyInfo = nil
+	onLobbyInfoUpdated := a.OnLobbyInfoUpdated
 	a.runningProfileMu.Unlock()
 	if stop != nil {
 		stop()
+	}
+	if onLobbyInfoUpdated != nil {
+		onLobbyInfoUpdated(nil)
 	}
 }
 
