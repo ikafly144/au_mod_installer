@@ -41,7 +41,12 @@ builds:
       post:
         - pwsh -NoProfile -File scripts/build_msi.ps1 -Version {{ .Version }} -BuildDirName {{ .ProjectName }}_{{ .Target }}
 
-archives: []
+archives:
+  - format: zip
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - lib/*.dll
+      - LICENSE
 
 checksum:
   name_template: "checksums.txt"
