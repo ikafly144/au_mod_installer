@@ -5,4 +5,5 @@
   <String Id="ShortcutName" Value="Mod of Us" />
   <String Id="ManufacturerName" Value="ikafly144" />
   <String Id="InstallFolder" Value="Mod of Us" />
+  <String Id="DowngradeError" Value="既に新しいバージョンの Mod of Us がインストールされています。" />
 </WixLocalization>

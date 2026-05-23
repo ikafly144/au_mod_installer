@@ -1,10 +1,11 @@
 ﻿<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
   xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util"
   xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
-  <Package Name="!(loc.ProductName)" Language="1041" Version="$(var.ProductVersion)" Manufacturer="!(loc.ManufacturerName)" UpgradeCode="{3C7B19C3-5A2D-4C4E-8B71-88D8F8DE18B2}">
+  <Package Name="!(loc.ProductName)" Language="1041" Version="$(var.ProductVersion)" Manufacturer="!(loc.ManufacturerName)" UpgradeCode="{3C7B19C3-5A2D-4C4E-8B71-88D8F8DE18B2}" Scope="perUser">
     <Icon Id="appIcon" SourceFile="$(var.SourceDir)\\client\\icon.ico" />
-    <MajorUpgrade DowngradeErrorMessage="A newer version of this application is already installed." />
     <Property Id="ARPPRODUCTICON" Value="appIcon" />
+
+    <MajorUpgrade DowngradeErrorMessage="!(loc.DowngradeError)" AllowSameVersionUpgrades="yes" />
 
     <!-- Exit dialog checkbox to launch the app -->
     <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="!(loc.LaunchAppText)" />
