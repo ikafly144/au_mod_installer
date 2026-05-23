@@ -90,6 +90,11 @@ if (Test-Path $licenseRtfPath) {
     Copy-Item -Path $licenseRtfPath -Destination $stagePath -Force
 }
 
+$imagesPath = Join-Path $repoRoot "installer\wix\*.png"
+if (Test-Path $imagesPath) {
+    Copy-Item -Path $imagesPath -Destination $stagePath -Force
+}
+
 $dotnetCmd = Get-Command dotnet -ErrorAction SilentlyContinue
 if ($dotnetCmd) {
     Write-Host "Installing or updating WiX dotnet global tool (v7)..."

@@ -29,8 +29,8 @@
     <WixVariable Id="WixUILicenseRtf" Value="$(var.LicenseRtfPath)" />
 
     <!-- Installer images (uncomment and provide BMP files in the same directory as this file) -->
-    <!-- <WixVariable Id="WixUIDialogBmp" Value="background.bmp" /> -->
-    <!-- <WixVariable Id="WixUIBannerBmp" Value="banner.bmp" /> -->
+    <WixVariable Id="WixUIDialogBmp" Value="$(var.SourceDir)\\launcher_dialog.png" />
+    <WixVariable Id="WixUIBannerBmp" Value="$(var.SourceDir)\\launcher_banner.png" />
 
     <StandardDirectory Id="LocalAppDataFolder">
       <Directory Id="INSTALLFOLDER" Name="!(loc.InstallFolder)">
