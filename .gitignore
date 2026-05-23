@@ -10,6 +10,7 @@ build/
 bin/
 
 *.msi
+cmd/bootstrapper/mod-of-us.msi
 *.wixpdb
 *.wixobj
 

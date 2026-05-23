@@ -44,6 +44,8 @@ builds:
 archives:
   - formats: [zip]
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    ids:
+      - default
     files:
       - src: lib/*.dll
         dst: /
@@ -55,6 +57,7 @@ checksum:
   algorithm: sha256
   extra_files:
     - glob: dist/*.msi
+    - glob: dist/*.exe
 
 changelog:
   use: github
@@ -88,6 +91,7 @@ release:
     owner: ikafly144
   extra_files:
     - glob: dist/*.msi
+    - glob: dist/*.exe
 
 announce:
   skip: '{{ or .IsSnapshot ( ne .Prerelease "" ) }}'

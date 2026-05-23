@@ -159,3 +159,29 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "MSI generated: $outputPath"
+
+# Build the bootstrapper
+Write-Host "Building bootstrapper..."
+$bootstrapperSource = Join-Path $repoRoot "cmd\bootstrapper"
+$embeddedMsiPath = Join-Path $bootstrapperSource "mod-of-us.msi"
+Copy-Item -Path $outputPath -Destination $embeddedMsiPath -Force
+
+$bootstrapperOutName = "mod-of-us_windows_x86_64.exe"
+$bootstrapperOutPath = Join-Path $distPath $bootstrapperOutName
+
+Push-Location $bootstrapperSource
+try {
+    # Use -ldflags "-H=windowsgui" to hide console if desired, 
+    # but for an installer a console or progress is sometimes okay.
+    # The user asked for a "binary", we'll keep it simple.
+    & go build -ldflags "-s -w -H=windowsgui" -o $bootstrapperOutPath
+    if ($LASTEXITCODE -ne 0) {
+        throw "Bootstrapper build failed"
+    }
+}
+finally {
+    Remove-Item -Path $embeddedMsiPath -Force
+    Pop-Location
+}
+
+Write-Host "Bootstrapper generated: $bootstrapperOutPath"
