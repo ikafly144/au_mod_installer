@@ -174,7 +174,7 @@ try {
     # Use -ldflags "-H=windowsgui" to hide console if desired, 
     # but for an installer a console or progress is sometimes okay.
     # The user asked for a "binary", we'll keep it simple.
-    & go build -ldflags "-s -w -H=windowsgui" -o $bootstrapperOutPath
+    & go build -ldflags "-s -w -H=windowsgui" -o $bootstrapperOutPath -tags bootstrapper
     if ($LASTEXITCODE -ne 0) {
         throw "Bootstrapper build failed"
     }

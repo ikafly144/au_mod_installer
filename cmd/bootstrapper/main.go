@@ -1,3 +1,5 @@
+//go:build bootstrapper
+
 package main
 
 import (
@@ -30,7 +32,7 @@ func main() {
 	}
 
 	fmt.Println("Installer launched successfully.")
-	// We don't wait for the installer to finish as it might take some time and 
+	// We don't wait for the installer to finish as it might take some time and
 	// msiexec runs as a separate process. The temp file will remain until cleaned by OS
 	// or we could try to delete it after a delay, but msiexec needs it while running.
 }
