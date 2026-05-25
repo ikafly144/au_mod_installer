@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
-	"github.com/google/go-github/v87/github"
+	"github.com/google/go-github/v88/github"
 	"github.com/urfave/cli/v3"
 
 	"github.com/ikafly144/au_mod_installer/common/githubrelease"

@@ -10,7 +10,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/google/go-github/v87/github"
+	"github.com/google/go-github/v88/github"
 
 	"github.com/ikafly144/au_mod_installer/common/githubrelease"
 )

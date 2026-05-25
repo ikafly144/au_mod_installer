@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/go-github/v87/github"
+	"github.com/google/go-github/v88/github"
 )
 
 // GetLatestReleaseIncludingPrereleases returns the latest non-draft release
