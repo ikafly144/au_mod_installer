@@ -94,7 +94,7 @@ release:
 announce:
   skip: '{{ or .IsSnapshot ( ne .Prerelease "" ) }}'
   discord:
-    enabled: true
+    enabled: false
     message_template: |-
       {{ .ProjectName }} {{ .Tag }} がリリースされました！
       ダウンロードリンク: <{{ .ReleaseURL }}>
