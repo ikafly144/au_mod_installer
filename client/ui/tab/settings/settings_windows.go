@@ -18,6 +18,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"fyne.io/fyne/v2"
 	fyneapp "fyne.io/fyne/v2/app"
@@ -47,6 +48,10 @@ type Settings struct {
 	epicAccountLabel *widget.Label
 	epicLoginButton  *widget.Button
 	epicLogoutButton *widget.Button
+
+	discordAccountLabel *widget.Label
+	discordLoginButton  *widget.Button
+	discordLogoutButton *widget.Button
 
 	displayScaleValues  map[string]float32
 	scaleControlSyncing bool
@@ -143,6 +148,7 @@ func NewSettings(state *uicommon.State) *Settings {
 		DisplayScaleSlider:       displayScaleSlider,
 		DisplayScaleSelect:       displayScaleSelect,
 		epicAccountLabel:         widget.NewLabel(""),
+		discordAccountLabel:      widget.NewLabel(""),
 		displayScaleValues:       displayScaleValues,
 		currentDisplayScale:      clampDisplayScale(currentScale),
 		thirdPartyLicenses:       thirdPartyLicenses,
@@ -156,8 +162,18 @@ func NewSettings(state *uicommon.State) *Settings {
 
 	s.epicLoginButton = widget.NewButton(lang.LocalizeKey("settings.epic_login", "Login"), s.showEpicLoginDialog)
 	s.epicLogoutButton = widget.NewButton(lang.LocalizeKey("settings.epic_logout", "Logout"), s.epicLogout)
+	s.discordLoginButton = widget.NewButton(lang.LocalizeKey("settings.discord_login", "Login"), s.discordLogin)
+	s.discordLogoutButton = widget.NewButton(lang.LocalizeKey("settings.discord_logout", "Logout"), s.discordLogout)
 
-	s.refreshEpicAccountInfo()
+	go func() {
+		ticker := time.NewTicker(3 * time.Second)
+		defer ticker.Stop()
+		for {
+			fyne.Do(s.refreshDiscordAccountInfo)
+			fyne.Do(s.refreshEpicAccountInfo)
+			<-ticker.C
+		}
+	}()
 
 	s.ClearCacheButton = widget.NewButtonWithIcon(lang.LocalizeKey("settings.clear_cache", "Clear Mod Cache"), theme.DeleteIcon(), s.clearCache)
 
@@ -284,6 +300,14 @@ func (s *Settings) Tab() (*container.TabItem, error) {
 
 	accountPage := container.NewVScroll(container.NewVBox(
 		widget.NewCard(
+			lang.LocalizeKey("settings.discord_account", "Discord Account"),
+			"",
+			container.NewVBox(
+				s.discordAccountLabel,
+				container.NewHBox(s.discordLoginButton, s.discordLogoutButton),
+			),
+		),
+		widget.NewCard(
 			lang.LocalizeKey("settings.epic_games_account", "Epic Games Account"),
 			"",
 			container.NewVBox(
@@ -400,6 +424,84 @@ func (s *Settings) epicLogout() {
 		return
 	}
 	s.refreshEpicAccountInfo()
+}
+
+func (s *Settings) refreshDiscordAccountInfo() {
+	if s.state.Core == nil || s.state.Core.DiscordService == nil {
+		s.discordAccountLabel.SetText(lang.LocalizeKey("settings.discord_unavailable", "Discord is unavailable."))
+		s.discordLoginButton.Hide()
+		s.discordLogoutButton.Hide()
+		return
+	}
+
+	if !s.state.Core.DiscordService.IsLoggedIn() {
+		s.discordAccountLabel.SetText(lang.LocalizeKey("settings.discord_logged_out", "Not Logged In"))
+		s.discordLoginButton.Enable()
+		s.discordLoginButton.Show()
+		s.discordLogoutButton.Hide()
+		return
+	}
+
+	user, ok := s.state.Core.DiscordService.UserInfo()
+	if !ok {
+		s.discordAccountLabel.SetText(lang.LocalizeKey("settings.discord_logged_in", "Logged in to Discord"))
+	} else {
+		displayName := user.Username()
+		if globalName, ok := user.GlobalName(); ok {
+			globalName = strings.TrimSpace(globalName)
+			if globalName != "" {
+				displayName = globalName
+			}
+		}
+		s.discordAccountLabel.SetText(lang.LocalizeKey("settings.discord_logged_in_user", "Logged in as {{.Name}} (ID: {{.ID}})", map[string]any{
+			"Name": displayName,
+			"ID":   user.Id(),
+		}))
+	}
+	s.discordLoginButton.Hide()
+	s.discordLogoutButton.Show()
+}
+
+func (s *Settings) discordLogin() {
+	if s.state.Core == nil || s.state.Core.DiscordService == nil {
+		s.state.ShowErrorDialog(errors.New(lang.LocalizeKey("settings.discord_unavailable", "Discord is unavailable.")))
+		return
+	}
+
+	if s.state.Core.DiscordService.StartSignIn(func(success bool) {
+		if success {
+			fyne.Do(func() {
+				s.discordLoginButton.Enable()
+				s.refreshDiscordAccountInfo()
+				s.state.ShowInfoDialog(
+					lang.LocalizeKey("settings.login_success", "Login Successful"),
+					lang.LocalizeKey("settings.login_success_message", "You have been logged in successfully."),
+				)
+			})
+			return
+		} else {
+			s.state.ShowErrorDialog(errors.New(lang.LocalizeKey("settings.discord_login_failed", "Failed to log in to Discord.")))
+		}
+	}) {
+		s.discordAccountLabel.SetText(lang.LocalizeKey("settings.discord_login_waiting", "Please complete the Discord login in the opened window."))
+		s.discordLoginButton.Disable()
+	} else {
+		s.state.ShowInfoDialog(
+			lang.LocalizeKey("settings.discord_login_in_progress_title", "Login In Progress"),
+			lang.LocalizeKey("settings.discord_login_in_progress_message", "Discord login is already in progress."),
+		)
+		return
+	}
+}
+
+func (s *Settings) discordLogout() {
+	if s.state.Core == nil || s.state.Core.DiscordService == nil {
+		s.state.ShowErrorDialog(errors.New(lang.LocalizeKey("settings.discord_unavailable", "Discord is unavailable.")))
+		return
+	}
+
+	s.state.Core.DiscordService.Logout()
+	s.refreshDiscordAccountInfo()
 }
 
 func (s *Settings) deleteAmongUsData() {

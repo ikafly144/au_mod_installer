@@ -229,7 +229,7 @@ func (a *App) updateRichPresence() {
 	act := sdk.NewActivity()
 	act.SetType(sdk.Discord_ActivityTypes_Playing)
 	act.SetName("Mod of Us")
-	act.SetDetails(new(fmt.Sprintf("Playing %s", prof.Name)))
+	act.SetDetails(fmt.Sprintf("Playing %s", prof.Name))
 	act.SetSupportedPlatforms(sdk.Discord_ActivityGamePlatforms_Desktop)
 
 	if !runningStartedAt.IsZero() {
@@ -240,9 +240,9 @@ func (a *App) updateRichPresence() {
 
 	if lobby != nil && lobby.IsConnected {
 		if lobby.GameState == "Started" {
-			act.SetState(new(lang.LocalizeKey("discord.status.in_game", "In Game")))
+			act.SetState(lang.LocalizeKey("discord.status.in_game", "In Game"))
 		} else {
-			act.SetState(new(lang.LocalizeKey("discord.status.in_lobby", "In Lobby"))) // TODO: More detailed state based on GameState?
+			act.SetState(lang.LocalizeKey("discord.status.in_lobby", "In Lobby")) // TODO: More detailed state based on GameState?
 		}
 		if lobby.MaxPlayers > 0 && lobby.JoinedPlayers > 0 {
 			p := sdk.NewActivityParty()
@@ -261,7 +261,7 @@ func (a *App) updateRichPresence() {
 		// Heartbeat sharing if active
 		a.HeartbeatRoomShareAsync()
 	} else {
-		act.SetState(new(lang.LocalizeKey("discord.status.in_main_menu", "In Main Menu")))
+		act.SetState(lang.LocalizeKey("discord.status.in_main_menu", "In Main Menu"))
 	}
 
 	a.DiscordService.SetActivity(act, func(d *sdk.Discord_ClientResult) {

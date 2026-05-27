@@ -104,8 +104,8 @@ github.com/hack-pad/safejs v0.1.1 h1:d5qPO0iQ7h2oVtpzGnLExE+Wn9AtytxIfltcS2b9KD8
 github.com/hack-pad/safejs v0.1.1/go.mod h1:HdS+bKF1NrE72VoXZeWzxFOVQVUSqZJAG0xNCnb+Tio=
 github.com/hinshun/vt10x v0.0.0-20220119200601-820417d04eec h1:qv2VnGeEQHchGaZ/u7lxST/RaJw+cv273q79D81Xbog=
 github.com/hinshun/vt10x v0.0.0-20220119200601-820417d04eec/go.mod h1:Q48J4R4DvxnHolD5P8pOtXigYlRuPLGl6moFx3ulM68=
-github.com/ikafly144/discord_social_sdk v0.0.0-20260526223209-5abc24d3ff2a h1:+btHKiiS5o61PtlbBG0KQFvzTN/LExS6tOfhNWt6Zj8=
-github.com/ikafly144/discord_social_sdk v0.0.0-20260526223209-5abc24d3ff2a/go.mod h1:bmrZWuOj65F5elSxumJxXE0hznSp37K7ZyJl/rZOhss=
+github.com/ikafly144/discord_social_sdk v0.0.0-20260527121102-bad4e465b7bd h1:0rd1ks8uVmRAxQiZTsZ9WmwIxuLCs2NnzSnH7vR+7Sk=
+github.com/ikafly144/discord_social_sdk v0.0.0-20260527121102-bad4e465b7bd/go.mod h1:bmrZWuOj65F5elSxumJxXE0hznSp37K7ZyJl/rZOhss=
 github.com/jackc/pgpassfile v1.0.0 h1:/6Hmqy13Ss2zCq62VdNG8tM1wchn8zjSGOBJ6icpsIM=
 github.com/jackc/pgpassfile v1.0.0/go.mod h1:CEx0iS5ambNFdcRtxPj5JhEz+xB6uRky5eyVu/W2HEg=
 github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 h1:iCEnooe7UlwOQYpKFhBabPMi4aNAfoODPEFNiAnClxo=
