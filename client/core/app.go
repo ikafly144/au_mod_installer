@@ -24,7 +24,7 @@ import (
 
 	sdk "github.com/ikafly144/discord_social_sdk"
 
-	"github.com/ikafly144/au_mod_installer/client/activity"
+	"github.com/ikafly144/au_mod_installer/client/discord"
 	"github.com/ikafly144/au_mod_installer/client/rest"
 	commonrest "github.com/ikafly144/au_mod_installer/common/rest"
 	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
@@ -46,7 +46,7 @@ type App struct {
 	EpicSessionManager *aumgr.EpicSessionManager
 	EpicApi            *aumgr.EpicApi
 
-	ActivityService *activity.ActivityService
+	DiscordService *discord.DiscordService
 
 	// Running profile state
 	runningProfileMu   sync.Mutex
@@ -203,7 +203,7 @@ func (a *App) StartActivityPolling(ctx context.Context) {
 }
 
 func (a *App) updateRichPresence() {
-	if a.ActivityService == nil {
+	if a.DiscordService == nil {
 		return
 	}
 
@@ -214,7 +214,7 @@ func (a *App) updateRichPresence() {
 	a.runningProfileMu.Unlock()
 
 	if profileID == uuid.Nil {
-		a.ActivityService.ClearActivity()
+		a.DiscordService.ClearActivity()
 		// Auto-stop sharing when game ends
 		a.InvalidateCachedRoomShareAsync()
 		return
@@ -222,15 +222,15 @@ func (a *App) updateRichPresence() {
 
 	prof, ok := a.ProfileManager.Get(profileID)
 	if !ok {
-		a.ActivityService.ClearActivity()
+		a.DiscordService.ClearActivity()
 		return
 	}
 
 	act := sdk.NewActivity()
-	act.SetType(sdk.ActivityTypePlaying)
+	act.SetType(sdk.Discord_ActivityTypes_Playing)
 	act.SetName("Mod of Us")
-	act.SetDetails(fmt.Sprintf("Playing %s", prof.Name))
-	act.SetSupportedPlatforms(sdk.ActivityGamePlatformsDesktop)
+	act.SetDetails(new(fmt.Sprintf("Playing %s", prof.Name)))
+	act.SetSupportedPlatforms(sdk.Discord_ActivityGamePlatforms_Desktop)
 
 	if !runningStartedAt.IsZero() {
 		timestamp := sdk.NewActivityTimestamps()
@@ -240,16 +240,16 @@ func (a *App) updateRichPresence() {
 
 	if lobby != nil && lobby.IsConnected {
 		if lobby.GameState == "Started" {
-			act.SetState(lang.LocalizeKey("discord.status.in_game", "In Game"))
+			act.SetState(new(lang.LocalizeKey("discord.status.in_game", "In Game")))
 		} else {
-			act.SetState(lang.LocalizeKey("discord.status.in_lobby", "In Lobby")) // TODO: More detailed state based on GameState?
+			act.SetState(new(lang.LocalizeKey("discord.status.in_lobby", "In Lobby"))) // TODO: More detailed state based on GameState?
 		}
 		if lobby.MaxPlayers > 0 && lobby.JoinedPlayers > 0 {
 			p := sdk.NewActivityParty()
-			p.SetID(strings.ToLower(lobby.GameState) + "/" + hex.EncodeToString(new(sha256.Sum256([]byte(lobby.MatchMakerIp + ":" + strconv.Itoa(lobby.MatchMakerPort) + "@" + lobby.LobbyCode)))[:]))
-			p.SetMaxSize(lobby.MaxPlayers)
-			p.SetCurrentSize(lobby.JoinedPlayers)
-			p.SetPrivacy(sdk.ActivityPartyPrivacyPublic)
+			p.SetId(strings.ToLower(lobby.GameState) + "/" + hex.EncodeToString(new(sha256.Sum256([]byte(lobby.MatchMakerIp + ":" + strconv.Itoa(lobby.MatchMakerPort) + "@" + lobby.LobbyCode)))[:]))
+			p.SetMaxSize(int32(lobby.MaxPlayers))
+			p.SetCurrentSize(int32(lobby.JoinedPlayers))
+			p.SetPrivacy(sdk.Discord_ActivityPartyPrivacy_Public)
 			act.SetParty(p)
 		}
 		share := a.GetSharedRoom()
@@ -261,17 +261,17 @@ func (a *App) updateRichPresence() {
 		// Heartbeat sharing if active
 		a.HeartbeatRoomShareAsync()
 	} else {
-		act.SetState(lang.LocalizeKey("discord.status.in_main_menu", "In Main Menu"))
+		act.SetState(new(lang.LocalizeKey("discord.status.in_main_menu", "In Main Menu")))
 	}
 
-	a.ActivityService.SetActivity(act, func(et sdk.ErrorType) {
-		if et != sdk.ErrorTypeNone {
-			slog.Warn("Failed to set activity", "error", et)
+	a.DiscordService.SetActivity(act, func(d *sdk.Discord_ClientResult) {
+		if !d.Successful() {
+			slog.Warn("Failed to update Discord activity", "error", d.ErrorCode())
 		}
 	})
 }
 
-func New(version string, restClient rest.Client, activityService *activity.ActivityService) (*App, error) {
+func New(version string, restClient rest.Client, activityService *discord.DiscordService) (*App, error) {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user config dir: %w", err)
@@ -300,7 +300,7 @@ func New(version string, restClient rest.Client, activityService *activity.Activ
 		ProfileManager:     profileManager,
 		EpicSessionManager: epicSessionManager,
 		EpicApi:            aumgr.NewEpicApi(),
-		ActivityService:    activityService,
+		DiscordService:     activityService,
 	}
 
 	return a, nil

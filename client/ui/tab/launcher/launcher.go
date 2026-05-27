@@ -164,7 +164,7 @@ func (l *Launcher) HandleJoinLink(s string) {
 }
 
 func (l *Launcher) init() {
-	client := l.state.Core.ActivityService.Client()
+	client := l.state.Core.DiscordService.Client()
 	client.SetActivityJoinCallback(l.HandleJoinLink)
 
 	l.state.OnSharedURIReceived = func(uri string) {

@@ -30,7 +30,7 @@ import (
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 
-	"github.com/ikafly144/au_mod_installer/client/activity"
+	"github.com/ikafly144/au_mod_installer/client/discord"
 	"github.com/ikafly144/au_mod_installer/client/rest"
 	"github.com/ikafly144/au_mod_installer/client/ui"
 	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
@@ -161,29 +161,29 @@ func realMain(sharedURI string, sharedArchive string) error {
 	a := app.New()
 
 	social := sdk.NewClient()
-	activityService := activity.NewActivityService(social)
+	activityService := discord.NewDiscordService(social)
 	social.SetActivityJoinCallback(func(s string) {
 		slog.Info("Received join activity callback", "uri", s)
 		activityService.PushQueue(s)
 	})
-	social.AddLogCallback(sdk.LoggingSeverityInfo, func(s string, ls sdk.LoggingSeverity) {
+	social.AddLogCallback(func(arg0 string, arg1 sdk.Discord_LoggingSeverity) {
 		level := slog.LevelInfo
-		switch ls {
-		case sdk.LoggingSeverityVerbose:
+		switch arg1 {
+		case sdk.Discord_LoggingSeverity_Verbose:
 			level = slog.LevelDebug
-		case sdk.LoggingSeverityWarning:
+		case sdk.Discord_LoggingSeverity_Warning:
 			level = slog.LevelWarn
-		case sdk.LoggingSeverityError:
+		case sdk.Discord_LoggingSeverity_Error:
 			level = slog.LevelError
 		}
-		s = "[Discord SDK] " + s
-		slog.Log(context.Background(), level, s)
-	})
-	social.SetApplicationID(APPLICATION_ID)
+		arg0 = "[Discord SDK] " + arg0
+		slog.Log(context.Background(), level, arg0)
+	}, sdk.Discord_LoggingSeverity_Info)
+	social.SetApplicationId(APPLICATION_ID)
 
 	go func() {
 		for {
-			social.RunCallbacks()
+			sdk.RunCallbacks()
 			time.Sleep(100 * time.Millisecond)
 		}
 	}()
@@ -236,16 +236,16 @@ func realMain(sharedURI string, sharedArchive string) error {
 		social.RegisterLaunchCommand(APPLICATION_ID, path)
 	}
 
-	activityService.SetIdleActivity(func() *sdk.Activity {
+	activityService.SetIdleActivity(func() *sdk.Discord_Activity {
 		act := sdk.NewActivity()
-		act.SetType(sdk.ActivityTypePlaying)
+		act.SetType(sdk.Discord_ActivityTypes_Playing)
 		act.SetName("Mod of Us")
-		act.SetState(lang.LocalizeKey("discord.status.idle", "Idle"))
-		act.SetDetails(lang.LocalizeKey("discord.status.idle_details", "Not currently running the game"))
+		act.SetState(new(lang.LocalizeKey("discord.status.idle", "Idle")))
+		act.SetDetails(new(lang.LocalizeKey("discord.status.idle_details", "Not currently running the game")))
 		return act
-	}, func(et sdk.ErrorType) {
-		if et != sdk.ErrorTypeNone {
-			slog.Warn("Failed to set idle activity", "et", et)
+	}, func(d *sdk.Discord_ClientResult) {
+		if !d.Successful() {
+			slog.Warn("Failed to set idle activity", "error", d.ErrorCode())
 		}
 	})
 
