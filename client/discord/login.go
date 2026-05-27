@@ -15,14 +15,37 @@ func (s *DiscordService) Connect() {
 	s.client.SetStatusChangedCallback(func(arg0 discord.Discord_Client_Status, arg1 discord.Discord_Client_Error, arg2 int32) {
 		if arg0 == discord.Discord_Client_Status_Ready {
 			slog.Info("Discord client is ready")
+			s.readyOnce.Do(func() {
+				close(s.ready)
+			})
+		}
+		if arg0 == discord.Discord_Client_Status_Disconnected {
+			slog.Info("Discord client disconnected")
+			s.signInMu.Lock()
+			s.loggedIn = false
+			s.signInMu.Unlock()
+			s.readyOnce.Do(func() {
+				close(s.ready)
+			})
 		}
 		slog.Info("Discord client status changed", "status", arg0, "error", arg1, "code", arg2)
 	})
-	s.login(true)
+	s.login(true, func(success bool) {
+		if !success {
+			slog.Warn("Discord login failed during Connect")
+			s.readyOnce.Do(func() {
+				close(s.ready)
+			})
+		}
+	})
 }
 
 func (s *DiscordService) Disconnect() {
 	s.client.Disconnect()
+}
+
+func (s *DiscordService) WaitReady() {
+	<-s.ready
 }
 
 func (s *DiscordService) IsLoggedIn() bool {
@@ -81,21 +104,29 @@ func (s *DiscordService) StartSignIn(callback func(bool)) (started bool) {
 				if err := s.saveCredentials(creds); err != nil {
 					slog.Error("Failed to save Discord credentials", "error", err)
 				}
-				s.loggedIn = true
-				s.signInMu.Unlock()
-				if callback != nil {
-					callback(true)
-				}
-				s.login(false)
+				s.login(true, func(success bool) {
+					if callback != nil {
+						callback(success)
+					}
+					s.loggedIn = true
+					s.signInMu.Unlock()
+				})
 			})
 	})
 	return true
 }
 
-func (s *DiscordService) login(connect bool) {
+func (s *DiscordService) login(connect bool, callbacks ...func(bool)) {
 	creds, ok := s.loadCredentials()
 	if !ok {
-		slog.Info("No existing Discord credentials found, skipping login")
+		s.StartSignIn(func(b bool) {
+			if !b {
+				slog.Warn("Discord sign-in failed")
+			}
+			for _, callback := range callbacks {
+				callback(b)
+			}
+		})
 		return
 	}
 
@@ -124,12 +155,18 @@ func (s *DiscordService) login(connect bool) {
 			if connect {
 				s.client.Connect()
 			}
+			for _, callback := range callbacks {
+				callback(false)
+			}
 			return
 		}
 		s.loggedIn = true
 		slog.Info("Successfully logged in to Discord")
 		if connect {
 			s.client.Connect()
+		}
+		for _, callback := range callbacks {
+			callback(true)
 		}
 	})
 }

@@ -163,14 +163,16 @@ func NewSettings(state *uicommon.State) *Settings {
 	s.epicLoginButton = widget.NewButton(lang.LocalizeKey("settings.epic_login", "Login"), s.showEpicLoginDialog)
 	s.epicLogoutButton = widget.NewButton(lang.LocalizeKey("settings.epic_logout", "Logout"), s.epicLogout)
 	s.discordLoginButton = widget.NewButton(lang.LocalizeKey("settings.discord_login", "Login"), s.discordLogin)
+	s.discordLoginButton.Disable()
 	s.discordLogoutButton = widget.NewButton(lang.LocalizeKey("settings.discord_logout", "Logout"), s.discordLogout)
+	s.discordLogoutButton.Hide()
 
 	go func() {
 		ticker := time.NewTicker(3 * time.Second)
 		defer ticker.Stop()
 		for {
-			fyne.Do(s.refreshDiscordAccountInfo)
-			fyne.Do(s.refreshEpicAccountInfo)
+			go s.refreshDiscordAccountInfo()
+			go fyne.Do(s.refreshEpicAccountInfo)
 			<-ticker.C
 		}
 	}()
@@ -427,39 +429,42 @@ func (s *Settings) epicLogout() {
 }
 
 func (s *Settings) refreshDiscordAccountInfo() {
-	if s.state.Core == nil || s.state.Core.DiscordService == nil {
-		s.discordAccountLabel.SetText(lang.LocalizeKey("settings.discord_unavailable", "Discord is unavailable."))
-		s.discordLoginButton.Hide()
-		s.discordLogoutButton.Hide()
-		return
-	}
-
-	if !s.state.Core.DiscordService.IsLoggedIn() {
-		s.discordAccountLabel.SetText(lang.LocalizeKey("settings.discord_logged_out", "Not Logged In"))
-		s.discordLoginButton.Enable()
-		s.discordLoginButton.Show()
-		s.discordLogoutButton.Hide()
-		return
-	}
-
-	user, ok := s.state.Core.DiscordService.UserInfo()
-	if !ok {
-		s.discordAccountLabel.SetText(lang.LocalizeKey("settings.discord_logged_in", "Logged in to Discord"))
-	} else {
-		displayName := user.Username()
-		if globalName, ok := user.GlobalName(); ok {
-			globalName = strings.TrimSpace(globalName)
-			if globalName != "" {
-				displayName = globalName
-			}
+	s.state.Core.DiscordService.WaitReady()
+	fyne.Do(func() {
+		if s.state.Core == nil || s.state.Core.DiscordService == nil {
+			s.discordAccountLabel.SetText(lang.LocalizeKey("settings.discord_unavailable", "Discord is unavailable."))
+			s.discordLoginButton.Hide()
+			s.discordLogoutButton.Hide()
+			return
 		}
-		s.discordAccountLabel.SetText(lang.LocalizeKey("settings.discord_logged_in_user", "Logged in as {{.Name}} (ID: {{.ID}})", map[string]any{
-			"Name": displayName,
-			"ID":   user.Id(),
-		}))
-	}
-	s.discordLoginButton.Hide()
-	s.discordLogoutButton.Show()
+
+		if !s.state.Core.DiscordService.IsLoggedIn() {
+			s.discordAccountLabel.SetText(lang.LocalizeKey("settings.discord_logged_out", "Not Logged In"))
+			s.discordLoginButton.Enable()
+			s.discordLoginButton.Show()
+			s.discordLogoutButton.Hide()
+			return
+		}
+
+		user, ok := s.state.Core.DiscordService.UserInfo()
+		if !ok {
+			s.discordAccountLabel.SetText(lang.LocalizeKey("settings.discord_logged_in", "Logged in to Discord"))
+		} else {
+			displayName := user.Username()
+			if globalName, ok := user.GlobalName(); ok {
+				globalName = strings.TrimSpace(globalName)
+				if globalName != "" {
+					displayName = globalName
+				}
+			}
+			s.discordAccountLabel.SetText(lang.LocalizeKey("settings.discord_logged_in_user", "Logged in as {{.Name}} (ID: {{.ID}})", map[string]any{
+				"Name": displayName,
+				"ID":   user.Id(),
+			}))
+		}
+		s.discordLoginButton.Hide()
+		s.discordLogoutButton.Show()
+	})
 }
 
 func (s *Settings) discordLogin() {
@@ -470,9 +475,9 @@ func (s *Settings) discordLogin() {
 
 	if s.state.Core.DiscordService.StartSignIn(func(success bool) {
 		if success {
+			s.refreshDiscordAccountInfo()
 			fyne.Do(func() {
-				s.discordLoginButton.Enable()
-				s.refreshDiscordAccountInfo()
+				s.discordLoginButton.Enable() // ?
 				s.state.ShowInfoDialog(
 					lang.LocalizeKey("settings.login_success", "Login Successful"),
 					lang.LocalizeKey("settings.login_success_message", "You have been logged in successfully."),
@@ -501,7 +506,7 @@ func (s *Settings) discordLogout() {
 	}
 
 	s.state.Core.DiscordService.Logout()
-	s.refreshDiscordAccountInfo()
+	go s.refreshDiscordAccountInfo()
 }
 
 func (s *Settings) deleteAmongUsData() {
