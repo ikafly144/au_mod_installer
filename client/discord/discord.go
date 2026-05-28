@@ -23,6 +23,7 @@ type DiscordService struct {
 
 	idleActivity    *discord.Discord_Activity
 	currentActivity *discord.Discord_Activity
+	activityMu      sync.Mutex
 
 	queueMu sync.Mutex
 	queue   []string
