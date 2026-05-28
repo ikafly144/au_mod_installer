@@ -508,6 +508,7 @@ func (s *Settings) discordLogin() {
 			})
 			return
 		} else {
+			s.refreshDiscordAccountInfo()
 			s.state.ShowErrorDialog(errors.New(lang.LocalizeKey("settings.discord_login_failed", "Failed to log in to Discord.")))
 		}
 	}) {
