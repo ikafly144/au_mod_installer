@@ -33,6 +33,9 @@ func (s *DiscordService) updateIdleActivity() {
 			}
 			s.SetActivity(activity, callback)
 		}
+	} else if s.currentActivity == nil {
+		s.activityMu.Unlock()
+		s.client.ClearRichPresence()
 	} else {
 		s.activityMu.Unlock()
 	}
