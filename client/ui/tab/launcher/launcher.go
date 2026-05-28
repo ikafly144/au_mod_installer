@@ -9,6 +9,7 @@ import (
 	imagedraw "image/draw"
 	"image/png"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -29,6 +30,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/google/uuid"
+	discordsdk "github.com/ikafly144/discord_social_sdk"
 
 	"github.com/ikafly144/au_mod_installer/client/core"
 	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
@@ -42,20 +44,22 @@ import (
 )
 
 type Launcher struct {
-	state                *uicommon.State
-	launchButton         *widget.Button
-	shareRoomButton      *widget.Button
-	copyRoomLinkButton   *widget.Button
-	unpublishRoomButton  *widget.Button
-	roomLinkEntry        *widget.Label
-	roomLinkLabel        *widget.Label
-	roomLinkContainer    *fyne.Container
-	roomLinkTray         *fyne.Container
-	roomLinkTrayToggle   *widget.Button
-	roomLinkTrayExpanded bool
-	greetingContent      *widget.Label
-	createProfileButton  *widget.Button
-	importProfileButton  *widget.Button
+	state                  *uicommon.State
+	launchButton           *widget.Button
+	shareRoomButton        *widget.Button
+	copyRoomLinkButton     *widget.Button
+	inviteFriendsButton    *widget.Button
+	roomVisibilitySelector *widget.Select
+	unpublishRoomButton    *widget.Button
+	roomLinkEntry          *widget.Label
+	roomLinkLabel          *widget.Label
+	roomLinkContainer      *fyne.Container
+	roomLinkTray           *fyne.Container
+	roomLinkTrayToggle     *widget.Button
+	roomLinkTrayExpanded   bool
+	greetingContent        *widget.Label
+	createProfileButton    *widget.Button
+	importProfileButton    *widget.Button
 
 	profileList       *widget.List
 	profileGrid       *fyne.Container
@@ -75,9 +79,21 @@ type Launcher struct {
 	modThumbnailFetched    map[string]bool
 	modThumbnailLoading    map[string]bool
 
+	friendAvatarMu      sync.Mutex
+	friendAvatarCache   map[uint64]image.Image
+	friendAvatarFetched map[uint64]bool
+	friendAvatarLoading map[uint64]bool
+
 	canLaunchListener binding.DataListener
 
 	content *fyne.Container
+}
+
+type discordFriend struct {
+	id        uint64
+	name      string
+	avatarURL string
+	status    discordsdk.Discord_StatusType
 }
 
 var _ uicommon.Tab = (*Launcher)(nil)
@@ -118,11 +134,22 @@ func NewLauncherTab(s *uicommon.State) *Launcher {
 	sortMode := normalizeSortMode(fyne.CurrentApp().Preferences().StringWithFallback(prefLauncherSortMode, sortModeName))
 	sortDescending := fyne.CurrentApp().Preferences().BoolWithFallback(prefLauncherSortDescending, defaultSortDescendingForMode(sortMode))
 	l = Launcher{
-		state:                  s,
-		launchButton:           widget.NewButtonWithIcon(lang.LocalizeKey("launcher.launch", "Launch"), theme.MediaPlayIcon(), l.runLaunch),
-		shareRoomButton:        widget.NewButtonWithIcon(lang.LocalizeKey("launcher.join_link.create", "Create Join Link"), theme.MailForwardIcon(), func() { l.shareCurrentRoom(true) }),
-		copyRoomLinkButton:     widget.NewButtonWithIcon(lang.LocalizeKey("launcher.join_link.copy", "Copy Link"), theme.ContentCopyIcon(), l.copyRoomLinkToClipboard),
-		unpublishRoomButton:    widget.NewButtonWithIcon(lang.LocalizeKey("launcher.join_link.unpublish", "Stop Sharing"), theme.MediaStopIcon(), l.unpublishCurrentRoom),
+		state:               s,
+		launchButton:        widget.NewButtonWithIcon(lang.LocalizeKey("launcher.launch", "Launch"), theme.MediaPlayIcon(), l.runLaunch),
+		shareRoomButton:     widget.NewButtonWithIcon(lang.LocalizeKey("launcher.join_link.create", "Create Join Link"), theme.MailForwardIcon(), func() { l.shareCurrentRoom(true) }),
+		copyRoomLinkButton:  widget.NewButtonWithIcon(lang.LocalizeKey("launcher.join_link.copy", "Copy Link"), theme.ContentCopyIcon(), l.copyRoomLinkToClipboard),
+		inviteFriendsButton: widget.NewButtonWithIcon(lang.LocalizeKey("launcher.discord_friends.button", "Friend List"), theme.MailComposeIcon(), l.showDiscordFriendsDialog),
+		unpublishRoomButton: widget.NewButtonWithIcon(lang.LocalizeKey("launcher.join_link.unpublish", "Stop Sharing"), theme.MediaStopIcon(), l.unpublishCurrentRoom),
+		roomVisibilitySelector: widget.NewSelect([]string{lang.LocalizeKey("launcher.party.visibility.public", "Public"), lang.LocalizeKey("launcher.party.visibility.private", "Private")}, func(s string) {
+			public := false
+			switch s {
+			case lang.LocalizeKey("launcher.party.visibility.public", "Public"):
+				public = true
+			case lang.LocalizeKey("launcher.party.visibility.private", "Private"):
+				public = false
+			}
+			fyne.CurrentApp().Preferences().SetBool("public_party", public)
+		}),
 		roomLinkEntry:          widget.NewLabel(""),
 		roomLinkLabel:          widget.NewLabel(lang.LocalizeKey("launcher.join_link.title", "Join Link")),
 		createProfileButton:    widget.NewButtonWithIcon(lang.LocalizeKey("profile.create", "Create Profile"), theme.ContentAddIcon(), l.createProfile),
@@ -134,9 +161,13 @@ func NewLauncherTab(s *uicommon.State) *Launcher {
 		modThumbnailImageCache: map[string]image.Image{},
 		modThumbnailFetched:    map[string]bool{},
 		modThumbnailLoading:    map[string]bool{},
+		friendAvatarCache:      map[uint64]image.Image{},
+		friendAvatarFetched:    map[uint64]bool{},
+		friendAvatarLoading:    map[uint64]bool{},
 	}
 	l.createProfileButton.Importance = widget.HighImportance
 	l.shareRoomButton.Importance = widget.MediumImportance
+	l.inviteFriendsButton.Importance = widget.LowImportance
 	l.shareRoomButton.Disable()
 	l.copyRoomLinkButton.Importance = widget.LowImportance
 	l.copyRoomLinkButton.Disable()
@@ -144,6 +175,13 @@ func NewLauncherTab(s *uicommon.State) *Launcher {
 	l.unpublishRoomButton.Disable()
 	l.roomLinkEntry.Selectable = true
 	l.roomLinkEntry.Wrapping = fyne.TextWrapOff
+	l.roomVisibilitySelector.SetSelectedIndex(func() int {
+		if fyne.CurrentApp().Preferences().BoolWithFallback("public_party", true) {
+			return 0
+		} else {
+			return 1
+		}
+	}())
 
 	l.init()
 
@@ -164,7 +202,7 @@ func (l *Launcher) HandleJoinLink(s string) {
 }
 
 func (l *Launcher) init() {
-	client := l.state.Core.ActivityService.Client()
+	client := l.state.Core.DiscordService.Client()
 	client.SetActivityJoinCallback(l.HandleJoinLink)
 
 	l.state.OnSharedURIReceived = func(uri string) {
@@ -283,7 +321,7 @@ func (l *Launcher) setupRoomLinkUI() {
 				linkBackground,
 				container.NewHScroll(l.roomLinkEntry),
 			),
-			container.NewHBox(l.shareRoomButton, l.copyRoomLinkButton, l.unpublishRoomButton),
+			container.NewBorder(nil, nil, nil, l.roomVisibilitySelector, container.NewHBox(l.shareRoomButton, l.copyRoomLinkButton, l.unpublishRoomButton)),
 		)),
 	)
 	l.roomLinkTrayToggle = widget.NewButtonWithIcon(lang.LocalizeKey("launcher.join_link.tray_title", "Join Link"), theme.NavigateBackIcon(), func() {
@@ -362,7 +400,9 @@ func (l *Launcher) refreshRoomLinkUI(info *core.IPCLobbyInfo, running bool) {
 	if !ok {
 		if l.roomLinkTray != nil {
 			l.roomLinkTray.Hide()
-			l.content.Refresh()
+			if l.content != nil {
+				l.content.Refresh()
+			}
 		}
 		l.setRoomLinkTrayExpanded(false)
 		l.roomLinkEntry.SetText(lang.LocalizeKey("launcher.join_link.placeholder", "No room shared now"))
@@ -375,7 +415,9 @@ func (l *Launcher) refreshRoomLinkUI(info *core.IPCLobbyInfo, running bool) {
 
 	visible := l.roomLinkTray.Visible()
 	if l.roomLinkTray.Show(); !visible {
-		l.content.Refresh()
+		if l.content != nil {
+			l.content.Refresh()
+		}
 	}
 	l.shareRoomButton.Enable()
 	runningProfileID, _ := l.state.Core.CurrentRunningProfileAndPID()
@@ -400,8 +442,12 @@ func (l *Launcher) refreshRoomLinkUI(info *core.IPCLobbyInfo, running bool) {
 		l.copyRoomLinkButton.Enable()
 		if fyne.CurrentApp().Preferences().BoolWithFallback("auto_sharing", true) {
 			l.unpublishRoomButton.Disable()
+			l.unpublishRoomButton.Hide()
+			l.shareRoomButton.Hide()
 		} else {
 			l.unpublishRoomButton.Enable()
+			l.unpublishRoomButton.Show()
+			l.shareRoomButton.Show()
 		}
 	} else {
 		l.roomLinkEntry.SetText(lang.LocalizeKey("launcher.join_link.placeholder", "No room shared now"))
@@ -528,6 +574,311 @@ func (l *Launcher) shareCurrentRoom(copyToClipboard bool) {
 	if copyToClipboard {
 		fyne.Do(l.copyRoomLinkToClipboard)
 	}
+}
+
+func (l *Launcher) canSendDiscordInvite() bool {
+	if l.state == nil || l.state.Core == nil || l.state.Core.DiscordService == nil {
+		return false
+	}
+	if !l.state.Core.DiscordService.IsLoggedIn() {
+		return false
+	}
+	share := l.state.Core.GetSharedRoom()
+	if share.URL == "" || share.ExpiresAt.Before(time.Now()) {
+		return false
+	}
+	_, active := l.state.Core.DiscordService.CurrentActivity()
+	return active
+}
+
+func discordStatusColor(status discordsdk.Discord_StatusType) color.Color {
+	switch status {
+	case discordsdk.Discord_StatusType_Online:
+		return theme.Color(theme.ColorNameSuccess)
+	case discordsdk.Discord_StatusType_Idle, discordsdk.Discord_StatusType_Streaming:
+		return theme.Color(theme.ColorNameWarning)
+	case discordsdk.Discord_StatusType_Dnd:
+		return theme.Color(theme.ColorNameError)
+	case discordsdk.Discord_StatusType_Offline, discordsdk.Discord_StatusType_Invisible:
+		return theme.Color(theme.ColorNameDisabled)
+	default:
+		return theme.Color(theme.ColorNameDisabled)
+	}
+}
+
+func discordStatusPriority(status discordsdk.Discord_StatusType) int {
+	switch status {
+	case discordsdk.Discord_StatusType_Online:
+		return 1
+	case discordsdk.Discord_StatusType_Idle, discordsdk.Discord_StatusType_Streaming:
+		return 2
+	case discordsdk.Discord_StatusType_Dnd:
+		return 3
+	case discordsdk.Discord_StatusType_Offline, discordsdk.Discord_StatusType_Invisible:
+		return 4
+	default:
+		return 5
+	}
+}
+
+func (l *Launcher) showDiscordFriendsDialog() {
+	if l.state == nil || l.state.Core == nil || l.state.Core.DiscordService == nil {
+		l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("settings.discord_unavailable", "Discord is unavailable.")))
+		return
+	}
+	ds := l.state.Core.DiscordService
+	if ds.IsSigningIn() {
+		l.state.ShowInfoDialog(lang.LocalizeKey("settings.discord_login_in_progress_title", "Login in progress"), lang.LocalizeKey("settings.discord_login_waiting", "Please complete the Discord login in your browser."))
+		return
+	}
+	if !ds.IsLoggedIn() {
+		l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("settings.discord_logged_out", "Not Logged In")))
+		return
+	}
+
+	if !ds.IsReady() {
+		progress := widget.NewProgressBarInfinite()
+		d := dialog.NewCustomWithoutButtons(
+			lang.LocalizeKey("settings.discord_login_in_progress_title", "Login in progress"),
+			container.NewVBox(widget.NewLabel(lang.LocalizeKey("settings.discord_login_in_progress_message", "Login in progress...")), progress),
+			l.state.Window,
+		)
+		d.Show()
+		go func() {
+			ds.WaitReady()
+			fyne.Do(func() {
+				d.Hide()
+				l.showDiscordFriendsDialog()
+			})
+		}()
+		return
+	}
+
+	contentBox := container.NewVBox()
+	scroll := container.NewVScroll(contentBox)
+	emptyLabel := widget.NewLabel(lang.LocalizeKey("launcher.discord_friends.empty", "No friends found."))
+	emptyLabel.Alignment = fyne.TextAlignCenter
+	emptyLabel.Hide()
+
+	loading := widget.NewProgressBarInfinite()
+	loading.Hide()
+
+	const friendAvatarSize = float32(48)
+	const friendStatusSize = float32(14)
+
+	var searchSeq uint64
+	buildFriendItem := func(friend discordFriend) fyne.CanvasObject {
+		avatarBg := canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground))
+		avatarBg.CornerRadius = 6
+		avatarBg.SetMinSize(fyne.NewSquareSize(friendAvatarSize))
+		avatar := canvas.NewImageFromImage(placeholderProfileIcon(int(friendAvatarSize)))
+		avatar.CornerRadius = 8
+		avatar.SetMinSize(fyne.NewSquareSize(friendAvatarSize))
+		avatar.FillMode = canvas.ImageFillContain
+		status := canvas.NewCircle(discordStatusColor(friend.status))
+		status.StrokeColor = theme.Color(theme.ColorNameBackground)
+		status.StrokeWidth = 2
+		avatarContainer := container.New(&discordFriendAvatarLayout{
+			statusSize: friendStatusSize,
+			inset:      2,
+		}, avatarBg, avatar, status)
+
+		l.refreshDiscordFriendAvatarCanvas(avatar, friend.id, int(friendAvatarSize))
+		l.ensureDiscordFriendAvatarLoaded(friend.id, friend.avatarURL, func() {
+			l.refreshDiscordFriendAvatarCanvas(avatar, friend.id, int(friendAvatarSize))
+		})
+
+		name := widget.NewLabelWithStyle(friend.name, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+		name.SizeName = theme.SizeNameSubHeadingText
+		name.Wrapping = fyne.TextWrapOff
+		name.Truncation = fyne.TextTruncateEllipsis
+
+		inviteButton := widget.NewButtonWithIcon(lang.LocalizeKey("launcher.discord_friends.invite", "Invite"), theme.MailSendIcon(), nil)
+		inviteButton.Importance = widget.LowImportance
+		if l.canSendDiscordInvite() {
+			inviteButton.Enable()
+		} else {
+			inviteButton.Disable()
+		}
+		inviteButton.OnTapped = func() {
+			if !l.canSendDiscordInvite() {
+				l.state.ShowInfoDialog(
+					lang.LocalizeKey("launcher.discord_friends.invite_unavailable_title", "Invite Unavailable"),
+					lang.LocalizeKey("launcher.discord_friends.invite_unavailable_message", "Invites are available only while sharing a room."),
+				)
+				return
+			}
+			l.state.Core.DiscordService.SendInvite(friend.id)
+		}
+
+		itemContent := container.NewBorder(nil, nil, avatarContainer, inviteButton, container.NewPadded(container.NewVBox(name)))
+
+		bg := canvas.NewRectangle(theme.Color(theme.ColorNameBackground))
+		bg.StrokeColor = theme.Color(theme.ColorNameButton)
+		bg.StrokeWidth = 1
+		bg.CornerRadius = theme.InputRadiusSize()
+
+		return container.NewStack(bg, container.NewPadded(itemContent))
+	}
+
+	var allFriends []discordFriend
+	var displayedCount int
+	const pageSize = 20
+	var loadMoreBtn *widget.Button
+
+	loadMore := func() {
+		if displayedCount >= len(allFriends) {
+			if loadMoreBtn != nil {
+				loadMoreBtn.Hide()
+			}
+			return
+		}
+		end := displayedCount + pageSize
+		if end > len(allFriends) {
+			end = len(allFriends)
+		}
+		for i := displayedCount; i < end; i++ {
+			contentBox.Add(buildFriendItem(allFriends[i]))
+		}
+		displayedCount = end
+
+		if loadMoreBtn != nil {
+			contentBox.Remove(loadMoreBtn)
+			if displayedCount < len(allFriends) {
+				contentBox.Add(loadMoreBtn)
+				loadMoreBtn.Show()
+			} else {
+				loadMoreBtn.Hide()
+			}
+		}
+		contentBox.Refresh()
+	}
+
+	loadMoreBtn = widget.NewButton(lang.LocalizeKey("repository.load_next", "Load More..."), loadMore)
+	loadMoreBtn.Hide()
+
+	updateList := func(query string) {
+		searchSeq++
+		mySeq := searchSeq
+		loading.Show()
+		go func() {
+			var userHandles []discordsdk.Discord_UserHandle
+			query = strings.TrimSpace(query)
+			if query == "" {
+				relationships, err := l.state.Core.DiscordService.GetFriends()
+				if err != nil {
+					fyne.Do(func() {
+						if mySeq != searchSeq {
+							return
+						}
+						l.state.ShowErrorDialog(err)
+						loading.Hide()
+					})
+					return
+				}
+				userHandles = make([]discordsdk.Discord_UserHandle, 0, len(relationships))
+				for _, r := range relationships {
+					if user, ok := r.User(); ok {
+						userHandles = append(userHandles, user)
+					}
+				}
+			} else {
+				searchResult, err := l.state.Core.DiscordService.SearchFriends(query)
+				if err != nil {
+					fyne.Do(func() {
+						if mySeq != searchSeq {
+							return
+						}
+						l.state.ShowErrorDialog(err)
+						loading.Hide()
+					})
+					return
+				}
+				userHandles = searchResult
+			}
+
+			newFriends := make([]discordFriend, 0, len(userHandles))
+			for _, user := range userHandles {
+				name := strings.TrimSpace(user.DisplayName())
+				if name == "" {
+					if globalName, ok := user.GlobalName(); ok {
+						name = strings.TrimSpace(globalName)
+					}
+				}
+				if name == "" {
+					name = strings.TrimSpace(user.Username())
+				}
+				if name == "" {
+					name = fmt.Sprintf("User %d", user.Id())
+				}
+				avatarURL := ""
+				if avatarHash, ok := user.Avatar(); ok && strings.TrimSpace(avatarHash) != "" {
+					avatarURL = user.AvatarUrl(discordsdk.Discord_UserHandle_AvatarType_Gif, discordsdk.Discord_UserHandle_AvatarType_Png)
+				} else {
+					avatarURL = fmt.Sprintf("https://cdn.discordapp.com/embed/avatars/%d.png", (user.Id()>>22)%6)
+				}
+				newFriends = append(newFriends, discordFriend{
+					id:        user.Id(),
+					name:      name,
+					avatarURL: avatarURL,
+					status:    user.Status(),
+				})
+			}
+			sort.Slice(newFriends, func(i, j int) bool {
+				pI := discordStatusPriority(newFriends[i].status)
+				pJ := discordStatusPriority(newFriends[j].status)
+				if pI != pJ {
+					return pI < pJ
+				}
+				return strings.ToLower(newFriends[i].name) < strings.ToLower(newFriends[j].name)
+			})
+
+			fyne.Do(func() {
+				if mySeq != searchSeq {
+					return
+				}
+				contentBox.Objects = nil
+				allFriends = newFriends
+				displayedCount = 0
+				if len(allFriends) == 0 {
+					emptyLabel.Show()
+				} else {
+					emptyLabel.Hide()
+					loadMore()
+				}
+				contentBox.Refresh()
+				scroll.Refresh()
+				loading.Hide()
+			})
+		}()
+	}
+
+	searchBar := widget.NewEntry()
+	searchBar.SetPlaceHolder(lang.LocalizeKey("launcher.discord_friends.search_placeholder", "Search by name..."))
+	searchBar.OnChanged = updateList
+
+	canInvite := l.canSendDiscordInvite()
+	inviteHint := widget.NewLabelWithStyle(
+		lang.LocalizeKey("launcher.discord_friends.invite_unavailable_message", "Invites are available only while sharing a room."),
+		fyne.TextAlignLeading,
+		fyne.TextStyle{Italic: true},
+	)
+	inviteHint.Wrapping = fyne.TextWrapWord
+	if canInvite {
+		inviteHint.Hide()
+	}
+
+	updateList("")
+
+	content := container.NewBorder(container.NewVBox(inviteHint, searchBar, loading), nil, nil, nil, container.NewStack(scroll, container.NewCenter(emptyLabel)))
+	d := dialog.NewCustom(
+		lang.LocalizeKey("launcher.discord_friends.title", "Discord Friends"),
+		lang.LocalizeKey("common.cancel", "Cancel"),
+		content,
+		l.state.Window,
+	)
+	d.Resize(fyne.NewSize(480, 560))
+	d.Show()
 }
 
 func (l *Launcher) shareProfile(prof profile.Profile) {
@@ -1116,8 +1467,50 @@ func (l *launcherListItemLayout) MinSize(objects []fyne.CanvasObject) fyne.Size 
 
 	thumbSide := max(l.minThumbSize, max(thumbMinSize.Width, thumbMinSize.Height))
 	height := max(thumbSide, max(menuMinSize.Height, bodyMinSize.Height))
-	width := thumbSide + l.spacing + l.spacing + menuMinSize.Width
+	width := thumbSide + l.spacing + bodyMinSize.Width + l.spacing + menuMinSize.Width
 	return fyne.NewSize(width, height)
+}
+
+type discordFriendAvatarLayout struct {
+	statusSize float32
+	inset      float32
+}
+
+func (l *discordFriendAvatarLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
+	if len(objects) < 3 {
+		return
+	}
+	bg := objects[0]
+	avatar := objects[1]
+	status := objects[2]
+
+	bg.Resize(size)
+	bg.Move(fyne.NewPos(0, 0))
+	avatar.Resize(size)
+	avatar.Move(fyne.NewPos(0, 0))
+
+	statusSize := l.statusSize
+	if statusSize <= 0 {
+		statusSize = min(size.Width, size.Height)
+	}
+	if statusSize > size.Width {
+		statusSize = size.Width
+	}
+	if statusSize > size.Height {
+		statusSize = size.Height
+	}
+	status.Resize(fyne.NewSquareSize(statusSize))
+	status.Move(fyne.NewPos(
+		size.Width-statusSize-l.inset,
+		size.Height-statusSize-l.inset,
+	))
+}
+
+func (l *discordFriendAvatarLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
+	if len(objects) == 0 {
+		return fyne.NewSize(0, 0)
+	}
+	return objects[0].MinSize()
 }
 
 func (l *Launcher) setupProfileGrid() {
@@ -1331,7 +1724,7 @@ func (l *Launcher) Tab() (*container.TabItem, error) {
 			nil,
 			nil,
 			container.NewHBox(l.toggleViewButton, l.sortOrderButton, l.sortSelect),
-			container.NewHBox(l.createProfileButton, l.importProfileButton),
+			container.NewHBox(l.createProfileButton, l.importProfileButton, l.inviteFriendsButton),
 		)),
 	)
 
@@ -2609,6 +3002,73 @@ func (l *Launcher) ensureModThumbnailLoaded(modID string, onLoaded func()) {
 			fyne.Do(onLoaded)
 		}
 	}(modID)
+}
+
+func (l *Launcher) discordFriendAvatarImage(userID uint64, fallbackSize int) image.Image {
+	l.friendAvatarMu.Lock()
+	img := l.friendAvatarCache[userID]
+	l.friendAvatarMu.Unlock()
+	if img == nil {
+		return placeholderProfileIcon(fallbackSize)
+	}
+	return img
+}
+
+func (l *Launcher) refreshDiscordFriendAvatarCanvas(target *canvas.Image, userID uint64, fallbackSize int) {
+	target.Image = l.discordFriendAvatarImage(userID, fallbackSize)
+	target.SetMinSize(fyne.NewSquareSize(float32(fallbackSize)))
+	target.Refresh()
+}
+
+func (l *Launcher) ensureDiscordFriendAvatarLoaded(userID uint64, avatarURL string, onLoaded func()) {
+	if userID == 0 {
+		return
+	}
+	if strings.TrimSpace(avatarURL) == "" {
+		l.friendAvatarMu.Lock()
+		l.friendAvatarFetched[userID] = true
+		l.friendAvatarMu.Unlock()
+		return
+	}
+	l.friendAvatarMu.Lock()
+	if l.friendAvatarFetched[userID] || l.friendAvatarLoading[userID] {
+		l.friendAvatarMu.Unlock()
+		return
+	}
+	l.friendAvatarLoading[userID] = true
+	l.friendAvatarMu.Unlock()
+
+	go func(targetUserID uint64, targetURL string) {
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Get(targetURL)
+		var decoded image.Image
+		if err == nil {
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				err = fmt.Errorf("unexpected status %d", resp.StatusCode)
+			} else {
+				decoded, _, err = image.Decode(resp.Body)
+				if err == nil {
+					decoded = centerCropSquare(decoded)
+				}
+			}
+		}
+		if err != nil {
+			slog.Debug("Failed to load Discord avatar", "userID", targetUserID, "error", err)
+		}
+
+		l.friendAvatarMu.Lock()
+		delete(l.friendAvatarLoading, targetUserID)
+		l.friendAvatarFetched[targetUserID] = true
+		if decoded != nil {
+			l.friendAvatarCache[targetUserID] = decoded
+		}
+		l.friendAvatarMu.Unlock()
+
+		if onLoaded != nil {
+			fyne.Do(onLoaded)
+		}
+	}(userID, avatarURL)
 }
 
 func (l *Launcher) newModDetailsDialog(mod *modmgr.Mod, onSelect func(modmgr.ModVersion)) *dialog.CustomDialog {

@@ -108,7 +108,9 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 			cancel()
 		}
 	}
-	state.Core.ActivityService.Client().Connect()
+	if state.Core.DiscordService != nil {
+		state.Core.DiscordService.Connect()
+	}
 	state.Core.StartActivityPolling(ctx)
 	w.SetOnClosed(onClosed)
 	fyne.Do(func() {
@@ -116,7 +118,7 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 			w.CenterOnScreen()
 		}
 		slog.Info("Application started")
-		for s, ok := state.Core.ActivityService.PopQueue(); ok; s, ok = state.Core.ActivityService.PopQueue() {
+		for s, ok := state.Core.DiscordService.PopQueue(); ok; s, ok = state.Core.DiscordService.PopQueue() {
 			l.HandleJoinLink(s)
 		}
 	})

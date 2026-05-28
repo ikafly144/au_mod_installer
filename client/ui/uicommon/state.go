@@ -13,8 +13,8 @@ import (
 	"fyne.io/fyne/v2/widget"
 	"github.com/google/uuid"
 
-	"github.com/ikafly144/au_mod_installer/client/activity"
 	"github.com/ikafly144/au_mod_installer/client/core"
+	"github.com/ikafly144/au_mod_installer/client/discord"
 	"github.com/ikafly144/au_mod_installer/client/rest"
 	"github.com/ikafly144/au_mod_installer/pkg/profile"
 )
@@ -23,7 +23,7 @@ type Option func(*Config)
 
 type Config struct {
 	rest            rest.Client
-	activityService *activity.ActivityService
+	activityService *discord.DiscordService
 }
 
 func WithRestClient(c rest.Client) func(*Config) {
@@ -32,7 +32,7 @@ func WithRestClient(c rest.Client) func(*Config) {
 	}
 }
 
-func WithActivityService(a *activity.ActivityService) func(*Config) {
+func WithActivityService(a *discord.DiscordService) func(*Config) {
 	return func(cfg *Config) {
 		cfg.activityService = a
 	}
