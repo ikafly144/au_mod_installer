@@ -6,8 +6,15 @@ func (s *DiscordService) GetFriends() ([]discord.Discord_RelationshipHandle, err
 	if !s.IsLoggedIn() {
 		return nil, ErrNotLoggedIn
 	}
-	friends := s.client.GetRelationshipsByGroup(discord.Discord_RelationshipGroupType(discord.Discord_RelationshipType_Friend))
-	return friends, nil
+	friends := s.client.GetRelationships()
+	var friendList []discord.Discord_RelationshipHandle
+	for _, friend := range friends {
+		if friend.DiscordRelationshipType() != discord.Discord_RelationshipType_Friend {
+			continue
+		}
+		friendList = append(friendList, friend)
+	}
+	return friendList, nil
 }
 
 func (s *DiscordService) SearchFriends(query string) ([]discord.Discord_UserHandle, error) {

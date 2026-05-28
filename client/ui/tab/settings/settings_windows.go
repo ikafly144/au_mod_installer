@@ -430,25 +430,29 @@ func (s *Settings) epicLogout() {
 
 func (s *Settings) refreshDiscordAccountInfo() {
 	if s.state.Core == nil || s.state.Core.DiscordService == nil {
-		s.discordAccountLabel.SetText(lang.LocalizeKey("settings.discord_unavailable", "Discord is unavailable."))
-		s.discordLoginButton.Hide()
-		s.discordLogoutButton.Hide()
+		fyne.Do(func() {
+			s.discordAccountLabel.SetText(lang.LocalizeKey("settings.discord_unavailable", "Discord is unavailable."))
+			s.discordLoginButton.Hide()
+			s.discordLogoutButton.Hide()
+		})
 		return
 	}
 
 	ds := s.state.Core.DiscordService
 	if !ds.IsReady() {
-		if ds.IsSigningIn() {
-			s.discordAccountLabel.SetText(lang.LocalizeKey("settings.discord_login_waiting", "Discord login waiting..."))
-			s.discordLoginButton.Disable()
-			s.discordLoginButton.Show()
-			s.discordLogoutButton.Hide()
-		} else {
-			s.discordAccountLabel.SetText(lang.LocalizeKey("settings.discord_login_in_progress_message", "Connecting..."))
-			s.discordLoginButton.Disable()
-			s.discordLoginButton.Show()
-			s.discordLogoutButton.Hide()
-		}
+		fyne.Do(func() {
+			if ds.IsSigningIn() {
+				s.discordAccountLabel.SetText(lang.LocalizeKey("settings.discord_login_waiting", "Discord login waiting..."))
+				s.discordLoginButton.Disable()
+				s.discordLoginButton.Show()
+				s.discordLogoutButton.Hide()
+			} else {
+				s.discordAccountLabel.SetText(lang.LocalizeKey("settings.discord_login_in_progress_message", "Connecting..."))
+				s.discordLoginButton.Disable()
+				s.discordLoginButton.Show()
+				s.discordLogoutButton.Hide()
+			}
+		})
 		go func() {
 			ds.WaitReady()
 			fyne.Do(s.refreshDiscordAccountInfo)

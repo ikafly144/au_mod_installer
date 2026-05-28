@@ -108,7 +108,9 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 			cancel()
 		}
 	}
-	state.Core.DiscordService.Connect()
+	if state.Core.DiscordService != nil {
+		state.Core.DiscordService.Connect()
+	}
 	state.Core.StartActivityPolling(ctx)
 	w.SetOnClosed(onClosed)
 	fyne.Do(func() {

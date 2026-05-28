@@ -96,14 +96,6 @@ type discordFriend struct {
 	status    discordsdk.Discord_StatusType
 }
 
-type discordFriendListItem struct {
-	*fyne.Container
-	avatar *canvas.Image
-	status *canvas.Circle
-	name   *widget.Label
-	invite *widget.Button
-}
-
 var _ uicommon.Tab = (*Launcher)(nil)
 
 const (
@@ -455,6 +447,7 @@ func (l *Launcher) refreshRoomLinkUI(info *core.IPCLobbyInfo, running bool) {
 		} else {
 			l.unpublishRoomButton.Enable()
 			l.unpublishRoomButton.Show()
+			l.shareRoomButton.Show()
 		}
 	} else {
 		l.roomLinkEntry.SetText(lang.LocalizeKey("launcher.join_link.placeholder", "No room shared now"))
@@ -1518,64 +1511,6 @@ func (l *discordFriendAvatarLayout) MinSize(objects []fyne.CanvasObject) fyne.Si
 		return fyne.NewSize(0, 0)
 	}
 	return objects[0].MinSize()
-}
-
-type discordFriendRowLayout struct {
-	avatarSize float32
-	spacing    float32
-}
-
-func (l *discordFriendRowLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
-	if len(objects) < 3 {
-		return
-	}
-	avatar := objects[0]
-	name := objects[1]
-	invite := objects[2]
-
-	avatarSide := l.avatarSize
-	if avatarSide <= 0 {
-		avatarSide = size.Height
-	}
-	if avatarSide > size.Height {
-		avatarSide = size.Height
-	}
-	avatar.Resize(fyne.NewSize(avatarSide, avatarSide))
-	avatar.Move(fyne.NewPos(0, (size.Height-avatarSide)/2))
-
-	inviteSize := invite.MinSize()
-	invite.Resize(inviteSize)
-	inviteX := size.Width - inviteSize.Width
-	if inviteX < 0 {
-		inviteX = 0
-	}
-	invite.Move(fyne.NewPos(inviteX, (size.Height-inviteSize.Height)/2))
-
-	nameX := avatarSide + l.spacing
-	nameRight := inviteX - l.spacing
-	nameWidth := nameRight - nameX
-	if nameWidth < 0 {
-		nameWidth = 0
-	}
-	name.Resize(fyne.NewSize(nameWidth, size.Height))
-	name.Move(fyne.NewPos(nameX, 0))
-}
-
-func (l *discordFriendRowLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
-	if len(objects) < 3 {
-		return fyne.NewSize(0, 0)
-	}
-	avatar := objects[0]
-	name := objects[1]
-	invite := objects[2]
-
-	avatarSize := l.avatarSize
-	if avatarSize <= 0 {
-		avatarSize = avatar.MinSize().Width
-	}
-	height := max(avatarSize, max(name.MinSize().Height, invite.MinSize().Height))
-	width := avatarSize + l.spacing + name.MinSize().Width + l.spacing + invite.MinSize().Width
-	return fyne.NewSize(width, height)
 }
 
 func (l *Launcher) setupProfileGrid() {

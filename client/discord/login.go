@@ -145,7 +145,7 @@ func (s *DiscordService) StartSignIn(callback func(bool)) (started bool) {
 func (s *DiscordService) login(connect bool, callbacks ...func(bool)) {
 	creds, ok := s.loadCredentials()
 	if !ok {
-		s.StartSignIn(func(b bool) {
+		started := s.StartSignIn(func(b bool) {
 			if !b {
 				slog.Warn("Discord sign-in failed")
 			}
@@ -153,6 +153,12 @@ func (s *DiscordService) login(connect bool, callbacks ...func(bool)) {
 				callback(b)
 			}
 		})
+		if !started {
+			slog.Warn("Discord login already in progress")
+			for _, callback := range callbacks {
+				callback(false)
+			}
+		}
 		return
 	}
 
@@ -217,7 +223,9 @@ func (s *DiscordService) Logout() {
 			slog.Warn("Failed to revoke Discord token", "error", result.ErrorCode())
 		} else {
 			slog.Info("Successfully revoked Discord token")
-			s.clearCredentials()
+			if err := s.clearCredentials(); err != nil {
+				slog.Error("Failed to clear Discord credentials from storage", "error", err)
+			}
 		}
 	})
 	s.signInMu.Lock()
