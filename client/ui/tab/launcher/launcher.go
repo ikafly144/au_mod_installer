@@ -673,6 +673,7 @@ func (l *Launcher) showDiscordFriendsDialog() {
 	const friendAvatarSize = float32(48)
 	const friendStatusSize = float32(14)
 
+	var searchSeq uint64
 	buildFriendItem := func(friend discordFriend) fyne.CanvasObject {
 		avatarBg := canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground))
 		avatarBg.CornerRadius = 6
@@ -764,6 +765,8 @@ func (l *Launcher) showDiscordFriendsDialog() {
 	loadMoreBtn.Hide()
 
 	updateList := func(query string) {
+		searchSeq++
+		mySeq := searchSeq
 		loading.Show()
 		go func() {
 			var userHandles []discordsdk.Discord_UserHandle
@@ -772,6 +775,9 @@ func (l *Launcher) showDiscordFriendsDialog() {
 				relationships, err := l.state.Core.DiscordService.GetFriends()
 				if err != nil {
 					fyne.Do(func() {
+						if mySeq != searchSeq {
+							return
+						}
 						l.state.ShowErrorDialog(err)
 						loading.Hide()
 					})
@@ -787,6 +793,9 @@ func (l *Launcher) showDiscordFriendsDialog() {
 				searchResult, err := l.state.Core.DiscordService.SearchFriends(query)
 				if err != nil {
 					fyne.Do(func() {
+						if mySeq != searchSeq {
+							return
+						}
 						l.state.ShowErrorDialog(err)
 						loading.Hide()
 					})
@@ -832,6 +841,9 @@ func (l *Launcher) showDiscordFriendsDialog() {
 			})
 
 			fyne.Do(func() {
+				if mySeq != searchSeq {
+					return
+				}
 				contentBox.Objects = nil
 				allFriends = newFriends
 				displayedCount = 0
