@@ -66,9 +66,14 @@ func (s *DiscordService) UserInfo() (*discord.Discord_UserHandle, bool) {
 }
 
 func (s *DiscordService) StartSignIn(callback func(bool)) (started bool) {
-	if !s.signInMu.TryLock() {
+	s.signInMu.Lock()
+	if s.signingIn {
+		s.signInMu.Unlock()
 		return false
 	}
+	s.signingIn = true
+	s.signInMu.Unlock()
+
 	codeVerifier := s.client.CreateAuthorizationCodeVerifier()
 	authArgs := discord.NewAuthorizationArgs()
 	authArgs.SetClientId(s.client.GetApplicationId())
@@ -78,6 +83,8 @@ func (s *DiscordService) StartSignIn(callback func(bool)) (started bool) {
 	s.client.Authorize(authArgs, func(arg0 *discord.Discord_ClientResult, arg1, arg2 string) {
 		if !arg0.Successful() {
 			slog.Warn("Failed to authorize Discord client", "error", arg0.ErrorCode())
+			s.signInMu.Lock()
+			s.signingIn = false
 			s.signInMu.Unlock()
 			if callback != nil {
 				callback(false)
@@ -88,6 +95,8 @@ func (s *DiscordService) StartSignIn(callback func(bool)) (started bool) {
 			func(result *discord.Discord_ClientResult, accessToken, refreshToken string, tokenType discord.Discord_AuthorizationTokenType, expiresIn int32, scopes string) {
 				if !result.Successful() {
 					slog.Warn("Failed to get Discord token", "error", result.ErrorCode())
+					s.signInMu.Lock()
+					s.signingIn = false
 					s.signInMu.Unlock()
 					if callback != nil {
 						callback(false)
@@ -105,11 +114,13 @@ func (s *DiscordService) StartSignIn(callback func(bool)) (started bool) {
 					slog.Error("Failed to save Discord credentials", "error", err)
 				}
 				s.login(true, func(success bool) {
+					s.signInMu.Lock()
+					s.signingIn = false
+					// loggedIn state is updated within s.login callbacks
+					s.signInMu.Unlock()
 					if callback != nil {
 						callback(success)
 					}
-					s.loggedIn = true
-					s.signInMu.Unlock()
 				})
 			})
 	})
@@ -134,7 +145,9 @@ func (s *DiscordService) login(connect bool, callbacks ...func(bool)) {
 		s.client.RefreshToken(creds.ClientID, creds.RefreshToken, func(result *discord.Discord_ClientResult, accessToken, refreshToken string, tokenType discord.Discord_AuthorizationTokenType, expiresIn int32, scopes string) {
 			if !result.Successful() {
 				slog.Warn("Failed to refresh Discord token", "error", result.ErrorCode())
+				s.signInMu.Lock()
 				s.loggedIn = false
+				s.signInMu.Unlock()
 				return
 			}
 			creds.AccessToken = accessToken
@@ -144,14 +157,18 @@ func (s *DiscordService) login(connect bool, callbacks ...func(bool)) {
 			if err := s.saveCredentials(creds); err != nil {
 				slog.Error("Failed to save updated Discord credentials", "error", err)
 			}
+			s.signInMu.Lock()
 			s.loggedIn = true
+			s.signInMu.Unlock()
 		})
 	})
 
 	s.client.UpdateToken(creds.TokenType, creds.AccessToken, func(result *discord.Discord_ClientResult) {
 		if !result.Successful() {
 			slog.Warn("Failed to update Discord token", "error", result.ErrorCode())
+			s.signInMu.Lock()
 			s.loggedIn = false
+			s.signInMu.Unlock()
 			if connect {
 				s.client.Connect()
 			}
@@ -160,7 +177,9 @@ func (s *DiscordService) login(connect bool, callbacks ...func(bool)) {
 			}
 			return
 		}
+		s.signInMu.Lock()
 		s.loggedIn = true
+		s.signInMu.Unlock()
 		slog.Info("Successfully logged in to Discord")
 		if connect {
 			s.client.Connect()
@@ -186,7 +205,9 @@ func (s *DiscordService) Logout() {
 			s.clearCredentials()
 		}
 	})
+	s.signInMu.Lock()
 	s.loggedIn = false
+	s.signInMu.Unlock()
 }
 
 type discordCredentials struct {

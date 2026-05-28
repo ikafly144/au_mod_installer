@@ -27,8 +27,9 @@ type DiscordService struct {
 	queueMu sync.Mutex
 	queue   []string
 
-	signInMu sync.Mutex
-	loggedIn bool
+	signInMu  sync.Mutex
+	signingIn bool
+	loggedIn  bool
 }
 
 func (s *DiscordService) Client() *discord.Discord_Client {
