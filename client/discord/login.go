@@ -54,6 +54,21 @@ func (s *DiscordService) IsLoggedIn() bool {
 	return s.loggedIn
 }
 
+func (s *DiscordService) IsSigningIn() bool {
+	s.signInMu.Lock()
+	defer s.signInMu.Unlock()
+	return s.signingIn
+}
+
+func (s *DiscordService) IsReady() bool {
+	select {
+	case <-s.ready:
+		return true
+	default:
+		return false
+	}
+}
+
 func (s *DiscordService) UserInfo() (*discord.Discord_UserHandle, bool) {
 	if !s.IsLoggedIn() {
 		return nil, false

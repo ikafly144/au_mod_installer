@@ -633,9 +633,31 @@ func (l *Launcher) showDiscordFriendsDialog() {
 		l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("settings.discord_unavailable", "Discord is unavailable.")))
 		return
 	}
-	l.state.Core.DiscordService.WaitReady()
-	if !l.state.Core.DiscordService.IsLoggedIn() {
+	ds := l.state.Core.DiscordService
+	if ds.IsSigningIn() {
+		l.state.ShowInfoDialog(lang.LocalizeKey("settings.discord_login_in_progress_title", "Login in progress"), lang.LocalizeKey("settings.discord_login_waiting", "Please complete the Discord login in your browser."))
+		return
+	}
+	if !ds.IsLoggedIn() {
 		l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("settings.discord_logged_out", "Not Logged In")))
+		return
+	}
+
+	if !ds.IsReady() {
+		progress := widget.NewProgressBarInfinite()
+		d := dialog.NewCustomWithoutButtons(
+			lang.LocalizeKey("settings.discord_login_in_progress_title", "Login in progress"),
+			container.NewVBox(widget.NewLabel(lang.LocalizeKey("settings.discord_login_in_progress_message", "Login in progress...")), progress),
+			l.state.Window,
+		)
+		d.Show()
+		go func() {
+			ds.WaitReady()
+			fyne.Do(func() {
+				d.Hide()
+				l.showDiscordFriendsDialog()
+			})
+		}()
 		return
 	}
 

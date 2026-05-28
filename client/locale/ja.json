@@ -93,6 +93,7 @@
     "settings.discord_login_waiting": "Discordログインを完了してください。",
     "settings.discord_login_in_progress_title": "ログイン中",
     "settings.discord_login_in_progress_message": "Discordログインが進行中です。",
+    "settings.discord_login_failed": "Discordログインに失敗しました。",
     "settings.discord_unavailable": "Discordを利用できません。",
     "settings.epic_games_account": "Epic Gamesアカウント",
     "settings.epic_login": "ログイン",
