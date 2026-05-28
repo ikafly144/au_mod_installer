@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/lang"
 	"github.com/google/uuid"
 
@@ -249,7 +250,11 @@ func (a *App) updateRichPresence() {
 			p.SetId(strings.ToLower(lobby.GameState) + "/" + hex.EncodeToString(new(sha256.Sum256([]byte(lobby.MatchMakerIp + ":" + strconv.Itoa(lobby.MatchMakerPort) + "@" + lobby.LobbyCode)))[:]))
 			p.SetMaxSize(int32(lobby.MaxPlayers))
 			p.SetCurrentSize(int32(lobby.JoinedPlayers))
-			p.SetPrivacy(sdk.Discord_ActivityPartyPrivacy_Public)
+			if fyne.CurrentApp().Preferences().BoolWithFallback("public_party", true) {
+				p.SetPrivacy(sdk.Discord_ActivityPartyPrivacy_Public)
+			} else {
+				p.SetPrivacy(sdk.Discord_ActivityPartyPrivacy_Private)
+			}
 			act.SetParty(p)
 		}
 		share := a.GetSharedRoom()

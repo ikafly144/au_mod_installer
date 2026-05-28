@@ -3,6 +3,7 @@ package discord
 import (
 	"log/slog"
 
+	"fyne.io/fyne/v2/lang"
 	discord "github.com/ikafly144/discord_social_sdk"
 )
 
@@ -53,4 +54,18 @@ func (s *DiscordService) ClearActivity() {
 
 func (s *DiscordService) CurrentActivity() (*discord.Discord_Activity, bool) {
 	return s.currentActivity, s.currentActivity != nil
+}
+
+func (s *DiscordService) SendInvite(userId uint64) {
+	if s.currentActivity == nil {
+		slog.Warn("Cannot send invite, no current activity")
+		return
+	}
+	s.client.SendActivityInvite(userId, lang.LocalizeKey("discord.invite_message", "Join me in {{.Name}}!", map[string]any{"Name": s.currentActivity.Name()}), func(result *discord.Discord_ClientResult) {
+		if !result.Successful() {
+			slog.Warn("Failed to send Discord invite", "error", result.ErrorCode())
+		} else {
+			slog.Info("Successfully sent Discord invite")
+		}
+	})
 }
