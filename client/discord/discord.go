@@ -1,16 +1,32 @@
 package discord
 
 import (
+	"log/slog"
 	"sync"
 
 	discord "github.com/ikafly144/discord_social_sdk"
 )
 
 func NewDiscordService(client *discord.Discord_Client) *DiscordService {
-	return &DiscordService{
+	ds := &DiscordService{
 		client: client,
 		ready:  make(chan struct{}),
+		relationShipChangedCallbacks: make(map[int]func([]discord.Discord_RelationshipHandle)),
 	}
+	client.SetRelationshipGroupsUpdatedCallback(func(userId uint64) {
+		ds.relationshipsMu.Lock()
+		friends, err := ds.GetFriends()
+		if err != nil {
+			slog.Warn("Failed to get friends during relationship update", "error", err)
+			ds.relationshipsMu.Unlock()
+			return
+		}
+		for _, callback := range ds.relationShipChangedCallbacks {
+			callback(friends)
+		}
+		ds.relationshipsMu.Unlock()
+	})
+	return ds
 }
 
 type DiscordService struct {
@@ -31,6 +47,10 @@ type DiscordService struct {
 	signInMu  sync.Mutex
 	signingIn bool
 	loggedIn  bool
+
+	relationShipChangedCallbacks map[int]func([]discord.Discord_RelationshipHandle)
+	nextRelationshipCallbackID   int
+	relationshipsMu              sync.Mutex
 }
 
 func (s *DiscordService) Client() *discord.Discord_Client {

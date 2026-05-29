@@ -887,6 +887,16 @@ func (l *Launcher) showDiscordFriendsDialog() {
 		content,
 		l.state.Window,
 	)
+
+	callbackID := ds.AddRelationshipChangedCallback(func(friends []discordsdk.Discord_RelationshipHandle) {
+		fyne.Do(func() {
+			updateList(searchBar.Text)
+		})
+	})
+	d.SetOnClosed(func() {
+		ds.RemoveRelationshipChangedCallback(callbackID)
+	})
+
 	d.Resize(fyne.NewSize(480, 560))
 	d.Show()
 }

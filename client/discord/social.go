@@ -24,3 +24,18 @@ func (s *DiscordService) SearchFriends(query string) ([]discord.Discord_UserHand
 	friends := s.client.SearchFriendsByUsername(query)
 	return friends, nil
 }
+
+func (s *DiscordService) AddRelationshipChangedCallback(callback func([]discord.Discord_RelationshipHandle)) int {
+	s.relationshipsMu.Lock()
+	defer s.relationshipsMu.Unlock()
+	id := s.nextRelationshipCallbackID
+	s.relationShipChangedCallbacks[id] = callback
+	s.nextRelationshipCallbackID++
+	return id
+}
+
+func (s *DiscordService) RemoveRelationshipChangedCallback(id int) {
+	s.relationshipsMu.Lock()
+	defer s.relationshipsMu.Unlock()
+	delete(s.relationShipChangedCallbacks, id)
+}
