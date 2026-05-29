@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"time"
 
+	"fyne.io/fyne/v2"
 	"github.com/danieljoos/wincred"
 	discord "github.com/ikafly144/discord_social_sdk"
 )
@@ -30,7 +31,8 @@ func (s *DiscordService) Connect() {
 		}
 		slog.Info("Discord client status changed", "status", arg0, "error", arg1, "code", arg2)
 	})
-	s.login(true, func(success bool) {
+	triedLogin := fyne.CurrentApp().Preferences().Bool("tried_discord_login")
+	s.login(!triedLogin, func(success bool) {
 		if !success {
 			slog.Warn("Discord login failed during Connect")
 			s.readyOnce.Do(func() {
@@ -128,7 +130,7 @@ func (s *DiscordService) StartSignIn(callback func(bool)) (started bool) {
 				if err := s.saveCredentials(creds); err != nil {
 					slog.Error("Failed to save Discord credentials", "error", err)
 				}
-				s.login(true, func(success bool) {
+				s.login(false, func(success bool) {
 					s.signInMu.Lock()
 					s.signingIn = false
 					// loggedIn state is updated within s.login callbacks
@@ -142,19 +144,23 @@ func (s *DiscordService) StartSignIn(callback func(bool)) (started bool) {
 	return true
 }
 
-func (s *DiscordService) login(connect bool, callbacks ...func(bool)) {
+func (s *DiscordService) login(firstLogin bool, callbacks ...func(bool)) {
 	creds, ok := s.loadCredentials()
 	if !ok {
-		started := s.StartSignIn(func(b bool) {
-			if !b {
-				slog.Warn("Discord sign-in failed")
-			}
-			for _, callback := range callbacks {
-				callback(b)
-			}
-		})
+		var started bool
+		if firstLogin {
+			started = s.StartSignIn(func(b bool) {
+				if !b {
+					slog.Warn("Discord sign-in failed")
+				} else {
+					fyne.CurrentApp().Preferences().SetBool("tried_discord_login", true)
+				}
+				for _, callback := range callbacks {
+					callback(b)
+				}
+			})
+		}
 		if !started {
-			slog.Warn("Discord login already in progress")
 			for _, callback := range callbacks {
 				callback(false)
 			}
@@ -190,9 +196,7 @@ func (s *DiscordService) login(connect bool, callbacks ...func(bool)) {
 			s.signInMu.Lock()
 			s.loggedIn = false
 			s.signInMu.Unlock()
-			if connect {
-				s.client.Connect()
-			}
+			s.client.Connect()
 			for _, callback := range callbacks {
 				callback(false)
 			}
@@ -202,9 +206,7 @@ func (s *DiscordService) login(connect bool, callbacks ...func(bool)) {
 		s.loggedIn = true
 		s.signInMu.Unlock()
 		slog.Info("Successfully logged in to Discord")
-		if connect {
-			s.client.Connect()
-		}
+		s.client.Connect()
 		for _, callback := range callbacks {
 			callback(true)
 		}
