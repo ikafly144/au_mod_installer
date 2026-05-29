@@ -9,8 +9,8 @@ import (
 
 func NewDiscordService(client *discord.Discord_Client) *DiscordService {
 	ds := &DiscordService{
-		client: client,
-		ready:  make(chan struct{}),
+		client:                       client,
+		ready:                        make(chan struct{}),
 		relationShipChangedCallbacks: make(map[int]func([]discord.Discord_RelationshipHandle)),
 	}
 	client.SetRelationshipGroupsUpdatedCallback(func(userId uint64) {
