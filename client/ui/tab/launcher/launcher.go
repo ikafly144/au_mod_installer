@@ -632,7 +632,17 @@ func (l *Launcher) showDiscordFriendsDialog() {
 		return
 	}
 	if !ds.IsLoggedIn() {
-		l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("settings.discord_logged_out", "Not Logged In")))
+		if ds.StartSignIn(func(success bool) {
+			if success {
+				fyne.Do(func() {
+					l.showDiscordFriendsDialog()
+				})
+			} else {
+				l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("settings.discord_login_failed", "Failed to log in to Discord.")))
+			}
+		}) {
+			l.state.ShowInfoDialog(lang.LocalizeKey("settings.discord_login_in_progress_title", "Login in progress"), lang.LocalizeKey("settings.discord_login_waiting", "Please complete the Discord login in your browser."))
+		}
 		return
 	}
 
