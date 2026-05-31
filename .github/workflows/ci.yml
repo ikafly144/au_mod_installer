@@ -106,4 +106,6 @@ jobs:
         with:
           go-version: stable
       - name: Run tests
-        run: go test ./... -v -
+        run: |
+          go generate ./...
+          go test ./... -v -
