@@ -18,7 +18,7 @@ import (
 	"github.com/ikafly144/au_mod_installer/server/service"
 )
 
-func router(srv *service.ModService, pathPrefix string, basePath string) http.Handler {
+func router(srv *service.ModService, versionProvider service.VersionInfoProvider, pathPrefix string, basePath string) http.Handler {
 	r := gin.Default()
 
 	api := r.Group(basePath)
@@ -107,6 +107,19 @@ func router(srv *service.ModService, pathPrefix string, basePath string) http.Ha
 	})
 	api.GET(rest.EndpointHealth.Route, func(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+	api.GET(rest.EndpointGetVersionInfo.Route, func(ctx *gin.Context) {
+		if versionProvider == nil {
+			ctx.JSON(http.StatusServiceUnavailable, gin.H{"error": "version info not available"})
+			return
+		}
+		info, err := versionProvider.GetVersionInfo(ctx.Request.Context())
+		if err != nil {
+			slog.ErrorContext(ctx.Request.Context(), "Failed to get version info", "error", err)
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get version info"})
+			return
+		}
+		ctx.JSON(http.StatusOK, info)
 	})
 	api.POST(rest.EndpointShareGame.Route, func(ctx *gin.Context) {
 		fileHeader, err := ctx.FormFile("aupack")

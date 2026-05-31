@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"mime/multipart"
 	"net/http"
@@ -11,12 +12,19 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	restcommon "github.com/ikafly144/au_mod_installer/common/rest"
 	"github.com/ikafly144/au_mod_installer/server/service"
 )
 
+type staticVersionInfoProvider struct{}
+
+func (staticVersionInfoProvider) GetVersionInfo(ctx context.Context) (*restcommon.VersionInfo, error) {
+	return &restcommon.VersionInfo{}, nil
+}
+
 func TestRouter_ShareGame_AcceptsMultipartFormData(t *testing.T) {
 	srv := service.NewModService(nil)
-	handler := router(srv, "", "")
+	handler := router(srv, staticVersionInfoProvider{}, "", "")
 
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
@@ -48,7 +56,7 @@ func TestRouter_ShareGame_AcceptsMultipartFormData(t *testing.T) {
 
 func TestRouter_ShareGame_RejectsInvalidServerPort(t *testing.T) {
 	srv := service.NewModService(nil)
-	handler := router(srv, "", "")
+	handler := router(srv, staticVersionInfoProvider{}, "", "")
 
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)

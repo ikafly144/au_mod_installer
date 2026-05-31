@@ -67,6 +67,10 @@ func (f *FileClient) GetHealthStatus() (*rest.HealthStatus, error) {
 	}, nil
 }
 
+func (f *FileClient) GetVersionInfo() (*rest.VersionInfo, error) {
+	return nil, fmt.Errorf("local mode: version info not available")
+}
+
 func (f *FileClient) GetModIDs(limit int, after string, before string) ([]string, error) {
 	var modIDs []string
 	for _, m := range f.modStore {

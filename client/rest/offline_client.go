@@ -21,6 +21,10 @@ func (c *OfflineClient) GetHealthStatus() (*rest.HealthStatus, error) {
 	}, nil
 }
 
+func (c *OfflineClient) GetVersionInfo() (*rest.VersionInfo, error) {
+	return nil, errors.New("offline mode: version info not available")
+}
+
 func (c *OfflineClient) ServerBaseURL() string {
 	return ""
 }

@@ -117,3 +117,11 @@ func (c *clientImpl) GetHealthStatus() (*rest.HealthStatus, error) {
 	}
 	return &status, nil
 }
+
+func (c *clientImpl) GetVersionInfo() (*rest.VersionInfo, error) {
+	var info rest.VersionInfo
+	if err := c.do(rest.EndpointGetVersionInfo.Compile(nil), nil, &info, 1); err != nil {
+		return nil, err
+	}
+	return &info, nil
+}

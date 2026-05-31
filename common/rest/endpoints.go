@@ -17,6 +17,7 @@ var (
 	EndpointUpdateShareGame     = NewEndpoint("PUT", "/share_game")
 	EndpointDeleteShareGame     = NewEndpoint("DELETE", "/share_game")
 	EndpointJoinGame            = NewEndpoint("GET", "/join_game")
+	EndpointGetVersionInfo      = NewEndpoint("GET", "/version_info")
 )
 
 func NewEndpoint(method, path string) *Endpoint {

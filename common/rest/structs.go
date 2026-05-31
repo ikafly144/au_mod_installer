@@ -3,9 +3,16 @@ package rest
 import "time"
 
 type HealthStatus struct {
-	Status           string   `json:"status"`
-	WorkingVersion   string   `json:"working_version,omitempty"`
-	DisabledVersions []string `json:"disabled_versions,omitempty"`
+	Status string `json:"status"`
+}
+
+type VersionInfo struct {
+	Branches []BranchInfo `json:"branches"`
+}
+
+type BranchInfo struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
 }
 
 type RoomInfo struct {

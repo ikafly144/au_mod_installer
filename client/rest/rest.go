@@ -8,6 +8,7 @@ import (
 type Client interface {
 	ServerBaseURL() string
 	GetHealthStatus() (*rest.HealthStatus, error)
+	GetVersionInfo() (*rest.VersionInfo, error)
 	GetModIDs(limit int, after string, before string) ([]string, error)
 	GetMod(modID string) (*modmgr.Mod, error)
 	GetModVersionIDs(modID string, limit int, after string) ([]string, error)

@@ -38,7 +38,9 @@ import (
 
 type Settings struct {
 	state                   *uicommon.State
-	BranchSelect            *widget.Select
+	BranchEntry             *widget.Entry
+	BranchHintLabel         *widget.Label
+	BranchStatusLabel       *widget.Label
 	AutoSharingCheck        *widget.Check
 	DisplayScaleSlider      *widget.Slider
 	DisplayScaleSelect      *widget.Select
@@ -100,20 +102,33 @@ type thirdPartyLicense struct {
 }
 
 func NewSettings(state *uicommon.State) *Settings {
-	branchOptions := []string{
-		versioning.BranchStable.String(),
-		versioning.BranchPreview.String(),
-		versioning.BranchBeta.String(),
-		versioning.BranchCanary.String(),
-		versioning.BranchDev.String(),
+	branchEntry := widget.NewEntry()
+	branchEntry.PlaceHolder = lang.LocalizeKey("settings.update_branch_placeholder", "Enter update branch (advanced)")
+	branchHintLabel := widget.NewLabelWithStyle(lang.LocalizeKey("settings.update_branch_hint", "Advanced: enter branch name manually. Leave blank for stable."), fyne.TextAlignLeading, fyne.TextStyle{Italic: true})
+	branchStatusLabel := widget.NewLabel("")
+	branchStatusLabel.Hide()
+	currentBranch := strings.TrimSpace(fyne.CurrentApp().Preferences().StringWithFallback("core.update_branch", "stable"))
+	normalizedBranch := strings.ToLower(currentBranch)
+	if versioning.BranchFromString(normalizedBranch).String() != normalizedBranch {
+		normalizedBranch = versioning.BranchStable.String()
 	}
-	branchSelect := widget.NewSelect(branchOptions, nil)
-	branchSelect.PlaceHolder = lang.LocalizeKey("settings.select_update_channel", "Select Update Channel")
-	branchSelect.OnChanged = func(s string) {
-		fyne.CurrentApp().Preferences().SetString("core.update_branch", s)
+	branchEntry.SetText(normalizedBranch)
+	branchEntry.OnChanged = func(s string) {
+		normalized := strings.ToLower(strings.TrimSpace(s))
+		if normalized == "" {
+			fyne.CurrentApp().Preferences().SetString("core.update_branch", versioning.BranchStable.String())
+			branchStatusLabel.Hide()
+			return
+		}
+		if versioning.BranchFromString(normalized).String() != normalized {
+			fyne.CurrentApp().Preferences().SetString("core.update_branch", versioning.BranchStable.String())
+			branchStatusLabel.SetText(lang.LocalizeKey("settings.update_branch_invalid", "Invalid branch name. Using stable."))
+			branchStatusLabel.Show()
+			return
+		}
+		fyne.CurrentApp().Preferences().SetString("core.update_branch", normalized)
+		branchStatusLabel.Hide()
 	}
-	currentBranch := fyne.CurrentApp().Preferences().StringWithFallback("core.update_branch", "stable")
-	branchSelect.SetSelected(currentBranch)
 
 	autoSharingCheck := widget.NewCheck(lang.LocalizeKey("settings.auto_sharing_label", "Enable Room Auto Sharing"), func(checked bool) {
 		fyne.CurrentApp().Preferences().SetBool("auto_sharing", checked)
@@ -143,7 +158,9 @@ func NewSettings(state *uicommon.State) *Settings {
 
 	s := &Settings{
 		state:                    state,
-		BranchSelect:             branchSelect,
+		BranchEntry:              branchEntry,
+		BranchHintLabel:          branchHintLabel,
+		BranchStatusLabel:        branchStatusLabel,
 		AutoSharingCheck:         autoSharingCheck,
 		DisplayScaleSlider:       displayScaleSlider,
 		DisplayScaleSelect:       displayScaleSelect,
@@ -269,7 +286,11 @@ func (s *Settings) Tab() (*container.TabItem, error) {
 		widget.NewCard(
 			lang.LocalizeKey("settings.update_channel", "Update Channel"),
 			"",
-			settingsEntry(lang.LocalizeKey("settings.select_update_channel", "Select Update Channel"), s.BranchSelect),
+			settingsEntry(lang.LocalizeKey("settings.update_branch_input", "Update Branch"), container.NewVBox(
+				s.BranchEntry,
+				s.BranchHintLabel,
+				s.BranchStatusLabel,
+			)),
 		),
 		widget.NewCard(
 			lang.LocalizeKey("settings.auto_sharing", "Auto Sharing"),

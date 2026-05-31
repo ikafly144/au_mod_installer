@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -53,10 +54,24 @@ func realMain(ctx context.Context) error {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
 	modSrv := service.NewModService(gormrepo.NewGormRepository(db))
+	versionInfoTTL := time.Duration(0)
+	if rawTTL := os.Getenv("VERSION_INFO_TTL"); rawTTL != "" {
+		parsedTTL, err := time.ParseDuration(rawTTL)
+		if err != nil {
+			slog.WarnContext(ctx, "Invalid VERSION_INFO_TTL; using default", "value", rawTTL, "error", err)
+		} else {
+			versionInfoTTL = parsedTTL
+		}
+	}
+	versionSvc := service.NewVersionInfoService(service.VersionInfoOptions{
+		HTTPClient: &http.Client{Timeout: 10 * time.Second},
+		Token:      os.Getenv("GITHUB_TOKEN"),
+		TTL:        versionInfoTTL,
+	})
 
 	srv := &http.Server{
 		Addr:    *addr,
-		Handler: router(modSrv, *pathPrefix, *basePath),
+		Handler: router(modSrv, versionSvc, *pathPrefix, *basePath),
 	}
 
 	go func() {

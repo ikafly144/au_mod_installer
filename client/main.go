@@ -32,6 +32,7 @@ import (
 	"github.com/ikafly144/au_mod_installer/client/rest"
 	"github.com/ikafly144/au_mod_installer/client/ui"
 	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
+	restcommon "github.com/ikafly144/au_mod_installer/common/rest"
 	"github.com/ikafly144/au_mod_installer/common/versioning"
 )
 
@@ -150,58 +151,6 @@ func realMain(sharedURI string, sharedArchive string) error {
 		slog.Error("Failed to register scheme", "error", err)
 	}
 
-	branch := versioning.BranchFromString(a.Preferences().StringWithFallback("core.update_branch", "stable"))
-
-	tag, stable, err := versioning.CheckForUpdates(context.Background(), branch, version)
-	if err != nil {
-		slog.Error("Failed to check for updates", "error", err)
-	} else if tag != "" {
-		slog.Info("Update available", "version", tag)
-		yes := (&dialog.MsgBuilder{Msg: lang.LocalizeKey("update.available", "New version \"{{.Version}}\" is available. Click 'Yes' to update.", map[string]any{"Version": tag})}).Title(lang.LocalizeKey("update.title", "Update Available")).YesNo()
-		if yes {
-			slog.Info("Updating to new version", "version", tag)
-			installerLaunched, err := versioning.Update(context.Background(), tag)
-			if err != nil {
-				slog.Error("Failed to update", "error", err)
-				(&dialog.MsgBuilder{Msg: lang.LocalizeKey("update.failed", "Update failed: {{.Error}}", map[string]any{"Error": err.Error()})}).Title(lang.LocalizeKey("app.error", "Error")).Error()
-				return err
-			}
-			if installerLaunched {
-				slog.Info("Installer launched, exiting to allow update")
-				return nil
-			}
-			execCmd := exec.Command(os.Args[0], os.Args[1:]...)
-			execCmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
-			return execCmd.Start()
-		} else if version != "(devel)" && semver.Prerelease(tag) == "" && semver.Compare(stable, version) > 0 {
-			// 開発版でないかつ安定版が現在のバージョンより新しい場合は、更新を促す
-			slog.Info("User chose not to update")
-			(&dialog.MsgBuilder{Msg: lang.LocalizeKey("update.required", "Update is required to continue. Please update to the latest version and restart the application.")}).Title(lang.LocalizeKey("update.required_title", "Update Required")).Error()
-			return errors.New("update required")
-		}
-	} else {
-		slog.Info("No updates available")
-	}
-
-	w := a.NewWindow(lang.LocalizeKey("app.name", "Mod of Us") + " " + version)
-	if path, err := os.Executable(); err == nil {
-
-		social.RegisterLaunchCommand(APPLICATION_ID, path)
-	}
-
-	activityService.SetIdleActivity(func() *sdk.Discord_Activity {
-		act := sdk.NewActivity()
-		act.SetType(sdk.Discord_ActivityTypes_Playing)
-		act.SetName("Mod of Us")
-		act.SetState(lang.LocalizeKey("discord.status.idle", "Idle"))
-		act.SetDetails(lang.LocalizeKey("discord.status.idle_details", "Not currently running the game"))
-		return act
-	}, func(d *sdk.Discord_ClientResult) {
-		if !d.Successful() {
-			slog.Warn("Failed to set idle activity", "error", d.ErrorCode())
-		}
-	})
-
 	var client rest.Client
 	if localMode != "" {
 		slog.Info("Running in local mode", "path", localMode)
@@ -236,6 +185,65 @@ func realMain(sharedURI string, sharedArchive string) error {
 		}
 	}
 
+	branch := versioning.BranchFromString(a.Preferences().StringWithFallback("core.update_branch", "stable"))
+
+	info, err := client.GetVersionInfo()
+	if err != nil {
+		slog.Error("Failed to check for updates", "error", err)
+	} else {
+		tag := findBranchVersion(info, branch.String())
+		stable := findBranchVersion(info, versioning.BranchStable.String())
+		if tag != "" && semver.Compare(tag, version) <= 0 {
+			tag = ""
+		}
+		if tag != "" {
+			slog.Info("Update available", "version", tag)
+			yes := (&dialog.MsgBuilder{Msg: lang.LocalizeKey("update.available", "New version \"{{.Version}}\" is available. Click 'Yes' to update.", map[string]any{"Version": tag})}).Title(lang.LocalizeKey("update.title", "Update Available")).YesNo()
+			if yes {
+				slog.Info("Updating to new version", "version", tag)
+				installerLaunched, err := versioning.Update(context.Background(), tag)
+				if err != nil {
+					slog.Error("Failed to update", "error", err)
+					(&dialog.MsgBuilder{Msg: lang.LocalizeKey("update.failed", "Update failed: {{.Error}}", map[string]any{"Error": err.Error()})}).Title(lang.LocalizeKey("app.error", "Error")).Error()
+					return err
+				}
+				if installerLaunched {
+					slog.Info("Installer launched, exiting to allow update")
+					return nil
+				}
+				execCmd := exec.Command(os.Args[0], os.Args[1:]...)
+				execCmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+				return execCmd.Start()
+			} else if version != "(devel)" && semver.Prerelease(tag) == "" && stable != "" && semver.Compare(stable, version) > 0 {
+				// 開発版でないかつ安定版が現在のバージョンより新しい場合は、更新を促す
+				slog.Info("User chose not to update")
+				(&dialog.MsgBuilder{Msg: lang.LocalizeKey("update.required", "Update is required to continue. Please update to the latest version and restart the application.")}).Title(lang.LocalizeKey("update.required_title", "Update Required")).Error()
+				return errors.New("update required")
+			}
+		} else {
+			slog.Info("No updates available")
+		}
+	}
+
+	w := a.NewWindow(lang.LocalizeKey("app.name", "Mod of Us") + " " + version)
+	if path, err := os.Executable(); err == nil {
+
+		social.RegisterLaunchCommand(APPLICATION_ID, path)
+	}
+
+	activityService.SetIdleActivity(func() *sdk.Discord_Activity {
+		act := sdk.NewActivity()
+		act.SetType(sdk.Discord_ActivityTypes_Playing)
+		act.SetName("Mod of Us")
+		act.SetState(lang.LocalizeKey("discord.status.idle", "Idle"))
+		act.SetDetails(lang.LocalizeKey("discord.status.idle_details", "Not currently running the game"))
+		return act
+	}, func(d *sdk.Discord_ClientResult) {
+		if !d.Successful() {
+			slog.Warn("Failed to set idle activity", "error", d.ErrorCode())
+		}
+	})
+
 	if err := ui.Main(w, version, sharedURI, sharedArchive,
 		ui.WithStateOptions(
 			uicommon.WithRestClient(client),
@@ -252,6 +260,18 @@ func realMain(sharedURI string, sharedArchive string) error {
 
 	runtime.KeepAlive(social)
 	return nil
+}
+
+func findBranchVersion(info *restcommon.VersionInfo, branch string) string {
+	if info == nil {
+		return ""
+	}
+	for _, b := range info.Branches {
+		if strings.EqualFold(b.Name, branch) {
+			return b.Version
+		}
+	}
+	return ""
 }
 
 func startIPCListener(s *uicommon.State) {
