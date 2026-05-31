@@ -69,11 +69,11 @@ func main() {
 
 		// Try to send URI to the existing instance via IPC
 		conn, err := winio.DialPipe(pipeName, nil)
-		defer conn.Close()
 		if err != nil {
 			_ = lock.Unlock()
 			os.Exit(1)
 		}
+		defer conn.Close()
 		if sharedURI != "" || sharedArchive != "" {
 			if sharedURI != "" {
 				_, _ = conn.Write([]byte("uri:" + sharedURI + "\n"))
@@ -130,8 +130,7 @@ func realMain(sharedURI string, sharedArchive string) error {
 		case sdk.Discord_LoggingSeverity_Error:
 			level = slog.LevelError
 		}
-		arg0 = "[Discord SDK] " + arg0
-		slog.Log(context.Background(), level, arg0)
+		slog.Default().With(slog.String("component", "discord_sdk")).Log(context.Background(), level, arg0)
 	}, sdk.Discord_LoggingSeverity_Info)
 	social.SetApplicationId(APPLICATION_ID)
 
