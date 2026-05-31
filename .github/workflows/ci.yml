@@ -25,7 +25,7 @@ permissions:
 jobs:
   golangci:
     name: lint
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -33,20 +33,20 @@ jobs:
           submodules: recursive
           persist-credentials: false
       - name: Stage Discord SDK DLL
+        shell: pwsh
         run: |
-          mkdir -p lib
-          dlls=$(find mus-libs -name "discord_partner_sdk.dll")
-          count=$(echo "$dlls" | grep -c .)
-          if [ "$count" -eq 0 ]; then
-            echo "discord_partner_sdk.dll not found in mus-libs"
+          New-Item -ItemType Directory -Force -Path lib | Out-Null
+          $dlls = @(Get-ChildItem -Path mus-libs -Recurse -Filter "discord_partner_sdk.dll" -File)
+          if ($dlls.Count -eq 0) {
+            Write-Error "discord_partner_sdk.dll not found in mus-libs"
             exit 1
-          fi
-          if [ "$count" -ne 1 ]; then
-            echo "multiple discord_partner_sdk.dll files found; please ensure exactly one match:"
-            echo "$dlls"
+          }
+          if ($dlls.Count -ne 1) {
+            Write-Error "multiple discord_partner_sdk.dll files found; please ensure exactly one match:"
+            $dlls | ForEach-Object { $_.FullName }
             exit 1
-          fi
-          cp "$dlls" lib/discord_partner_sdk.dll
+          }
+          Copy-Item -Path $dlls[0].FullName -Destination "lib\discord_partner_sdk.dll" -Force
       - name: Cache golangci-lint cache
         id: cache-golangci-lint
         env:
@@ -66,7 +66,7 @@ jobs:
         uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee # v9.2.1
   test:
     name: test
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -74,20 +74,20 @@ jobs:
           submodules: recursive
           persist-credentials: false
       - name: Stage Discord SDK DLL
+        shell: pwsh
         run: |
-          mkdir -p lib
-          dlls=$(find mus-libs -name "discord_partner_sdk.dll")
-          count=$(echo "$dlls" | grep -c .)
-          if [ "$count" -eq 0 ]; then
-            echo "discord_partner_sdk.dll not found in mus-libs"
+          New-Item -ItemType Directory -Force -Path lib | Out-Null
+          $dlls = @(Get-ChildItem -Path mus-libs -Recurse -Filter "discord_partner_sdk.dll" -File)
+          if ($dlls.Count -eq 0) {
+            Write-Error "discord_partner_sdk.dll not found in mus-libs"
             exit 1
-          fi
-          if [ "$count" -ne 1 ]; then
-            echo "multiple discord_partner_sdk.dll files found; please ensure exactly one match:"
-            echo "$dlls"
+          }
+          if ($dlls.Count -ne 1) {
+            Write-Error "multiple discord_partner_sdk.dll files found; please ensure exactly one match:"
+            $dlls | ForEach-Object { $_.FullName }
             exit 1
-          fi
-          cp "$dlls" lib/discord_partner_sdk.dll
+          }
+          Copy-Item -Path $dlls[0].FullName -Destination "lib\discord_partner_sdk.dll" -Force
       - name: Cache Go modules
         id: cache-go-mod
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
