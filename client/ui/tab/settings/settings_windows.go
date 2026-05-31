@@ -40,7 +40,7 @@ type Settings struct {
 	state                   *uicommon.State
 	BranchEntry             *widget.Entry
 	BranchHintLabel         *widget.Label
-	BranchStatusLabel       *widget.Label
+	BranchStatusLabel       *widget.RichText
 	AutoSharingCheck        *widget.Check
 	DisplayScaleSlider      *widget.Slider
 	DisplayScaleSelect      *widget.Select
@@ -105,7 +105,8 @@ func NewSettings(state *uicommon.State) *Settings {
 	branchEntry := widget.NewEntry()
 	branchEntry.PlaceHolder = lang.LocalizeKey("settings.update_branch_placeholder", "Enter update branch (advanced)")
 	branchHintLabel := widget.NewLabelWithStyle(lang.LocalizeKey("settings.update_branch_hint", "Advanced: enter branch name manually. Leave blank for stable."), fyne.TextAlignLeading, fyne.TextStyle{Italic: true})
-	branchStatusLabel := widget.NewLabel("")
+	branchHintLabel.Wrapping = fyne.TextWrapWord
+	branchStatusLabel := widget.NewRichText()
 	branchStatusLabel.Hide()
 	currentBranch := strings.TrimSpace(fyne.CurrentApp().Preferences().StringWithFallback("core.update_branch", "stable"))
 	normalizedBranch := strings.ToLower(currentBranch)
@@ -122,8 +123,17 @@ func NewSettings(state *uicommon.State) *Settings {
 		}
 		if versioning.BranchFromString(normalized).String() != normalized {
 			fyne.CurrentApp().Preferences().SetString("core.update_branch", versioning.BranchStable.String())
-			branchStatusLabel.SetText(lang.LocalizeKey("settings.update_branch_invalid", "Invalid branch name. Using stable."))
+			branchStatusLabel.Segments = []widget.RichTextSegment{
+				&widget.TextSegment{
+					Text: lang.LocalizeKey("settings.update_branch_invalid", "Invalid branch name. Using stable."),
+					Style: widget.RichTextStyle{
+						ColorName: theme.ColorNameError,
+					},
+				},
+			}
+			branchStatusLabel.Wrapping = fyne.TextWrapWord
 			branchStatusLabel.Show()
+			branchStatusLabel.Refresh()
 			return
 		}
 		fyne.CurrentApp().Preferences().SetString("core.update_branch", normalized)
