@@ -1,3 +1,5 @@
+//go:build xbox
+
 package aumgr
 
 import "testing"
