@@ -755,10 +755,7 @@ func (l *Launcher) showDiscordFriendsDialog() {
 			}
 			return
 		}
-		end := displayedCount + pageSize
-		if end > len(allFriends) {
-			end = len(allFriends)
-		}
+		end := min(displayedCount+pageSize, len(allFriends))
 		for i := displayedCount; i < end; i++ {
 			contentBox.Add(buildFriendItem(allFriends[i]))
 		}

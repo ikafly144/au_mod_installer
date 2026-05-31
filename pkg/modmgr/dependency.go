@@ -253,9 +253,7 @@ func resolveDependenciesWithConstraints(
 
 		// Continue from the successfully resolved branch's remaining dependency state.
 		clear(allDeps)
-		for modID, constraints := range remainingDepsAfterResolve {
-			allDeps[modID] = constraints
-		}
+		maps.Copy(allDeps, remainingDepsAfterResolve)
 	}
 
 	return nil
