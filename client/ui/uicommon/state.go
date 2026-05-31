@@ -136,6 +136,7 @@ type State struct {
 
 	OnSharedURIReceived     func(uri string)
 	OnSharedArchiveReceived func(path string)
+	OnActivateReceived      func()
 	OnDroppedURIs           func([]fyne.URI)
 	OnGameStarted           func(profileID uuid.UUID, pid int)
 	OnGameExited            func(profileID uuid.UUID)

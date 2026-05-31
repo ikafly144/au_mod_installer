@@ -23,6 +23,7 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/driver"
 	"fyne.io/fyne/v2/lang"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/storage"
@@ -31,6 +32,7 @@ import (
 
 	"github.com/google/uuid"
 	discordsdk "github.com/ikafly144/discord_social_sdk"
+	"github.com/zzl/go-win32api/v2/win32"
 
 	"github.com/ikafly144/au_mod_installer/client/core"
 	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
@@ -212,6 +214,16 @@ func (l *Launcher) init() {
 	l.state.OnSharedArchiveReceived = func(path string) {
 		l.state.SharedArchive = path
 		fyne.Do(l.checkSharedArchive)
+	}
+	l.state.OnActivateReceived = func() {
+		fyne.Do(l.state.Window.RequestFocus)
+		if nw, ok := l.state.Window.(driver.NativeWindow); ok {
+			nw.RunNative(func(context any) {
+				if w, ok := context.(driver.WindowsWindowContext); ok {
+					win32.SetForegroundWindow(win32.HWND(w.HWND))
+				}
+			})
+		}
 	}
 	l.state.OnDroppedURIs = func(uris []fyne.URI) {
 		l.handleDroppedURIs(uris)
