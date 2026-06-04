@@ -83,6 +83,8 @@ func (s *State) Launch(path string, directJoinEnabled bool) {
 		slog.Warn("Failed to launch Among Us", "error", err)
 	}
 
+	s.OnActivateReceived()
+
 	s.Core.OnGameExitedInternal(activeProfileID)
 	if launchSucceeded {
 		finishedAt := time.Now()
