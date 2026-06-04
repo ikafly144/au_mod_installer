@@ -294,15 +294,6 @@ func (s *Settings) Tab() (*container.TabItem, error) {
 			),
 		),
 		widget.NewCard(
-			lang.LocalizeKey("settings.update_channel", "Update Channel"),
-			"",
-			settingsEntry(lang.LocalizeKey("settings.update_branch_input", "Update Branch"), container.NewVBox(
-				s.BranchEntry,
-				s.BranchHintLabel,
-				s.BranchStatusLabel,
-			)),
-		),
-		widget.NewCard(
 			lang.LocalizeKey("settings.auto_sharing", "Auto Sharing"),
 			"",
 			container.NewVBox(
@@ -360,6 +351,15 @@ func (s *Settings) Tab() (*container.TabItem, error) {
 
 	advancedPage := container.NewVScroll(container.NewVBox(
 		warningText,
+		widget.NewCard(
+			lang.LocalizeKey("settings.update_channel", "Update Channel"),
+			"",
+			settingsEntry(lang.LocalizeKey("settings.update_branch_input", "Update Branch"), container.NewVBox(
+				s.BranchEntry,
+				s.BranchHintLabel,
+				s.BranchStatusLabel,
+			)),
+		),
 		widget.NewCard(
 			lang.LocalizeKey("settings.data_management", "Data Management"),
 			"",
