@@ -10,6 +10,9 @@ version: 2
 
 project_name: mod-of-us
 
+snapshot:
+  version_template: "{{ .Version }}-dev+{{ .Branch }}-{{ .ShortCommit }}"
+
 git:
   tag_sort: -version:creatordate
   prerelease_suffix: "-"
