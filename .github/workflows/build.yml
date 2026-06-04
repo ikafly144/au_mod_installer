@@ -46,7 +46,7 @@ jobs:
       - name: Generate assets
         run: go generate ./client
       - name: Upload prepared source
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: prepared-source-${{ github.sha }}
           path: |
@@ -124,10 +124,18 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Upload snapshot artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: snapshot-${{ github.sha }}
           path: dist
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: snapshot-installer
+          archive: false
+          path: dist/*.msi
           if-no-files-found: error
           retention-days: 14
       - name: Save Go module cache
@@ -235,6 +243,13 @@ jobs:
       - uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4
         with:
           subject-checksums: ./dist/checksums.txt
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: installer-${{ github.sha }}
+          path: dist/*.msi
+          if-no-files-found: error
+          retention-days: 14
       - name: Output Release Summary
         env:
           GITHUB_REF_NAME: ${{ github.ref_name }}
