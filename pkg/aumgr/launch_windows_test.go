@@ -1,6 +1,8 @@
 package aumgr
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestIsSteamRunning(t *testing.T) {
 	running, err := isSteamRunning()

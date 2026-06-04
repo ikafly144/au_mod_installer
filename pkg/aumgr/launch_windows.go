@@ -127,7 +127,7 @@ func isSteamRunning() (bool, error) {
 		for {
 			select {
 			case <-timer.C:
-				return false, fmt.Errorf("timeout waiting for Steam to start")
+				return false, nil
 			case <-ticker.C:
 				processes, err := getProcesses()
 				if err != nil {
