@@ -3,7 +3,8 @@ name: build
 
 on:
   push:
-    # run only against tags
+    branches:
+      - "**"
     tags:
       - "v*"
 
@@ -70,7 +71,27 @@ jobs:
             ${{ runner.os }}-
       - name: Generate assets
         run: go generate ./client
+      - name: Run GoReleaser snapshot
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        uses: goreleaser/goreleaser-action@5daf1e915a5f0af01ddbcd89a43b8061ff4f1a89 # v7.2.2
+        with:
+          # either 'goreleaser' (default) or 'goreleaser-pro'
+          distribution: goreleaser
+          # 'latest', 'nightly', or a semver
+          version: "~> v2"
+          args: release --snapshot --clean --verbose
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload snapshot artifact
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: snapshot-${{ github.sha }}
+          path: dist
+          if-no-files-found: error
+          retention-days: 14
       - name: Get previous stable release
+        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
         id: get_previous_stable
         run: |
           $currentTag = $env:GITHUB_REF_NAME
@@ -93,6 +114,7 @@ jobs:
             "previous_stable=" >> $env:GITHUB_OUTPUT
           }
       - name: Run GoReleaser
+        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
         uses: goreleaser/goreleaser-action@5daf1e915a5f0af01ddbcd89a43b8061ff4f1a89 # v7.2.2
         with:
           # either 'goreleaser' (default) or 'goreleaser-pro'
@@ -106,9 +128,11 @@ jobs:
           DISCORD_WEBHOOK_TOKEN: ${{ secrets.DISCORD_WEBHOOK_TOKEN }}
           GORELEASER_PREVIOUS_TAG: ${{ steps.get_previous_stable.outputs.previous_stable }}
       - uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4
+        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
         with:
           subject-checksums: ./dist/checksums.txt
       - name: Output Release Summary
+        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
         env:
           GITHUB_REF_NAME: ${{ github.ref_name }}
           GITHUB_SERVER_URL: ${{ github.server_url }}
