@@ -6,7 +6,7 @@ formatters:
     - goimports
   settings:
     gofmt:
-      simplify: true
+      simplify: false
       rewrite-rules:
         - pattern: interface{}
           replacement: any
