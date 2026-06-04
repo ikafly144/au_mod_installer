@@ -112,7 +112,39 @@ func isSteamRunning() (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return findProcessByName(processes, "steam.exe") != nil, nil
+	_, foundSteam := findProcessByName(processes, "steamservice.exe")
+	if !foundSteam {
+		// Start steam
+		cmd := exec.Command("explorer.exe", "steam://")
+		if err := cmd.Start(); err != nil {
+			return false, fmt.Errorf("failed to start Steam: %w", err)
+		}
+		timer := time.NewTimer(30 * time.Second)
+		ticker := time.NewTicker(500 * time.Millisecond)
+		defer timer.Stop()
+		defer ticker.Stop()
+	loop:
+		for {
+			select {
+			case <-timer.C:
+				return false, fmt.Errorf("timeout waiting for Steam to start")
+			case <-ticker.C:
+				processes, err := getProcesses()
+				if err != nil {
+					slog.Error("Failed to get process list while waiting for Steam", "error", err)
+					continue
+				}
+				if _, found := findProcessByName(processes, "steamservice.exe"); found {
+					foundSteam = true
+					break loop
+				}
+			}
+			if foundSteam {
+				break
+			}
+		}
+	}
+	return foundSteam, nil
 }
 
 func launchEpicGames(amongUsDir string, dllDir string, exchangeCode string, directJoinInfo DirectJoinInfo, onStarted func(pid int) error) error {
@@ -141,8 +173,8 @@ func launchMicrosoft(amongUsDir string, dllDir string, directJoinInfo DirectJoin
 			slog.Error("Failed to get process list", "error", err)
 			continue
 		}
-		p := findProcessByName(pList, "Among Us.exe")
-		if p == nil {
+		p, found := findProcessByName(pList, "Among Us.exe")
+		if !found {
 			continue
 		}
 

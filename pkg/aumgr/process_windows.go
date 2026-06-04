@@ -55,13 +55,13 @@ func getProcesses() ([]WindowsProcess, error) {
 	}
 }
 
-func findProcessByName(processes []WindowsProcess, name string) *WindowsProcess {
+func findProcessByName(processes []WindowsProcess, name string) (*WindowsProcess, bool) {
 	for _, p := range processes {
 		if strings.EqualFold(p.Exe, name) {
-			return &p
+			return &p, true
 		}
 	}
-	return nil
+	return nil, false
 }
 
 func newWindowsProcess(e *windows.ProcessEntry32) WindowsProcess {
@@ -83,8 +83,8 @@ func IsAmongUsRunning() (pid int, err error) {
 	if err != nil {
 		return 0, err
 	}
-	proc := findProcessByName(processes, "Among Us.exe")
-	if proc == nil {
+	proc, found := findProcessByName(processes, "Among Us.exe")
+	if !found {
 		return 0, nil
 	}
 	return proc.ProcessID, nil

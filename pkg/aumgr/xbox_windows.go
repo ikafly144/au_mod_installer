@@ -12,7 +12,14 @@ import (
 
 func GetXboxAppId() (string, error) {
 	cmd := exec.Command("powershell", "-NoProfile", "-Command", "(Get-StartApps | Where-Object { $_.Name -like '*Among Us*' }).AppId")
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	pid, err := syscall.GetCurrentProcess()
+	if err != nil {
+		return "", fmt.Errorf("failed to get current process ID: %w", err)
+	}
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		HideWindow:    true,
+		ParentProcess: pid,
+	}
 	stdErr, err := cmd.StderrPipe()
 	if err != nil {
 		return "", err
