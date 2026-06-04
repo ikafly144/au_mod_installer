@@ -15,10 +15,11 @@ permissions:
   id-token: write
   attestations: write
 
+env:
+  cache-name: cache-go-mod
+
 jobs:
-  goreleaser:
-    env:
-      cache-name: cache-go-mod
+  setup:
     runs-on: windows-latest
     steps:
       - name: Configure Git
@@ -37,6 +38,49 @@ jobs:
           if ($dlls.Count -eq 0) { throw "discord_partner_sdk.dll not found in mus-libs" }
           elseif ($dlls.Count -ne 1) { throw "multiple discord_partner_sdk.dll files found; please ensure exactly one match" }
           else { Copy-Item $dlls[0].FullName -Destination lib\discord_partner_sdk.dll -Force }
+      - name: Set up Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version: stable
+          cache: false
+      - name: Generate assets
+        run: go generate ./client
+      - name: Upload prepared source
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: prepared-source-${{ github.sha }}
+          path: |
+            .
+            !**/.git/**
+          if-no-files-found: error
+
+  snapshot:
+    needs: setup
+    if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+    runs-on: windows-latest
+    steps:
+      - name: Configure Git
+        run: |
+          git config --global core.autocrlf false
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.MUS_LIBS_PAT }}
+          submodules: recursive
+          persist-credentials: false
+      - name: Download prepared source
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: prepared-source-${{ github.sha }}
+          path: .
+      - name: Normalize prepared source
+        run: |
+          $artifactRoot = "prepared-source-$env:GITHUB_SHA"
+          if (Test-Path $artifactRoot) {
+            Get-ChildItem -Force $artifactRoot | Move-Item -Destination . -Force
+            Remove-Item $artifactRoot -Recurse -Force
+          }
       - name: Set up MinGW
         uses: egor-tensin/setup-mingw@41b837e47d7f85214629d255b9c4bc3fcbe9fd63 # v3.0
         with:
@@ -69,10 +113,7 @@ jobs:
             ${{ runner.os }}-go-${{ env.cache-name }}-
             ${{ runner.os }}-go-
             ${{ runner.os }}-
-      - name: Generate assets
-        run: go generate ./client
       - name: Run GoReleaser snapshot
-        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         uses: goreleaser/goreleaser-action@5daf1e915a5f0af01ddbcd89a43b8061ff4f1a89 # v7.2.2
         with:
           # either 'goreleaser' (default) or 'goreleaser-pro'
@@ -83,15 +124,80 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Upload snapshot artifact
-        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: snapshot-${{ github.sha }}
           path: dist
           if-no-files-found: error
           retention-days: 14
+      - name: Save Go module cache
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: |
+            ~\AppData\Local\go-build
+            ~\go\pkg\mod
+          key: ${{ runner.os }}-go-crossbuild-windows-amd64-${{ hashFiles('**/go.sum') }}-${{ hashFiles('**/*.go') }}
+
+  release:
+    needs: setup
+    if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+    runs-on: windows-latest
+    steps:
+      - name: Configure Git
+        run: |
+          git config --global core.autocrlf false
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.MUS_LIBS_PAT }}
+          submodules: recursive
+          persist-credentials: false
+      - name: Download prepared source
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: prepared-source-${{ github.sha }}
+          path: .
+      - name: Normalize prepared source
+        run: |
+          $artifactRoot = "prepared-source-$env:GITHUB_SHA"
+          if (Test-Path $artifactRoot) {
+            Get-ChildItem -Force $artifactRoot | Move-Item -Destination . -Force
+            Remove-Item $artifactRoot -Recurse -Force
+          }
+      - name: Set up MinGW
+        uses: egor-tensin/setup-mingw@41b837e47d7f85214629d255b9c4bc3fcbe9fd63 # v3.0
+        with:
+          platform: x64
+      - name: Set up .NET
+        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5.3.0
+        with:
+          dotnet-version: "8.0.x"
+      - name: Install WiX v7
+        run: |
+          dotnet tool install --global wix --version 7.*
+          echo "$env:USERPROFILE\\.dotnet\\tools" >> $env:GITHUB_PATH
+      - name: Set up Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version: stable
+          cache: false
+      - name: Cache Go modules and build cache
+        id: restore-cache
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: |
+            ~\AppData\Local\go-build
+            ~\go\pkg\mod
+          key: ${{ runner.os }}-go-crossbuild-windows-amd64-${{ hashFiles('**/go.sum') }}-${{ hashFiles('**/*.go') }}
+          restore-keys: |
+            ${{ runner.os }}-go-crossbuild-windows-amd64-${{ hashFiles('**/go.sum') }}-
+            ${{ runner.os }}-go-crossbuild-windows-amd64-
+            ${{ runner.os }}-go-${{ env.cache-name }}-${{ hashFiles('**/go.sum') }}
+            ${{ runner.os }}-go-${{ env.cache-name }}-
+            ${{ runner.os }}-go-
+            ${{ runner.os }}-
       - name: Get previous stable release
-        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
         id: get_previous_stable
         run: |
           $currentTag = $env:GITHUB_REF_NAME
@@ -114,7 +220,6 @@ jobs:
             "previous_stable=" >> $env:GITHUB_OUTPUT
           }
       - name: Run GoReleaser
-        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
         uses: goreleaser/goreleaser-action@5daf1e915a5f0af01ddbcd89a43b8061ff4f1a89 # v7.2.2
         with:
           # either 'goreleaser' (default) or 'goreleaser-pro'
@@ -128,11 +233,9 @@ jobs:
           DISCORD_WEBHOOK_TOKEN: ${{ secrets.DISCORD_WEBHOOK_TOKEN }}
           GORELEASER_PREVIOUS_TAG: ${{ steps.get_previous_stable.outputs.previous_stable }}
       - uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4
-        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
         with:
           subject-checksums: ./dist/checksums.txt
       - name: Output Release Summary
-        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
         env:
           GITHUB_REF_NAME: ${{ github.ref_name }}
           GITHUB_SERVER_URL: ${{ github.server_url }}
@@ -166,7 +269,6 @@ jobs:
           Add-Content -Path $summaryPath -Value "Cache prime key: $env:CACHE_PRIMARY_KEY"
           Add-Content -Path $summaryPath -Value "Cache matched key: $env:CACHE_MATCHED_KEY"
       - name: Save Go module cache
-        if: always()
         uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: |
