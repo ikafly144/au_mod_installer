@@ -30,7 +30,7 @@ require (
 
 require (
 	fyne.io/systray v1.12.1 // indirect
-	fyne.io/tools v1.7.1 // indirect
+	fyne.io/tools v1.7.2 // indirect
 	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/akavel/rsrc v0.10.2 // indirect
 	github.com/bytedance/gopkg v0.1.4 // indirect
