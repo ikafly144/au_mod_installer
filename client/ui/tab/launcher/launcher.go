@@ -86,6 +86,10 @@ type Launcher struct {
 	friendAvatarFetched map[uint64]bool
 	friendAvatarLoading map[uint64]bool
 
+	profileIconMu      sync.Mutex
+	profileIconCache   map[uuid.UUID]image.Image
+	profileIconFetched map[uuid.UUID]bool
+
 	canLaunchListener binding.DataListener
 
 	content *fyne.Container
@@ -166,6 +170,8 @@ func NewLauncherTab(s *uicommon.State) *Launcher {
 		friendAvatarCache:      map[uint64]image.Image{},
 		friendAvatarFetched:    map[uint64]bool{},
 		friendAvatarLoading:    map[uint64]bool{},
+		profileIconCache:       map[uuid.UUID]image.Image{},
+		profileIconFetched:     map[uuid.UUID]bool{},
 	}
 	l.createProfileButton.Importance = widget.HighImportance
 	l.shareRoomButton.Importance = widget.MediumImportance
@@ -1303,10 +1309,13 @@ func (l *Launcher) confirmAndImportProfile(prof *profile.SharedProfile, iconPNG 
 }
 
 func (l *Launcher) importProfile(shared *profile.SharedProfile, iconPNG []byte) {
-	_, err := l.state.Core.ImportSharedProfile(shared, iconPNG)
+	prof, err := l.state.Core.ImportSharedProfile(shared, iconPNG)
 	if err != nil {
 		dialog.ShowError(err, l.state.Window)
 		return
+	}
+	if prof != nil {
+		l.invalidateProfileIconCache(prof.ID)
 	}
 	l.refreshProfiles()
 }
@@ -1315,6 +1324,10 @@ func (l *Launcher) importProfileWithJoinInfo(shared *profile.SharedProfile, icon
 	prof, err := l.state.Core.ImportSharedProfile(shared, iconPNG)
 	if err != nil {
 		return err
+	}
+
+	if prof != nil {
+		l.invalidateProfileIconCache(prof.ID)
 	}
 
 	l.refreshProfiles()
@@ -1428,15 +1441,15 @@ func (l *Launcher) setupProfileList() {
 		}
 		l.selectedProfileID = l.profiles[id].ID
 		_ = l.state.ActiveProfile.Set(l.selectedProfileID.String())
-		l.checkLaunchState()
-		l.profileList.Refresh()
+		// l.checkLaunchState()
 		l.refreshProfileGrid()
+		l.profileList.Refresh()
 	}
 	l.profileList.OnUnselected = func(id widget.ListItemID) {
 		l.selectedProfileID = uuid.Nil
-		l.checkLaunchState()
-		l.profileList.Refresh()
+		// l.checkLaunchState()
 		l.refreshProfileGrid()
+		l.profileList.Refresh()
 	}
 }
 
@@ -2274,6 +2287,7 @@ func (l *Launcher) deleteProfile(id uuid.UUID) {
 			dialog.ShowError(err, l.state.Window)
 			return
 		}
+		l.invalidateProfileIconCache(id)
 		l.refreshProfiles()
 		l.profileList.UnselectAll()
 	}, l.state.Window)
@@ -2558,18 +2572,21 @@ func (l *Launcher) openProfileEditor(prof profile.Profile) {
 					dialog.ShowError(err, l.state.Window)
 					return
 				}
+				l.invalidateProfileIconCache(currentProfile.ID)
 			}
 			if selectedIconPNG != nil {
 				if err := l.state.ProfileManager.SaveIconPNG(currentProfile.ID, selectedIconPNG); err != nil {
 					dialog.ShowError(err, l.state.Window)
 					return
 				}
+				l.invalidateProfileIconCache(currentProfile.ID)
 			}
 
 			if oldID != currentProfile.ID {
 				if err := l.state.ProfileManager.Remove(oldID); err != nil {
 					slog.Warn("Failed to remove old profile", "error", err)
 				}
+				l.invalidateProfileIconCache(oldID)
 			}
 
 			l.refreshProfiles()
@@ -2913,17 +2930,39 @@ func encodeSquarePNG(src image.Image) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+func (l *Launcher) invalidateProfileIconCache(id uuid.UUID) {
+	l.profileIconMu.Lock()
+	defer l.profileIconMu.Unlock()
+	delete(l.profileIconCache, id)
+	delete(l.profileIconFetched, id)
+}
+
 func (l *Launcher) profileSquareIconImage(prof profile.Profile, fallbackSize int) image.Image {
 	if prof.ID == uuid.Nil {
 		return placeholderProfileIcon(fallbackSize)
 	}
+
+	l.profileIconMu.Lock()
+	if img, ok := l.profileIconCache[prof.ID]; ok {
+		l.profileIconMu.Unlock()
+		return img
+	}
+	l.profileIconMu.Unlock()
 
 	iconPNG, err := l.state.ProfileManager.LoadIconPNG(prof.ID)
 	if err != nil {
 		slog.Warn("Failed to load profile icon image", "profileID", prof.ID.String(), "error", err)
 		return placeholderProfileIcon(fallbackSize)
 	}
-	return l.squareIconImageFromPNG(iconPNG, fallbackSize, prof.ID)
+
+	img := l.squareIconImageFromPNG(iconPNG, fallbackSize, prof.ID)
+
+	l.profileIconMu.Lock()
+	l.profileIconCache[prof.ID] = img
+	l.profileIconFetched[prof.ID] = true
+	l.profileIconMu.Unlock()
+
+	return img
 }
 
 func (l *Launcher) squareIconImageFromPNG(iconPNG []byte, fallbackSize int, profileID uuid.UUID) image.Image {
