@@ -19,7 +19,7 @@ require (
 	github.com/rs/zerolog v1.35.1
 	github.com/sqweek/dialog v0.0.0-20260123140253-64c163d53aac
 	github.com/stretchr/testify v1.11.1
-	github.com/urfave/cli/v3 v3.9.1
+	github.com/urfave/cli/v3 v3.10.0
 	github.com/zzl/go-win32api/v2 v2.2.0
 	golang.org/x/mod v0.37.0
 	golang.org/x/sys v0.46.0
