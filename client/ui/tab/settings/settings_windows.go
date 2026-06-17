@@ -527,30 +527,51 @@ func (s *Settings) discordLogin() {
 		return
 	}
 
-	if s.state.Core.DiscordService.StartSignIn(func(success bool) {
-		if success {
-			s.refreshDiscordAccountInfo()
-			fyne.Do(func() {
-				s.discordLoginButton.Enable() // ?
+	ds := s.state.Core.DiscordService
+	var loginDialog *dialog.CustomDialog
+	cancelled := false
+	if ds.StartSignIn(func(success bool) {
+		fyne.Do(func() {
+			if loginDialog != nil {
+				loginDialog.Hide()
+			}
+			if success {
+				s.refreshDiscordAccountInfo()
 				s.state.ShowInfoDialog(
 					lang.LocalizeKey("settings.login_success", "Login Successful"),
 					lang.LocalizeKey("settings.login_success_message", "You have been logged in successfully."),
 				)
-			})
-			return
-		} else {
-			s.refreshDiscordAccountInfo()
-			s.state.ShowErrorDialog(errors.New(lang.LocalizeKey("settings.discord_login_failed", "Failed to log in to Discord.")))
-		}
+			} else if !cancelled {
+				s.refreshDiscordAccountInfo()
+				s.state.ShowErrorDialog(errors.New(lang.LocalizeKey("settings.discord_login_failed", "Failed to log in to Discord.")))
+			}
+		})
 	}) {
-		s.discordAccountLabel.SetText(lang.LocalizeKey("settings.discord_login_waiting", "Please complete the Discord login in the opened window."))
-		s.discordLoginButton.Disable()
+		progress := widget.NewProgressBarInfinite()
+		content := container.NewVBox(
+			widget.NewLabel(lang.LocalizeKey("settings.discord_login_waiting", "Please complete the Discord login in your browser.")),
+			progress,
+		)
+		loginDialog = dialog.NewCustom(
+			lang.LocalizeKey("settings.discord_login_in_progress_title", "Login in progress"),
+			lang.LocalizeKey("common.cancel", "Cancel"),
+			content,
+			s.state.Window,
+		)
+		loginDialog.SetOnClosed(func() {
+			if ds.IsSigningIn() {
+				cancelled = true
+				ds.AbortSignIn()
+				s.refreshDiscordAccountInfo()
+			}
+		})
+		loginDialog.Resize(fyne.NewSize(420, 160))
+		loginDialog.Show()
 	} else {
 		s.state.ShowInfoDialog(
 			lang.LocalizeKey("settings.discord_login_in_progress_title", "Login In Progress"),
 			lang.LocalizeKey("settings.discord_login_in_progress_message", "Discord login is already in progress."),
 		)
-		return
 	}
 }
 

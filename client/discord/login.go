@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"time"
 
-	"fyne.io/fyne/v2"
 	"github.com/danieljoos/wincred"
 	discord "github.com/ikafly144/discord_social_sdk"
 )
@@ -31,8 +30,7 @@ func (s *DiscordService) Connect() {
 		}
 		slog.Info("Discord client status changed", "status", arg0, "error", arg1, "code", arg2)
 	})
-	triedLogin := fyne.CurrentApp().Preferences().Bool("tried_discord_login")
-	s.login(!triedLogin, func(success bool) {
+	s.Login(func(success bool) {
 		if !success {
 			slog.Warn("Discord login failed during Connect")
 			s.readyOnce.Do(func() {
@@ -130,10 +128,10 @@ func (s *DiscordService) StartSignIn(callback func(bool)) (started bool) {
 				if err := s.saveCredentials(creds); err != nil {
 					slog.Error("Failed to save Discord credentials", "error", err)
 				}
-				s.login(false, func(success bool) {
+				s.Login(func(success bool) {
 					s.signInMu.Lock()
 					s.signingIn = false
-					// loggedIn state is updated within s.login callbacks
+					// loggedIn state is updated within s.Login callbacks
 					s.signInMu.Unlock()
 					if callback != nil {
 						callback(success)
@@ -144,26 +142,18 @@ func (s *DiscordService) StartSignIn(callback func(bool)) (started bool) {
 	return true
 }
 
-func (s *DiscordService) login(firstLogin bool, callbacks ...func(bool)) {
+func (s *DiscordService) AbortSignIn() {
+	s.client.AbortAuthorize()
+	s.signInMu.Lock()
+	s.signingIn = false
+	s.signInMu.Unlock()
+}
+
+func (s *DiscordService) Login(callbacks ...func(bool)) {
 	creds, ok := s.loadCredentials()
 	if !ok {
-		var started bool
-		if firstLogin {
-			started = s.StartSignIn(func(b bool) {
-				if !b {
-					slog.Warn("Discord sign-in failed")
-				} else {
-					fyne.CurrentApp().Preferences().SetBool("tried_discord_login", true)
-				}
-				for _, callback := range callbacks {
-					callback(b)
-				}
-			})
-		}
-		if !started {
-			for _, callback := range callbacks {
-				callback(false)
-			}
+		for _, callback := range callbacks {
+			callback(false)
 		}
 		return
 	}

@@ -15,6 +15,9 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/lang"
+	"fyne.io/fyne/v2/widget"
 )
 
 type Config struct {
@@ -109,7 +112,47 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 		}
 	}
 	if state.Core.DiscordService != nil {
-		state.Core.DiscordService.Connect()
+		ds := state.Core.DiscordService
+		ds.Connect()
+		if !fyne.CurrentApp().Preferences().Bool("tried_discord_login") {
+			go func() {
+				ds.WaitReady()
+				if !ds.IsLoggedIn() {
+					fyne.Do(func() {
+						var loginDialog *dialog.CustomDialog
+						if ds.StartSignIn(func(success bool) {
+							fyne.Do(func() {
+								if loginDialog != nil {
+									loginDialog.Hide()
+								}
+								if success {
+									fyne.CurrentApp().Preferences().SetBool("tried_discord_login", true)
+								}
+							})
+						}) {
+							progress := widget.NewProgressBarInfinite()
+							content := container.NewVBox(
+								widget.NewLabel(lang.LocalizeKey("settings.discord_login_waiting", "Please complete the Discord login in your browser.")),
+								progress,
+							)
+							loginDialog = dialog.NewCustom(
+								lang.LocalizeKey("settings.discord_login_in_progress_title", "Login in progress"),
+								lang.LocalizeKey("common.cancel", "Cancel"),
+								content,
+								w,
+							)
+							loginDialog.SetOnClosed(func() {
+								if ds.IsSigningIn() {
+									ds.AbortSignIn()
+								}
+							})
+							loginDialog.Resize(fyne.NewSize(420, 160))
+							loginDialog.Show()
+						}
+					})
+				}
+			}()
+		}
 	}
 	state.Core.StartActivityPolling(ctx)
 	w.SetOnClosed(onClosed)

@@ -646,20 +646,39 @@ func (l *Launcher) showDiscordFriendsDialog() {
 	}
 	ds := l.state.Core.DiscordService
 	if ds.IsSigningIn() {
-		l.state.ShowInfoDialog(lang.LocalizeKey("settings.discord_login_in_progress_title", "Login in progress"), lang.LocalizeKey("settings.discord_login_waiting", "Please complete the Discord login in your browser."))
+		l.state.ShowInfoDialog(
+			lang.LocalizeKey("settings.discord_login_in_progress_title", "Login In Progress"),
+			lang.LocalizeKey("settings.discord_login_in_progress_message", "Discord login is already in progress."),
+		)
 		return
 	}
 	if !ds.IsLoggedIn() {
+		var loginDialog *dialog.CustomDialog
+		cancelled := false
 		if ds.StartSignIn(func(success bool) {
-			if success {
-				fyne.Do(func() {
-					l.showDiscordFriendsDialog()
-				})
-			} else {
-				l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("settings.discord_login_failed", "Failed to log in to Discord.")))
-			}
+			fyne.Do(func() {
+				if loginDialog != nil {
+					loginDialog.Hide()
+				}
+				if success {
+					go fyne.Do(l.showDiscordFriendsDialog)
+				} else if !cancelled {
+					l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("settings.discord_login_failed", "Failed to log in to Discord.")))
+				}
+			})
 		}) {
-			l.state.ShowInfoDialog(lang.LocalizeKey("settings.discord_login_in_progress_title", "Login in progress"), lang.LocalizeKey("settings.discord_login_waiting", "Please complete the Discord login in your browser."))
+			loginDialog = l.newDiscordLoginProgressDialog(func() {
+				if ds.IsSigningIn() {
+					cancelled = true
+					ds.AbortSignIn()
+				}
+			})
+			loginDialog.Show()
+		} else {
+			l.state.ShowInfoDialog(
+				lang.LocalizeKey("settings.discord_login_in_progress_title", "Login In Progress"),
+				lang.LocalizeKey("settings.discord_login_in_progress_message", "Discord login is already in progress."),
+			)
 		}
 		return
 	}
@@ -674,7 +693,7 @@ func (l *Launcher) showDiscordFriendsDialog() {
 		d.Show()
 		go func() {
 			ds.WaitReady()
-			fyne.Do(func() {
+			go fyne.Do(func() {
 				d.Hide()
 				l.showDiscordFriendsDialog()
 			})
@@ -2053,6 +2072,23 @@ func (l *Launcher) newProgressDialog(titleKey, titleDefault, messageKey, message
 	)
 	d.Resize(fyne.NewSize(420, 140))
 	return d, progressBar
+}
+
+func (l *Launcher) newDiscordLoginProgressDialog(onClosed func()) *dialog.CustomDialog {
+	progress := widget.NewProgressBarInfinite()
+	content := container.NewVBox(
+		widget.NewLabel(lang.LocalizeKey("settings.discord_login_waiting", "Please complete the Discord login in your browser.")),
+		progress,
+	)
+	d := dialog.NewCustom(
+		lang.LocalizeKey("settings.discord_login_in_progress_title", "Login in progress"),
+		lang.LocalizeKey("common.cancel", "Cancel"),
+		content,
+		l.state.Window,
+	)
+	d.SetOnClosed(onClosed)
+	d.Resize(fyne.NewSize(420, 160))
+	return d
 }
 
 func (l *Launcher) refreshProfiles() {
