@@ -100,7 +100,7 @@ jobs:
           cache: false
       - name: Cache Go modules and build cache
         id: restore-cache
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
         with:
           path: |
             ~\AppData\Local\go-build
@@ -139,7 +139,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Save Go module cache
-        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache/save@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
         with:
           path: |
             ~\AppData\Local\go-build
@@ -192,7 +192,7 @@ jobs:
           cache: false
       - name: Cache Go modules and build cache
         id: restore-cache
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
         with:
           path: |
             ~\AppData\Local\go-build
@@ -284,7 +284,7 @@ jobs:
           Add-Content -Path $summaryPath -Value "Cache prime key: $env:CACHE_PRIMARY_KEY"
           Add-Content -Path $summaryPath -Value "Cache matched key: $env:CACHE_MATCHED_KEY"
       - name: Save Go module cache
-        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache/save@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
         with:
           path: |
             ~\AppData\Local\go-build
