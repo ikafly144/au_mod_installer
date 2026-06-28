@@ -229,7 +229,7 @@ type discordCredentials struct {
 	ClientID     uint64                         `json:"client_id"`
 	AccessToken  string                         `json:"access_token"`
 	RefreshToken string                         `json:"refresh_token"`
-	TokenType    discord.AuthorizationTokenType `json:"tokentype"`
+	TokenType    discord.AuthorizationTokenType `json:"token_type"`
 	ExpiresAt    int64                          `json:"expires_at"`
 }
 
