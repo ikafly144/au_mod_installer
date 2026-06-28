@@ -11,7 +11,7 @@ require (
 	github.com/gin-gonic/gin v1.12.0
 	github.com/google/go-github/v88 v88.0.0
 	github.com/google/uuid v1.6.0
-	github.com/ikafly144/discord_social_sdk v0.0.0-20260527121102-bad4e465b7bd
+	github.com/ikafly144/discord_social_sdk v0.1.1
 	github.com/jchv/go-webview2 v0.0.0-20260205173254-56598839c808
 	github.com/josephspurrier/goversioninfo v1.7.0
 	github.com/mcuadros/go-version v0.0.0-20190830083331-035f6764e8d2
@@ -40,6 +40,7 @@ require (
 	github.com/cloudwego/base64x v0.1.7 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/ebitengine/purego v0.10.1 // indirect
 	github.com/fogleman/gg v1.3.0 // indirect
 	github.com/fredbi/uri v1.1.1 // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect

@@ -228,10 +228,10 @@ func (a *App) updateRichPresence() {
 	}
 
 	act := sdk.NewActivity()
-	act.SetType(sdk.Discord_ActivityTypes_Playing)
+	act.SetType(sdk.ActivityTypesPlaying)
 	act.SetName("Mod of Us")
 	act.SetDetails(fmt.Sprintf("Playing %s", prof.Name))
-	act.SetSupportedPlatforms(sdk.Discord_ActivityGamePlatforms_Desktop)
+	act.SetSupportedPlatforms(sdk.ActivityGamePlatformsDesktop)
 
 	if !runningStartedAt.IsZero() {
 		timestamp := sdk.NewActivityTimestamps()
@@ -241,9 +241,9 @@ func (a *App) updateRichPresence() {
 
 	if lobby != nil && lobby.IsConnected {
 		if lobby.GameState == "Started" {
-			act.SetState(lang.LocalizeKey("discord.status.in_game", "In Game"))
+			act.SetState(lang.LocalizeKey("discord.status.ingame", "In Game"))
 		} else {
-			act.SetState(lang.LocalizeKey("discord.status.in_lobby", "In Lobby")) // TODO: More detailed state based on GameState?
+			act.SetState(lang.LocalizeKey("discord.status.inlobby", "In Lobby")) // TODO: More detailed state based on GameState?
 		}
 		if lobby.MaxPlayers > 0 && lobby.JoinedPlayers > 0 {
 			p := sdk.NewActivityParty()
@@ -251,9 +251,9 @@ func (a *App) updateRichPresence() {
 			p.SetMaxSize(int32(lobby.MaxPlayers))
 			p.SetCurrentSize(int32(lobby.JoinedPlayers))
 			if fyne.CurrentApp().Preferences().BoolWithFallback("public_party", true) {
-				p.SetPrivacy(sdk.Discord_ActivityPartyPrivacy_Public)
+				p.SetPrivacy(sdk.ActivityPartyPrivacyPublic)
 			} else {
-				p.SetPrivacy(sdk.Discord_ActivityPartyPrivacy_Private)
+				p.SetPrivacy(sdk.ActivityPartyPrivacyPrivate)
 			}
 			act.SetParty(p)
 		}
@@ -266,10 +266,10 @@ func (a *App) updateRichPresence() {
 		// Heartbeat sharing if active
 		a.HeartbeatRoomShareAsync()
 	} else {
-		act.SetState(lang.LocalizeKey("discord.status.in_main_menu", "In Main Menu"))
+		act.SetState(lang.LocalizeKey("discord.status.inmainmenu", "In Main Menu"))
 	}
 
-	a.DiscordService.SetActivity(act, func(d *sdk.Discord_ClientResult) {
+	a.DiscordService.SetActivity(act, func(d *sdk.ClientResult) {
 		if !d.Successful() {
 			slog.Warn("Failed to update Discord activity", "error", d.ErrorCode())
 		}

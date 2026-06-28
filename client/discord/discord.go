@@ -7,11 +7,11 @@ import (
 	discord "github.com/ikafly144/discord_social_sdk"
 )
 
-func NewDiscordService(client *discord.Discord_Client) *DiscordService {
+func NewDiscordService(client *discord.Client) *DiscordService {
 	ds := &DiscordService{
 		client:                       client,
 		ready:                        make(chan struct{}),
-		relationShipChangedCallbacks: make(map[int]func([]discord.Discord_RelationshipHandle)),
+		relationShipChangedCallbacks: make(map[int]func([]discord.RelationshipHandle)),
 	}
 	client.SetRelationshipGroupsUpdatedCallback(func(userId uint64) {
 		ds.relationshipsMu.Lock()
@@ -30,15 +30,15 @@ func NewDiscordService(client *discord.Discord_Client) *DiscordService {
 }
 
 type DiscordService struct {
-	client    *discord.Discord_Client
+	client    *discord.Client
 	ready     chan struct{}
 	readyOnce sync.Once
 
-	idleActivityProvider func() *discord.Discord_Activity
-	idleActivityCallback func(*discord.Discord_ClientResult)
+	idleActivityProvider func() *discord.Activity
+	idleActivityCallback func(*discord.ClientResult)
 
-	idleActivity    *discord.Discord_Activity
-	currentActivity *discord.Discord_Activity
+	idleActivity    *discord.Activity
+	currentActivity *discord.Activity
 	activityMu      sync.Mutex
 
 	queueMu sync.Mutex
@@ -48,12 +48,12 @@ type DiscordService struct {
 	signingIn bool
 	loggedIn  bool
 
-	relationShipChangedCallbacks map[int]func([]discord.Discord_RelationshipHandle)
+	relationShipChangedCallbacks map[int]func([]discord.RelationshipHandle)
 	nextRelationshipCallbackID   int
 	relationshipsMu              sync.Mutex
 }
 
-func (s *DiscordService) Client() *discord.Discord_Client {
+func (s *DiscordService) Client() *discord.Client {
 	return s.client
 }
 

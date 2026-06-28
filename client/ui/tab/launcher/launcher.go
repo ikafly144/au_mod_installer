@@ -99,7 +99,7 @@ type discordFriend struct {
 	id        uint64
 	name      string
 	avatarURL string
-	status    discordsdk.Discord_StatusType
+	status    discordsdk.StatusType
 }
 
 var _ uicommon.Tab = (*Launcher)(nil)
@@ -609,30 +609,30 @@ func (l *Launcher) canSendDiscordInvite() bool {
 	return active
 }
 
-func discordStatusColor(status discordsdk.Discord_StatusType) color.Color {
+func discordStatusColor(status discordsdk.StatusType) color.Color {
 	switch status {
-	case discordsdk.Discord_StatusType_Online:
+	case discordsdk.StatusTypeOnline:
 		return theme.Color(theme.ColorNameSuccess)
-	case discordsdk.Discord_StatusType_Idle, discordsdk.Discord_StatusType_Streaming:
+	case discordsdk.StatusTypeIdle, discordsdk.StatusTypeStreaming:
 		return theme.Color(theme.ColorNameWarning)
-	case discordsdk.Discord_StatusType_Dnd:
+	case discordsdk.StatusTypeDnd:
 		return theme.Color(theme.ColorNameError)
-	case discordsdk.Discord_StatusType_Offline, discordsdk.Discord_StatusType_Invisible:
+	case discordsdk.StatusTypeOffline, discordsdk.StatusTypeInvisible:
 		return theme.Color(theme.ColorNameDisabled)
 	default:
 		return theme.Color(theme.ColorNameDisabled)
 	}
 }
 
-func discordStatusPriority(status discordsdk.Discord_StatusType) int {
+func discordStatusPriority(status discordsdk.StatusType) int {
 	switch status {
-	case discordsdk.Discord_StatusType_Online:
+	case discordsdk.StatusTypeOnline:
 		return 1
-	case discordsdk.Discord_StatusType_Idle, discordsdk.Discord_StatusType_Streaming:
+	case discordsdk.StatusTypeIdle, discordsdk.StatusTypeStreaming:
 		return 2
-	case discordsdk.Discord_StatusType_Dnd:
+	case discordsdk.StatusTypeDnd:
 		return 3
-	case discordsdk.Discord_StatusType_Offline, discordsdk.Discord_StatusType_Invisible:
+	case discordsdk.StatusTypeOffline, discordsdk.StatusTypeInvisible:
 		return 4
 	default:
 		return 5
@@ -806,7 +806,7 @@ func (l *Launcher) showDiscordFriendsDialog() {
 		mySeq := searchSeq
 		loading.Show()
 		go func() {
-			var userHandles []discordsdk.Discord_UserHandle
+			var userHandles []discordsdk.UserHandle
 			query = strings.TrimSpace(query)
 			if query == "" {
 				relationships, err := l.state.Core.DiscordService.GetFriends()
@@ -820,7 +820,7 @@ func (l *Launcher) showDiscordFriendsDialog() {
 					})
 					return
 				}
-				userHandles = make([]discordsdk.Discord_UserHandle, 0, len(relationships))
+				userHandles = make([]discordsdk.UserHandle, 0, len(relationships))
 				for _, r := range relationships {
 					if user, ok := r.User(); ok {
 						userHandles = append(userHandles, user)
@@ -857,7 +857,7 @@ func (l *Launcher) showDiscordFriendsDialog() {
 				}
 				avatarURL := ""
 				if avatarHash, ok := user.Avatar(); ok && strings.TrimSpace(avatarHash) != "" {
-					avatarURL = user.AvatarUrl(discordsdk.Discord_UserHandle_AvatarType_Gif, discordsdk.Discord_UserHandle_AvatarType_Png)
+					avatarURL = user.AvatarUrl(discordsdk.UserHandleAvatarTypeGif, discordsdk.UserHandleAvatarTypePng)
 				} else {
 					avatarURL = fmt.Sprintf("https://cdn.discordapp.com/embed/avatars/%d.png", (user.Id()>>22)%6)
 				}
@@ -922,7 +922,7 @@ func (l *Launcher) showDiscordFriendsDialog() {
 		l.state.Window,
 	)
 
-	callbackID := ds.AddRelationshipChangedCallback(func(friends []discordsdk.Discord_RelationshipHandle) {
+	callbackID := ds.AddRelationshipChangedCallback(func(friends []discordsdk.RelationshipHandle) {
 		fyne.Do(func() {
 			updateList(searchBar.Text)
 		})

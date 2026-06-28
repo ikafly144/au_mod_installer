@@ -7,7 +7,7 @@ import (
 	discord "github.com/ikafly144/discord_social_sdk"
 )
 
-func (s *DiscordService) SetIdleActivity(provider func() *discord.Discord_Activity, callback func(*discord.Discord_ClientResult)) {
+func (s *DiscordService) SetIdleActivity(provider func() *discord.Activity, callback func(*discord.ClientResult)) {
 	s.activityMu.Lock()
 	s.idleActivityProvider = provider
 	s.idleActivityCallback = callback
@@ -25,7 +25,7 @@ func (s *DiscordService) updateIdleActivity() {
 
 		if activity != nil {
 			if callback == nil {
-				callback = func(result *discord.Discord_ClientResult) {
+				callback = func(result *discord.ClientResult) {
 					if !result.Successful() {
 						slog.Warn("No callback set for idle activity update error", "error", result.ErrorCode())
 					}
@@ -41,7 +41,7 @@ func (s *DiscordService) updateIdleActivity() {
 	}
 }
 
-func (s *DiscordService) SetActivity(activity *discord.Discord_Activity, callback func(*discord.Discord_ClientResult)) {
+func (s *DiscordService) SetActivity(activity *discord.Activity, callback func(*discord.ClientResult)) {
 	if activity == nil {
 		slog.Warn("SetActivity called with nil activity")
 		return
@@ -53,7 +53,7 @@ func (s *DiscordService) SetActivity(activity *discord.Discord_Activity, callbac
 	}
 	s.activityMu.Unlock()
 
-	s.client.UpdateRichPresence(activity, func(arg0 *discord.Discord_ClientResult) {
+	s.client.UpdateRichPresence(activity, func(arg0 *discord.ClientResult) {
 		if callback != nil {
 			callback(arg0)
 		}
@@ -67,7 +67,7 @@ func (s *DiscordService) ClearActivity() {
 	s.updateIdleActivity()
 }
 
-func (s *DiscordService) CurrentActivity() (*discord.Discord_Activity, bool) {
+func (s *DiscordService) CurrentActivity() (*discord.Activity, bool) {
 	s.activityMu.Lock()
 	defer s.activityMu.Unlock()
 	return s.currentActivity, s.currentActivity != nil
@@ -82,7 +82,7 @@ func (s *DiscordService) SendInvite(userId uint64) {
 		slog.Warn("Cannot send invite, no current activity")
 		return
 	}
-	s.client.SendActivityInvite(userId, lang.LocalizeKey("discord.invite_message", "Join me in {{.Name}}!", map[string]any{"Name": activity.Name()}), func(result *discord.Discord_ClientResult) {
+	s.client.SendActivityInvite(userId, lang.LocalizeKey("discord.invitemessage", "Join me in {{.Name}}!", map[string]any{"Name": activity.Name()}), func(result *discord.ClientResult) {
 		if !result.Successful() {
 			slog.Warn("Failed to send Discord invite", "error", result.ErrorCode())
 		} else {

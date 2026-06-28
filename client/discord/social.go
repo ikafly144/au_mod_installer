@@ -2,14 +2,14 @@ package discord
 
 import discord "github.com/ikafly144/discord_social_sdk"
 
-func (s *DiscordService) GetFriends() ([]discord.Discord_RelationshipHandle, error) {
+func (s *DiscordService) GetFriends() ([]discord.RelationshipHandle, error) {
 	if !s.IsLoggedIn() {
 		return nil, ErrNotLoggedIn
 	}
 	friends := s.client.GetRelationships()
-	var friendList []discord.Discord_RelationshipHandle
+	var friendList []discord.RelationshipHandle
 	for _, friend := range friends {
-		if friend.DiscordRelationshipType() != discord.Discord_RelationshipType_Friend {
+		if friend.DiscordRelationshipType() != discord.RelationshipTypeFriend {
 			continue
 		}
 		friendList = append(friendList, friend)
@@ -17,7 +17,7 @@ func (s *DiscordService) GetFriends() ([]discord.Discord_RelationshipHandle, err
 	return friendList, nil
 }
 
-func (s *DiscordService) SearchFriends(query string) ([]discord.Discord_UserHandle, error) {
+func (s *DiscordService) SearchFriends(query string) ([]discord.UserHandle, error) {
 	if !s.IsLoggedIn() {
 		return nil, ErrNotLoggedIn
 	}
@@ -25,7 +25,7 @@ func (s *DiscordService) SearchFriends(query string) ([]discord.Discord_UserHand
 	return friends, nil
 }
 
-func (s *DiscordService) AddRelationshipChangedCallback(callback func([]discord.Discord_RelationshipHandle)) int {
+func (s *DiscordService) AddRelationshipChangedCallback(callback func([]discord.RelationshipHandle)) int {
 	s.relationshipsMu.Lock()
 	defer s.relationshipsMu.Unlock()
 	id := s.nextRelationshipCallbackID

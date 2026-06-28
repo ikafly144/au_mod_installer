@@ -121,18 +121,18 @@ func realMain(sharedURI string, sharedArchive string) error {
 		slog.Info("Received join activity callback", "uri", s)
 		activityService.PushQueue(s)
 	})
-	social.AddLogCallback(func(arg0 string, arg1 sdk.Discord_LoggingSeverity) {
+	social.AddLogCallback(func(arg0 string, arg1 sdk.LoggingSeverity) {
 		level := slog.LevelInfo
 		switch arg1 {
-		case sdk.Discord_LoggingSeverity_Verbose:
+		case sdk.LoggingSeverityVerbose:
 			level = slog.LevelDebug
-		case sdk.Discord_LoggingSeverity_Warning:
+		case sdk.LoggingSeverityWarning:
 			level = slog.LevelWarn
-		case sdk.Discord_LoggingSeverity_Error:
+		case sdk.LoggingSeverityError:
 			level = slog.LevelError
 		}
 		slog.Default().With(slog.String("component", "discord_sdk")).Log(context.Background(), level, arg0)
-	}, sdk.Discord_LoggingSeverity_Info)
+	}, sdk.LoggingSeverityInfo)
 	social.SetApplicationId(APPLICATION_ID)
 
 	go func() {
@@ -231,14 +231,14 @@ func realMain(sharedURI string, sharedArchive string) error {
 		social.RegisterLaunchCommand(APPLICATION_ID, path)
 	}
 
-	activityService.SetIdleActivity(func() *sdk.Discord_Activity {
+	activityService.SetIdleActivity(func() *sdk.Activity {
 		act := sdk.NewActivity()
-		act.SetType(sdk.Discord_ActivityTypes_Playing)
+		act.SetType(sdk.ActivityTypesPlaying)
 		act.SetName("Mod of Us")
 		act.SetState(lang.LocalizeKey("discord.status.idle", "Idle"))
-		act.SetDetails(lang.LocalizeKey("discord.status.idle_details", "Not currently running the game"))
+		act.SetDetails(lang.LocalizeKey("discord.status.idledetails", "Not currently running the game"))
 		return act
-	}, func(d *sdk.Discord_ClientResult) {
+	}, func(d *sdk.ClientResult) {
 		if !d.Successful() {
 			slog.Warn("Failed to set idle activity", "error", d.ErrorCode())
 		}

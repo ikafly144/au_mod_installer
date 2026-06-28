@@ -12,14 +12,14 @@ import (
 const discordCredentialsKey = "au_mod_installer_discord"
 
 func (s *DiscordService) Connect() {
-	s.client.SetStatusChangedCallback(func(arg0 discord.Discord_Client_Status, arg1 discord.Discord_Client_Error, arg2 int32) {
-		if arg0 == discord.Discord_Client_Status_Ready {
+	s.client.SetStatusChangedCallback(func(arg0 discord.ClientStatus, arg1 discord.ClientError, arg2 int32) {
+		if arg0 == discord.ClientStatusReady {
 			slog.Info("Discord client is ready")
 			s.readyOnce.Do(func() {
 				close(s.ready)
 			})
 		}
-		if arg0 == discord.Discord_Client_Status_Disconnected {
+		if arg0 == discord.ClientStatusDisconnected {
 			slog.Info("Discord client disconnected")
 			s.signInMu.Lock()
 			s.loggedIn = false
@@ -69,7 +69,7 @@ func (s *DiscordService) IsReady() bool {
 	}
 }
 
-func (s *DiscordService) UserInfo() (*discord.Discord_UserHandle, bool) {
+func (s *DiscordService) UserInfo() (*discord.UserHandle, bool) {
 	if !s.IsLoggedIn() {
 		return nil, false
 	}
@@ -92,10 +92,10 @@ func (s *DiscordService) StartSignIn(callback func(bool)) (started bool) {
 	codeVerifier := s.client.CreateAuthorizationCodeVerifier()
 	authArgs := discord.NewAuthorizationArgs()
 	authArgs.SetClientId(s.client.GetApplicationId())
-	authArgs.SetScopes(discord.Client_GetDefaultCommunicationScopes())
+	authArgs.SetScopes(discord.ClientGetDefaultCommunicationScopes())
 	authArgs.SetCodeChallenge(new(codeVerifier.Challenge()))
 
-	s.client.Authorize(authArgs, func(arg0 *discord.Discord_ClientResult, arg1, arg2 string) {
+	s.client.Authorize(authArgs, func(arg0 *discord.ClientResult, arg1, arg2 string) {
 		if !arg0.Successful() {
 			slog.Warn("Failed to authorize Discord client", "error", arg0.ErrorCode())
 			s.signInMu.Lock()
@@ -107,7 +107,7 @@ func (s *DiscordService) StartSignIn(callback func(bool)) (started bool) {
 			return
 		}
 		s.client.GetToken(s.client.GetApplicationId(), arg1, codeVerifier.Verifier(), arg2,
-			func(result *discord.Discord_ClientResult, accessToken, refreshToken string, tokenType discord.Discord_AuthorizationTokenType, expiresIn int32, scopes string) {
+			func(result *discord.ClientResult, accessToken, refreshToken string, tokenType discord.AuthorizationTokenType, expiresIn int32, scopes string) {
 				if !result.Successful() {
 					slog.Warn("Failed to get Discord token", "error", result.ErrorCode())
 					s.signInMu.Lock()
@@ -159,7 +159,7 @@ func (s *DiscordService) Login(callbacks ...func(bool)) {
 	}
 
 	s.client.SetTokenExpirationCallback(func() {
-		s.client.RefreshToken(creds.ClientID, creds.RefreshToken, func(result *discord.Discord_ClientResult, accessToken, refreshToken string, tokenType discord.Discord_AuthorizationTokenType, expiresIn int32, scopes string) {
+		s.client.RefreshToken(creds.ClientID, creds.RefreshToken, func(result *discord.ClientResult, accessToken, refreshToken string, tokenType discord.AuthorizationTokenType, expiresIn int32, scopes string) {
 			if !result.Successful() {
 				slog.Warn("Failed to refresh Discord token", "error", result.ErrorCode())
 				s.signInMu.Lock()
@@ -180,7 +180,7 @@ func (s *DiscordService) Login(callbacks ...func(bool)) {
 		})
 	})
 
-	s.client.UpdateToken(creds.TokenType, creds.AccessToken, func(result *discord.Discord_ClientResult) {
+	s.client.UpdateToken(creds.TokenType, creds.AccessToken, func(result *discord.ClientResult) {
 		if !result.Successful() {
 			slog.Warn("Failed to update Discord token", "error", result.ErrorCode())
 			s.signInMu.Lock()
@@ -210,7 +210,7 @@ func (s *DiscordService) Logout() {
 		return
 	}
 
-	s.client.RevokeToken(creds.ClientID, creds.AccessToken, func(result *discord.Discord_ClientResult) {
+	s.client.RevokeToken(creds.ClientID, creds.AccessToken, func(result *discord.ClientResult) {
 		if !result.Successful() {
 			slog.Warn("Failed to revoke Discord token", "error", result.ErrorCode())
 		} else {
@@ -226,11 +226,11 @@ func (s *DiscordService) Logout() {
 }
 
 type discordCredentials struct {
-	ClientID     uint64                                 `json:"client_id"`
-	AccessToken  string                                 `json:"access_token"`
-	RefreshToken string                                 `json:"refresh_token"`
-	TokenType    discord.Discord_AuthorizationTokenType `json:"token_type"`
-	ExpiresAt    int64                                  `json:"expires_at"`
+	ClientID     uint64                         `json:"client_id"`
+	AccessToken  string                         `json:"access_token"`
+	RefreshToken string                         `json:"refresh_token"`
+	TokenType    discord.AuthorizationTokenType `json:"tokentype"`
+	ExpiresAt    int64                          `json:"expires_at"`
 }
 
 func (s *DiscordService) loadCredentials() (*discordCredentials, bool) {
