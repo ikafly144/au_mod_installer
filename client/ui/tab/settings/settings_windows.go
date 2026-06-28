@@ -269,7 +269,17 @@ func (s *Settings) Tab() (*container.TabItem, error) {
 		}))
 	}))
 
+	revision := fyne.CurrentApp().Metadata().Custom["revision"]
+	revision = revision[:min(7, len(revision))]
+	versionContent := widget.NewLabelWithStyle(fmt.Sprintf("version: %s (%s)", s.state.Version, revision), fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	versionContent.Wrapping = fyne.TextWrapWord
 	basicPage := container.NewVScroll(container.NewVBox(
+		widget.NewCard(
+			lang.LocalizeKey("settings.app.title", "Mod of Us"),
+			lang.LocalizeKey("settings.app.subtitle",
+				"Among Us Mod Manager"),
+			versionContent,
+		),
 		widget.NewCard(
 			lang.LocalizeKey("installation.select_install_info", "Among Us Installation Information"),
 			"",

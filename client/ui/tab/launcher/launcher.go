@@ -59,7 +59,6 @@ type Launcher struct {
 	roomLinkTray           *fyne.Container
 	roomLinkTrayToggle     *widget.Button
 	roomLinkTrayExpanded   bool
-	greetingContent        *widget.Label
 	createProfileButton    *widget.Button
 	importProfileButton    *widget.Button
 
@@ -134,8 +133,6 @@ var launcherRunningProfileStrokeColor = color.NRGBA{R: 56, G: 170, B: 92, A: 255
 
 func NewLauncherTab(s *uicommon.State) *Launcher {
 	var l Launcher
-	revision := fyne.CurrentApp().Metadata().Custom["revision"]
-	revision = revision[:min(7, len(revision))]
 	viewMode := fyne.CurrentApp().Preferences().StringWithFallback(prefLauncherViewMode, viewModeList)
 	sortMode := normalizeSortMode(fyne.CurrentApp().Preferences().StringWithFallback(prefLauncherSortMode, sortModeName))
 	sortDescending := fyne.CurrentApp().Preferences().BoolWithFallback(prefLauncherSortDescending, defaultSortDescendingForMode(sortMode))
@@ -160,7 +157,6 @@ func NewLauncherTab(s *uicommon.State) *Launcher {
 		roomLinkLabel:          widget.NewLabel(lang.LocalizeKey("launcher.join_link.title", "Join Link")),
 		createProfileButton:    widget.NewButtonWithIcon(lang.LocalizeKey("profile.create", "Create Profile"), theme.ContentAddIcon(), l.createProfile),
 		importProfileButton:    widget.NewButtonWithIcon(lang.LocalizeKey("profile.import", "Import"), theme.ContentPasteIcon(), l.showImportDialog),
-		greetingContent:        widget.NewLabelWithStyle(fmt.Sprintf("version: %s (%s)", s.Version, revision), fyne.TextAlignCenter, fyne.TextStyle{Bold: true}),
 		sortMode:               sortMode,
 		sortDescending:         sortDescending,
 		isGridView:             viewMode == viewModeGrid,
@@ -269,7 +265,6 @@ func (l *Launcher) init() {
 		l.canLaunchListener = binding.NewDataListener(l.checkLaunchState)
 		l.state.CanLaunch.AddListener(l.canLaunchListener)
 	}
-	l.greetingContent.Wrapping = fyne.TextWrapWord
 	l.launchButton.Importance = widget.HighImportance
 
 	l.setupProfileList()
@@ -1781,7 +1776,6 @@ func (l *Launcher) refreshProfileGrid() {
 
 func (l *Launcher) Tab() (*container.TabItem, error) {
 	header := container.NewVBox(
-		widget.NewCard(lang.LocalizeKey("launcher.card_title", "Mod of Us"), lang.LocalizeKey("launcher.card_subtitle", "Among Us Mod Manager"), l.greetingContent),
 		container.NewPadded(container.NewBorder(
 			nil,
 			nil,
