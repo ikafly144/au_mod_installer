@@ -241,9 +241,9 @@ func (a *App) updateRichPresence() {
 
 	if lobby != nil && lobby.IsConnected {
 		if lobby.GameState == "Started" {
-			act.SetState(lang.LocalizeKey("discord.status.ingame", "In Game"))
+			act.SetState(lang.LocalizeKey("discord.status.in_game", "In Game"))
 		} else {
-			act.SetState(lang.LocalizeKey("discord.status.inlobby", "In Lobby")) // TODO: More detailed state based on GameState?
+			act.SetState(lang.LocalizeKey("discord.status.in_lobby", "In Lobby")) // TODO: More detailed state based on GameState?
 		}
 		if lobby.MaxPlayers > 0 && lobby.JoinedPlayers > 0 {
 			p := sdk.NewActivityParty()
@@ -266,7 +266,7 @@ func (a *App) updateRichPresence() {
 		// Heartbeat sharing if active
 		a.HeartbeatRoomShareAsync()
 	} else {
-		act.SetState(lang.LocalizeKey("discord.status.inmainmenu", "In Main Menu"))
+		act.SetState(lang.LocalizeKey("discord.status.in_main_menu", "In Main Menu"))
 	}
 
 	a.DiscordService.SetActivity(act, func(d *sdk.ClientResult) {
