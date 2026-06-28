@@ -86,6 +86,7 @@ func (s *DiscordService) StartSignIn(callback func(bool)) (started bool) {
 		s.signInMu.Unlock()
 		return false
 	}
+	s.resetReady()
 	s.signingIn = true
 	s.signInMu.Unlock()
 

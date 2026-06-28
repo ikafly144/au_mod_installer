@@ -10,9 +10,9 @@ import (
 func NewDiscordService(client *discord.Client) *DiscordService {
 	ds := &DiscordService{
 		client:                       client,
-		ready:                        make(chan struct{}),
 		relationShipChangedCallbacks: make(map[int]func([]discord.RelationshipHandle)),
 	}
+	ds.resetReady()
 	client.SetRelationshipGroupsUpdatedCallback(func(userId uint64) {
 		ds.relationshipsMu.Lock()
 		friends, err := ds.GetFriends()
@@ -51,6 +51,20 @@ type DiscordService struct {
 	relationShipChangedCallbacks map[int]func([]discord.RelationshipHandle)
 	nextRelationshipCallbackID   int
 	relationshipsMu              sync.Mutex
+}
+
+func (s *DiscordService) resetReady() {
+	if s.ready != nil {
+		select {
+		case <-s.ready:
+		default:
+			s.readyOnce.Do(func() {
+				close(s.ready)
+			})
+		}
+	}
+	s.readyOnce = sync.Once{}
+	s.ready = make(chan struct{})
 }
 
 func (s *DiscordService) Client() *discord.Client {

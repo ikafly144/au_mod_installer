@@ -661,6 +661,7 @@ func (l *Launcher) showDiscordFriendsDialog() {
 					loginDialog.Hide()
 				}
 				if success {
+					l.state.Core.DiscordService.WaitReady()
 					go fyne.Do(l.showDiscordFriendsDialog)
 				} else if !cancelled {
 					l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("settings.discord_login_failed", "Failed to log in to Discord.")))
