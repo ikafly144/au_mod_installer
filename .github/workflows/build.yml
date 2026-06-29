@@ -100,7 +100,7 @@ jobs:
           cache: false
       - name: Cache Go modules and build cache
         id: restore-cache
-        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~\AppData\Local\go-build
@@ -114,7 +114,7 @@ jobs:
             ${{ runner.os }}-go-
             ${{ runner.os }}-
       - name: Run GoReleaser snapshot
-        uses: goreleaser/goreleaser-action@5daf1e915a5f0af01ddbcd89a43b8061ff4f1a89 # v7.2.2
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
           # either 'goreleaser' (default) or 'goreleaser-pro'
           distribution: goreleaser
@@ -139,7 +139,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Save Go module cache
-        uses: actions/cache/save@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~\AppData\Local\go-build
@@ -192,7 +192,7 @@ jobs:
           cache: false
       - name: Cache Go modules and build cache
         id: restore-cache
-        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~\AppData\Local\go-build
@@ -228,7 +228,7 @@ jobs:
             "previous_stable=" >> $env:GITHUB_OUTPUT
           }
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@5daf1e915a5f0af01ddbcd89a43b8061ff4f1a89 # v7.2.2
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
           # either 'goreleaser' (default) or 'goreleaser-pro'
           distribution: goreleaser
@@ -240,7 +240,7 @@ jobs:
           DISCORD_WEBHOOK_ID: ${{ secrets.DISCORD_WEBHOOK_ID }}
           DISCORD_WEBHOOK_TOKEN: ${{ secrets.DISCORD_WEBHOOK_TOKEN }}
           GORELEASER_PREVIOUS_TAG: ${{ steps.get_previous_stable.outputs.previous_stable }}
-      - uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4
+      - uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4
         with:
           subject-checksums: ./dist/checksums.txt
       - name: Upload installer artifact
@@ -284,7 +284,7 @@ jobs:
           Add-Content -Path $summaryPath -Value "Cache prime key: $env:CACHE_PRIMARY_KEY"
           Add-Content -Path $summaryPath -Value "Cache matched key: $env:CACHE_MATCHED_KEY"
       - name: Save Go module cache
-        uses: actions/cache/save@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~\AppData\Local\go-build

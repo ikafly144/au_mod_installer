@@ -55,7 +55,7 @@ jobs:
         id: cache-golangci-lint
         env:
           cache-name: cache-golangci-lint
-        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/golangci-lint
           key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('.golangci.yml') }}
@@ -69,7 +69,7 @@ jobs:
       - name: go generate
         run: go generate ./...
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee # v9.2.1
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
   test:
     name: test
     runs-on: windows-latest
@@ -97,7 +97,7 @@ jobs:
           Copy-Item -Path $dlls[0].FullName -Destination "lib\discord_partner_sdk.dll" -Force
       - name: Cache Go modules
         id: cache-go-mod
-        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         env:
           cache-name: cache-go-mod
         with:
