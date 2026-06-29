@@ -86,7 +86,7 @@ jobs:
         with:
           platform: x64
       - name: Set up .NET
-        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5.3.0
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           dotnet-version: "8.0.x"
       - name: Install WiX v7
@@ -100,7 +100,7 @@ jobs:
           cache: false
       - name: Cache Go modules and build cache
         id: restore-cache
-        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~\AppData\Local\go-build
@@ -139,7 +139,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Save Go module cache
-        uses: actions/cache/save@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~\AppData\Local\go-build
@@ -178,7 +178,7 @@ jobs:
         with:
           platform: x64
       - name: Set up .NET
-        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5.3.0
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           dotnet-version: "8.0.x"
       - name: Install WiX v7
@@ -192,7 +192,7 @@ jobs:
           cache: false
       - name: Cache Go modules and build cache
         id: restore-cache
-        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~\AppData\Local\go-build
@@ -240,7 +240,7 @@ jobs:
           DISCORD_WEBHOOK_ID: ${{ secrets.DISCORD_WEBHOOK_ID }}
           DISCORD_WEBHOOK_TOKEN: ${{ secrets.DISCORD_WEBHOOK_TOKEN }}
           GORELEASER_PREVIOUS_TAG: ${{ steps.get_previous_stable.outputs.previous_stable }}
-      - uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4
+      - uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4
         with:
           subject-checksums: ./dist/checksums.txt
       - name: Upload installer artifact
@@ -284,7 +284,7 @@ jobs:
           Add-Content -Path $summaryPath -Value "Cache prime key: $env:CACHE_PRIMARY_KEY"
           Add-Content -Path $summaryPath -Value "Cache matched key: $env:CACHE_MATCHED_KEY"
       - name: Save Go module cache
-        uses: actions/cache/save@2c8a9bd7457de244a408f35966fab2fb45fda9c8 # v6.0.0
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~\AppData\Local\go-build
