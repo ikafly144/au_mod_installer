@@ -240,7 +240,7 @@ jobs:
           DISCORD_WEBHOOK_ID: ${{ secrets.DISCORD_WEBHOOK_ID }}
           DISCORD_WEBHOOK_TOKEN: ${{ secrets.DISCORD_WEBHOOK_TOKEN }}
           GORELEASER_PREVIOUS_TAG: ${{ steps.get_previous_stable.outputs.previous_stable }}
-      - uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4
+      - uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763 # v4
         with:
           subject-checksums: ./dist/checksums.txt
       - name: Upload installer artifact
