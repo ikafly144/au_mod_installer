@@ -10,7 +10,7 @@ require (
 	github.com/danieljoos/wincred v1.2.3
 	github.com/gin-gonic/gin v1.12.0
 	github.com/google/go-github/v88 v88.0.0
-	github.com/google/go-github/v89 v89.0.0
+	github.com/google/go-github/v90 v90.0.0
 	github.com/google/go-github/v90 v90.0.0
 	github.com/google/uuid v1.6.0
 	github.com/ikafly144/discord_social_sdk v0.1.1
