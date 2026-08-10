@@ -477,7 +477,7 @@ func (l *Launcher) copyRoomLinkToClipboard() {
 	fyne.CurrentApp().Clipboard().SetContent(link)
 	l.state.ShowInfoDialog(
 		lang.LocalizeKey("common.success", "Success"),
-		lang.LocalizeKey("launcher.join_link.copied", "参加リンクをコピーしました。"),
+		lang.LocalizeKey("launcher.join_link.copied", "Copied join link to clipboard."),
 	)
 }
 
@@ -499,7 +499,7 @@ func (l *Launcher) unpublishCurrentRoom() {
 	})
 	l.state.ShowInfoDialog(
 		lang.LocalizeKey("common.success", "Success"),
-		lang.LocalizeKey("launcher.join_link.unpublished", "参加リンクの公開を停止しました。"),
+		lang.LocalizeKey("launcher.join_link.unpublished", "Unpublished join link."),
 	)
 }
 
@@ -514,12 +514,12 @@ func (l *Launcher) shareCurrentRoom(copyToClipboard bool) {
 
 	prof, _, ok := l.state.Core.CurrentRunningProfile()
 	if !ok {
-		l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("launcher.join_link.no_running_profile", "起動中のプロファイルが見つかりません。")))
+		l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("launcher.join_link.no_running_profile", "No running profile found.")))
 		return
 	}
 	room, ok := l.state.Core.CurrentRoomInfo(l.state.Core.GetLobbyInfo())
 	if !ok {
-		l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("launcher.join_link.no_room", "部屋情報を取得できません。部屋に参加してから再試行してください。")))
+		l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("launcher.join_link.no_room", "Could not get room info. Please join a room and try again.")))
 		return
 	}
 	roomKey := core.RoomKeyForCache(room, prof.ID)
@@ -550,7 +550,7 @@ func (l *Launcher) shareCurrentRoom(copyToClipboard bool) {
 	}
 	base := strings.TrimSpace(l.state.Rest.ServerBaseURL())
 	if base == "" {
-		l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("launcher.join_link.server_unavailable", "このモードでは参加リンクを生成できません。")))
+		l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("launcher.join_link.server_unavailable", "Cannot generate join link in this mode.")))
 		return
 	}
 	aupack, err := l.state.Core.ExportProfileArchive(prof, iconPNG)
@@ -988,7 +988,7 @@ func (l *Launcher) shareProfileAsCode(prof profile.Profile, copyToClipboard bool
 	}
 	if copyToClipboard {
 		fyne.CurrentApp().Clipboard().SetContent(uri)
-		dialog.ShowInformation(lang.LocalizeKey("common.success", "Success"), lang.LocalizeKey("profile.shared_clipboard", "共有コードをコピーしました。"), l.state.Window)
+		dialog.ShowInformation(lang.LocalizeKey("common.success", "Success"), lang.LocalizeKey("profile.shared_clipboard", "Copied share code to clipboard."), l.state.Window)
 		return
 	}
 	l.saveProfileShareCodeToFile(prof, uri)
@@ -996,7 +996,7 @@ func (l *Launcher) shareProfileAsCode(prof profile.Profile, copyToClipboard bool
 
 func (l *Launcher) saveProfileShareCodeToFile(prof profile.Profile, uri string) {
 	path, err := l.state.ExplorerSaveFile(
-		lang.LocalizeKey("profile.share.code_file_type", "共有コード"),
+		lang.LocalizeKey("profile.share.code_file_type", "Share Code"),
 		"*.txt",
 		profileShareFileBaseName(prof)+".txt",
 	)
@@ -1005,10 +1005,10 @@ func (l *Launcher) saveProfileShareCodeToFile(prof profile.Profile, uri string) 
 		return
 	}
 	if err := os.WriteFile(path, []byte(uri), 0600); err != nil {
-		dialog.ShowError(fmt.Errorf("failed to save share code: %w", err), l.state.Window)
+		dialog.ShowError(errors.New(lang.LocalizeKey("profile.error.failed_to_save_share_code", "Failed to save share code: {{.Error}}", map[string]any{"Error": err.Error()})), l.state.Window)
 		return
 	}
-	dialog.ShowInformation(lang.LocalizeKey("common.success", "Success"), lang.LocalizeKey("profile.share.saved", "保存しました。"), l.state.Window)
+	dialog.ShowInformation(lang.LocalizeKey("common.success", "Success"), lang.LocalizeKey("profile.share.saved", "Saved profile output."), l.state.Window)
 }
 
 func (l *Launcher) shareProfileAsArchive(prof profile.Profile, copyToClipboard bool) {
@@ -1025,19 +1025,19 @@ func (l *Launcher) shareProfileAsArchive(prof profile.Profile, copyToClipboard b
 	if copyToClipboard {
 		tempFilePath := filepath.Join(os.TempDir(), profileShareFileBaseName(prof)+".aupack")
 		if err := os.WriteFile(tempFilePath, archive, 0600); err != nil {
-			dialog.ShowError(fmt.Errorf("failed to create temporary archive file: %w", err), l.state.Window)
+			dialog.ShowError(errors.New(lang.LocalizeKey("profile.error.failed_to_create_temp_archive", "Failed to create temporary archive file: {{.Error}}", map[string]any{"Error": err.Error()})), l.state.Window)
 			return
 		}
 		if err := l.state.ClipboardSetFile(tempFilePath); err != nil {
 			dialog.ShowError(err, l.state.Window)
 			return
 		}
-		dialog.ShowInformation(lang.LocalizeKey("common.success", "Success"), lang.LocalizeKey("profile.share.archive_clipboard", "アーカイブをコピーしました。"), l.state.Window)
+		dialog.ShowInformation(lang.LocalizeKey("common.success", "Success"), lang.LocalizeKey("profile.share.archive_clipboard", "Copied archive to clipboard."), l.state.Window)
 		return
 	}
 
 	path, err := l.state.ExplorerSaveFile(
-		lang.LocalizeKey("profile.share.archive_file_type", "アーカイブ"),
+		lang.LocalizeKey("profile.share.archive_file_type", "Archive"),
 		"*.aupack",
 		profileShareFileBaseName(prof)+".aupack",
 	)
@@ -1046,10 +1046,10 @@ func (l *Launcher) shareProfileAsArchive(prof profile.Profile, copyToClipboard b
 		return
 	}
 	if err := os.WriteFile(path, archive, 0600); err != nil {
-		dialog.ShowError(fmt.Errorf("failed to save profile archive: %w", err), l.state.Window)
+		dialog.ShowError(errors.New(lang.LocalizeKey("profile.error.failed_to_save_archive", "Failed to save profile archive: {{.Error}}", map[string]any{"Error": err.Error()})), l.state.Window)
 		return
 	}
-	dialog.ShowInformation(lang.LocalizeKey("common.success", "Success"), lang.LocalizeKey("profile.share.saved", "保存しました。"), l.state.Window)
+	dialog.ShowInformation(lang.LocalizeKey("common.success", "Success"), lang.LocalizeKey("profile.share.saved", "Saved profile output."), l.state.Window)
 }
 
 func profileShareFileBaseName(prof profile.Profile) string {
@@ -1077,7 +1077,7 @@ func (l *Launcher) showImportDialog() {
 		},
 	)
 	importArchiveBtn := widget.NewButtonWithIcon(
-		lang.LocalizeKey("profile.import_file", "アーカイブからインポート"),
+		lang.LocalizeKey("profile.import_file", "Import from Archive"),
 		theme.FolderOpenIcon(),
 		func() {
 			if d != nil {
@@ -1119,7 +1119,7 @@ func (l *Launcher) showImportCodeDialog() {
 
 func (l *Launcher) importProfileFromArchiveFileDialog() {
 	path, err := l.state.ExplorerOpenFile(
-		lang.LocalizeKey("profile.import_file_dialog_type", "アーカイブ"),
+		lang.LocalizeKey("profile.import_file_dialog_type", "Archive"),
 		"*.aupack",
 	)
 	if err != nil {
@@ -1146,7 +1146,7 @@ func (l *Launcher) importProfileFromArchiveURI(uri fyne.URI) {
 
 	reader, err := storage.Reader(uri)
 	if err != nil {
-		dialog.ShowError(fmt.Errorf("failed to read dropped archive: %w", err), l.state.Window)
+		dialog.ShowError(errors.New(lang.LocalizeKey("profile.error.failed_to_read_dropped_archive", "Failed to read dropped archive: {{.Error}}", map[string]any{"Error": err.Error()})), l.state.Window)
 		return
 	}
 	defer reader.Close()
@@ -1166,7 +1166,7 @@ func (l *Launcher) handleDroppedURIs(uris []fyne.URI) {
 			return
 		}
 	}
-	dialog.ShowError(errors.New(lang.LocalizeKey("profile.import_drop_no_zip", "ドロップされた項目にアーカイブ(.aupack)が見つかりませんでした。")), l.state.Window)
+	dialog.ShowError(errors.New(lang.LocalizeKey("profile.import_drop_no_zip", "No archive (.aupack) found in dropped items.")), l.state.Window)
 }
 
 func (l *Launcher) checkSharedURI() {
@@ -1231,14 +1231,14 @@ func (l *Launcher) handleGameLink(joinURI *core.JoinGameLink) {
 			go func() {
 				if err := <-errCh; err != nil {
 					fyne.Do(func() {
-						dialog.ShowError(fmt.Errorf("failed to send join request to game process: %w", err), l.state.Window)
+						dialog.ShowError(errors.New(lang.LocalizeKey("launcher.error.failed_to_send_join_request", "Failed to send join request to game process: {{.Error}}", map[string]any{"Error": err.Error()})), l.state.Window)
 					})
 				}
 			}()
 		}
 		l.state.ShowInfoDialog(
 			lang.LocalizeKey("common.success", "Success"),
-			lang.LocalizeKey("launcher.join_link.join_sent", "起動中のゲームに部屋参加リクエストを送信しました。"),
+			lang.LocalizeKey("launcher.join_link.join_sent", "Sent room join request to running game."),
 		)
 		return
 	}
@@ -1269,7 +1269,7 @@ func (l *Launcher) importProfileFromArchiveURL(archiveURL string) {
 	loadingProgress = progress.NewFyneProgress(bar)
 	fyne.DoAndWait(func() {
 		content := container.NewVBox(
-			widget.NewLabel(lang.LocalizeKey("profile.import_url_loading", "アーカイブをダウンロードしています...")),
+			widget.NewLabel(lang.LocalizeKey("profile.import_url_loading", "Downloading archive...")),
 			bar,
 		)
 		loadingDialog = dialog.NewCustomWithoutButtons(
@@ -1432,7 +1432,7 @@ func (l *Launcher) setupProfileList() {
 			menuBtn := content.Objects[1].(*widget.Button)
 			title.SetText(prof.Name)
 			meta.SetText(l.profileMetaText(prof))
-			stats.SetText(fmt.Sprintf("Mods: %d  Play: %s", len(prof.ModVersions), formatPlayDuration(time.Duration(prof.PlayDurationNS))))
+			stats.SetText(lang.LocalizeKey("launcher.profile.stats", "Mods: {{.Mods}}  Play: {{.Duration}}", map[string]any{"Mods": len(prof.ModVersions), "Duration": formatPlayDuration(time.Duration(prof.PlayDurationNS))}))
 
 			tappable.OnTapped = func() {
 				l.profileList.Select(id)
@@ -1870,7 +1870,7 @@ func (l *Launcher) runLaunch() {
 		// Resolve dependencies
 		resolvedVersions, err := l.state.Core.ResolveDependencies(targetProfile.Versions())
 		if err != nil {
-			launchErr = fmt.Errorf("failed to resolve dependencies: %w", err)
+			launchErr = errors.New(lang.LocalizeKey("launcher.error.failed_to_resolve_dependencies", "Failed to resolve dependencies: {{.Error}}", map[string]any{"Error": err.Error()}))
 			return
 		}
 
@@ -2016,7 +2016,7 @@ func (l *Launcher) syncProfile(prof profile.Profile) {
 		// Resolve dependencies
 		resolvedVersions, err := l.state.Core.ResolveDependencies(prof.Versions())
 		if err != nil {
-			syncErr = fmt.Errorf("failed to resolve dependencies: %w", err)
+			syncErr = errors.New(lang.LocalizeKey("launcher.error.failed_to_resolve_dependencies", "Failed to resolve dependencies: {{.Error}}", map[string]any{"Error": err.Error()}))
 			return
 		}
 
@@ -2250,7 +2250,7 @@ func (l *Launcher) openProfileFolder(prof profile.Profile) {
 		return
 	}
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		dialog.ShowError(fmt.Errorf("failed to create profile directory: %w", err), l.state.Window)
+		dialog.ShowError(errors.New(lang.LocalizeKey("profile.error.failed_to_create_directory", "Failed to create profile directory: {{.Error}}", map[string]any{"Error": err.Error()})), l.state.Window)
 		return
 	}
 	if err := l.state.ExplorerOpenFolder(dir); err != nil {
@@ -2261,7 +2261,7 @@ func (l *Launcher) openProfileFolder(prof profile.Profile) {
 // -- Profile Management Methods --
 
 func (l *Launcher) createProfile() {
-	baseName := "New Profile"
+	baseName := lang.LocalizeKey("launcher.profile.default_name", "New Profile")
 	name := baseName
 	counter := 1
 	existing := l.state.ProfileManager.List()
@@ -2471,7 +2471,7 @@ func (l *Launcher) openProfileEditor(prof profile.Profile) {
 	updatesAvailable := make(map[string]string) // ModID -> LatestVersionID
 	var applyLatestBtn *widget.Button
 	applyLatestBtn = widget.NewButtonWithIcon(
-		lang.LocalizeKey("profile.apply_latest", "最新バージョンを適用"),
+		lang.LocalizeKey("profile.apply_latest", "Apply Latest Version"),
 		theme.DownloadIcon(),
 		func() {
 			if len(updatesAvailable) == 0 {
@@ -2480,7 +2480,7 @@ func (l *Launcher) openProfileEditor(prof profile.Profile) {
 			for modID, latestID := range updatesAvailable {
 				version, fetchErr := l.state.Rest.GetModVersion(modID, latestID)
 				if fetchErr != nil {
-					dialog.ShowError(fmt.Errorf("failed to fetch latest version for %s:%s: %w", modID, latestID, fetchErr), l.state.Window)
+					dialog.ShowError(errors.New(lang.LocalizeKey("profile.error.failed_to_fetch_latest_version", "Failed to fetch latest version for {{.ModID}}:{{.VersionID}}: {{.Error}}", map[string]any{"ModID": modID, "VersionID": latestID, "Error": fetchErr.Error()})), l.state.Window)
 					return
 				}
 				currentProfile.AddModVersion(*version)
@@ -2544,7 +2544,7 @@ func (l *Launcher) openProfileEditor(prof profile.Profile) {
 				latestVersionID := latestID
 				version, fetchErr := l.state.Rest.GetModVersion(modID, latestVersionID)
 				if fetchErr != nil {
-					dialog.ShowError(fmt.Errorf("failed to fetch latest version for %s:%s: %w", modID, latestVersionID, fetchErr), l.state.Window)
+					dialog.ShowError(errors.New(lang.LocalizeKey("profile.error.failed_to_fetch_latest_version", "Failed to fetch latest version for {{.ModID}}:{{.VersionID}}: {{.Error}}", map[string]any{"ModID": modID, "VersionID": latestVersionID, "Error": fetchErr.Error()})), l.state.Window)
 					return
 				}
 				currentProfile.AddModVersion(*version)
@@ -2775,7 +2775,7 @@ func (l *Launcher) showProfileIconSelectionDialog(prof profile.Profile, onSelect
 }
 
 func (l *Launcher) pickProfileIconFromExplorer() ([]byte, error) {
-	path, err := l.state.ExplorerOpenFile("Profile Icon", "*.png;*.jpg;*.jpeg;*.gif")
+	path, err := l.state.ExplorerOpenFile(lang.LocalizeKey("profile.icon.select_dialog_title", "Profile Icon"), "*.png;*.jpg;*.jpeg;*.gif")
 	if err != nil {
 		slog.Info("File selection cancelled or failed", "error", err)
 		return nil, nil

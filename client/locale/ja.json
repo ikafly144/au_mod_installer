@@ -288,5 +288,19 @@
     "discord.status.idle_details": "ゲームを起動していません",
     "discord.status.in_lobby": "ロビー",
     "discord.status.in_main_menu": "メインメニュー",
-    "discord.status.in_game": "ゲーム中"
+    "discord.status.in_game": "ゲーム中",
+    "repository.error.failed_to_load_versions": "バージョンの読み込みに失敗しました: {{.Error}}",
+    "repository.error.profile_not_found": "プロファイルが見つかりません。",
+    "launcher.profile.stats": "Mod: {{.Mods}}  プレイ: {{.Duration}}",
+    "launcher.profile.default_name": "新規プロファイル",
+    "profile.icon.select_dialog_title": "プロファイルアイコン",
+    "profile.error.failed_to_save_share_code": "共有コードの保存に失敗しました: {{.Error}}",
+    "profile.error.failed_to_create_temp_archive": "一時アーカイブファイルの作成に失敗しました: {{.Error}}",
+    "profile.error.failed_to_save_archive": "プロファイルアーカイブの保存に失敗しました: {{.Error}}",
+    "profile.error.failed_to_read_dropped_archive": "ドロップされたアーカイブの読み込みに失敗しました: {{.Error}}",
+    "launcher.error.failed_to_send_join_request": "ゲームプロセスへの参加リクエスト送信に失敗しました: {{.Error}}",
+    "launcher.error.failed_to_resolve_dependencies": "依存関係の解決に失敗しました: {{.Error}}",
+    "profile.error.failed_to_create_directory": "プロファイルディレクトリの作成に失敗しました: {{.Error}}",
+    "profile.error.failed_to_fetch_latest_version": "最新バージョンの取得に失敗しました ({{.ModID}}:{{.VersionID}}): {{.Error}}",
+    "settings.app.version": "バージョン: {{.Version}} ({{.Revision}})"
 }

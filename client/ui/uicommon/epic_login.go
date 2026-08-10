@@ -62,7 +62,7 @@ func (s *State) ShowEpicLoginWindow(onSuccess func(), onCancel func()) {
 	var success atomic.Bool
 	var flowCancel context.CancelFunc
 
-	statusLabel := widget.NewLabel(lang.LocalizeKey("settings.epic_login_waiting", "ブラウザでEpic Gamesログインを完了してください。"))
+	statusLabel := widget.NewLabel(lang.LocalizeKey("settings.epic_login_waiting", "Please complete Epic Games login in your browser."))
 	statusLabel.Wrapping = fyne.TextWrapWord
 
 	setStatus := func(text string) {
@@ -84,14 +84,14 @@ func (s *State) ShowEpicLoginWindow(onSuccess func(), onCancel func()) {
 	}
 
 	content := container.NewVBox(
-		widget.NewLabel(lang.LocalizeKey("settings.epic_login_instruction", "Epic Gamesでログインすると自動的に連携が完了します。")),
+		widget.NewLabel(lang.LocalizeKey("settings.epic_login_instruction", "Logging in with Epic Games will complete the connection automatically.")),
 		statusLabel,
 		container.NewHBox(layout.NewSpacer()),
 	)
 
 	popup = dialog.NewCustom(
-		lang.LocalizeKey("settings.epic_games_account", "Epic Gamesアカウント"),
-		lang.LocalizeKey("common.cancel", "キャンセル"),
+		lang.LocalizeKey("settings.epic_games_account", "Epic Games Account"),
+		lang.LocalizeKey("common.cancel", "Cancel"),
 		content,
 		s.Window,
 	)
@@ -111,7 +111,7 @@ func (s *State) ShowEpicLoginWindow(onSuccess func(), onCancel func()) {
 	ctx, cancel := context.WithCancel(context.Background())
 	flowCancel = cancel
 
-	setStatus(lang.LocalizeKey("settings.epic_login_waiting", "ブラウザでEpic Gamesログインを完了してください。認証コードはクリップボードから自動で取得します。"))
+	setStatus(lang.LocalizeKey("settings.epic_login_waiting", "Please complete Epic Games login in your browser."))
 
 	webViewCodeCh, webViewErrCh, stopWebView := startEpicWebView2Login(authURL)
 	clipboardFallbackEnabled := webViewCodeCh == nil || webViewErrCh == nil
@@ -154,11 +154,11 @@ func (s *State) ShowEpicLoginWindow(onSuccess func(), onCancel func()) {
 				}
 				triedCodes[clipboardContent] = struct{}{}
 
-				setStatus(lang.LocalizeKey("settings.epic_login_code_detected", "認証コードを検出しました。ログインを完了しています..."))
+				setStatus(lang.LocalizeKey("settings.epic_login_code_detected", "Auth code detected. Completing login..."))
 
 				session, err := s.Core.EpicApi.LoginWithCode(clipboardContent)
 				if err != nil {
-					setStatus(lang.LocalizeKey("settings.epic_login_code_failed", "コード検証に失敗しました。ブラウザで再ログイン後、もう一度お試しください。"))
+					setStatus(lang.LocalizeKey("settings.epic_login_code_failed", "Code verification failed. Please try again after logging in on your browser."))
 					continue
 				}
 
@@ -198,11 +198,11 @@ func (s *State) ShowEpicLoginWindow(onSuccess func(), onCancel func()) {
 				}
 				triedCodes[code] = struct{}{}
 
-				setStatus(lang.LocalizeKey("settings.epic_login_code_detected", "認証コードを検出しました。ログインを完了しています..."))
+				setStatus(lang.LocalizeKey("settings.epic_login_code_detected", "Auth code detected. Completing login..."))
 
 				session, err := s.Core.EpicApi.LoginWithCode(code)
 				if err != nil {
-					setStatus(lang.LocalizeKey("settings.epic_login_code_failed", "コード検証に失敗しました。ブラウザで再ログイン後、もう一度お試しください。"))
+					setStatus(lang.LocalizeKey("settings.epic_login_code_failed", "Code verification failed. Please try again after logging in on your browser."))
 					continue
 				}
 
@@ -228,15 +228,15 @@ func (s *State) ShowEpicLoginWindow(onSuccess func(), onCancel func()) {
 		clipboardFallback:
 			fyne.Do(func() {
 				dialog.ShowConfirm(
-					lang.LocalizeKey("settings.epic_login_fallback_title", "WebViewログイン失敗"),
-					lang.LocalizeKey("settings.epic_login_fallback_message", "WebViewでのログインに失敗しました。外部ブラウザでログインを続行しますか？"),
+					lang.LocalizeKey("settings.epic_login_fallback_title", "WebView Login Failed"),
+					lang.LocalizeKey("settings.epic_login_fallback_message", "Failed to log in via WebView. Do you want to continue login in an external browser?"),
 					func(confirm bool) {
 						if !confirm {
 							cancel()
 							return
 						}
 						clipboardFallbackEnabled = true
-						setStatus(lang.LocalizeKey("settings.epic_login_waiting", "ブラウザでEpic Gamesログインを完了してください。認証コードはクリップボードから自動で取得します。"))
+						setStatus(lang.LocalizeKey("settings.epic_login_waiting", "Please complete Epic Games login in your browser."))
 						openLoginPage()
 					},
 					s.Window,

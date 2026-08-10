@@ -301,7 +301,7 @@ func (r *Repository) showModDetails(mod *modmgr.Mod) {
 		fyne.Do(func() {
 			versionsList.Objects = nil
 			if err != nil {
-				versionsList.Add(widget.NewLabel("Failed to load versions: " + err.Error()))
+				versionsList.Add(widget.NewLabel(lang.LocalizeKey("repository.error.failed_to_load_versions", "Failed to load versions: {{.Error}}", map[string]any{"Error": err.Error()})))
 				return
 			}
 			for _, v := range versions {
@@ -402,7 +402,7 @@ func (r *Repository) installModVersion(mod *modmgr.Mod, versionID string) {
 				targetProfile, found := r.state.ProfileManager.Get(targetID)
 				if !found {
 					fyne.Do(func() {
-						r.state.SetError(fmt.Errorf("profile not found"))
+						r.state.SetError(errors.New(lang.LocalizeKey("repository.error.profile_not_found", "Profile not found.")))
 					})
 					return
 				}

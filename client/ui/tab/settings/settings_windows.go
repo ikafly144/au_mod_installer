@@ -271,7 +271,7 @@ func (s *Settings) Tab() (*container.TabItem, error) {
 
 	revision := fyne.CurrentApp().Metadata().Custom["revision"]
 	revision = revision[:min(7, len(revision))]
-	versionContent := widget.NewLabelWithStyle(fmt.Sprintf("version: %s (%s)", s.state.Version, revision), fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	versionContent := widget.NewLabelWithStyle(lang.LocalizeKey("settings.app.version", "version: {{.Version}} ({{.Revision}})", map[string]any{"Version": s.state.Version, "Revision": revision}), fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	versionContent.Wrapping = fyne.TextWrapWord
 	basicPage := container.NewVScroll(container.NewVBox(
 		widget.NewCard(
