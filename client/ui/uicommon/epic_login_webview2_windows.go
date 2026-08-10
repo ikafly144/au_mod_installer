@@ -69,13 +69,15 @@ func parseEpicCodeFromWebViewPayload(payload epicWebViewPayload) (string, bool) 
 }
 
 const epicWebView2BridgeScript = `(function () {
+  if (window.top !== window.self) return;
+
   const sent = new Set();
   let lastHref = "";
   let lastBodySample = "";
 
   function sendPayload(payload) {
-    if (!payload) return;
-    const key = JSON.stringify(payload);
+    if (!payload || !payload.code) return;
+    const key = payload.code;
     if (sent.has(key)) return;
     sent.add(key);
     if (typeof window.epicReportCode === 'function') {
@@ -87,18 +89,15 @@ const epicWebView2BridgeScript = `(function () {
     if (!value) return;
     const code = String(value).trim();
     if (!code) return;
-    sendPayload({ code: code, raw: raw || "", url: window.location.href || "" });
-  }
-
-  function sendRaw(raw) {
-    if (!raw) return;
-    sendPayload({ code: "", raw: String(raw), url: window.location.href || "" });
+    const m = code.match(/[a-f0-9]{32}/i);
+    if (m) {
+      sendPayload({ code: m[0].toLowerCase(), raw: raw || "", url: window.location.href || "" });
+    }
   }
 
   function inspectText(text) {
     if (!text) return;
     const raw = String(text);
-    sendRaw(raw);
     try {
       const obj = JSON.parse(raw);
       const keys = ['exchange_code', 'code', 'authorization_code', 'authorizationCode'];
@@ -117,7 +116,6 @@ const epicWebView2BridgeScript = `(function () {
     lastHref = href;
     try {
       const u = new URL(href, window.location.origin);
-      sendPayload({ code: "", raw: "", url: u.href });
       ['exchange_code', 'code', 'authorization_code'].forEach((key) => {
         const v = u.searchParams.get(key);
         if (v) sendCandidate(v, "");
@@ -148,7 +146,7 @@ const epicWebView2BridgeScript = `(function () {
   window.addEventListener('load', tick);
   window.addEventListener('hashchange', tick);
   window.addEventListener('popstate', tick);
-  setInterval(tick, 1200);
+  setInterval(tick, 1000);
   tick();
 })();`
 
@@ -162,8 +160,11 @@ func startEpicWebView2Login(authURL string) (<-chan string, <-chan error, func()
 		mu.Lock()
 		defer mu.Unlock()
 		if w != nil {
-			w.Destroy()
-			w.Terminate()
+			target := w
+			w = nil
+			target.Dispatch(func() {
+				target.Destroy()
+			})
 		}
 	}
 
@@ -214,8 +215,15 @@ func startEpicWebView2Login(authURL string) (<-chan string, <-chan error, func()
 				case codeCh <- code:
 				default:
 				}
-				wv.Destroy()
-				wv.Terminate()
+				mu.Lock()
+				target := w
+				w = nil
+				mu.Unlock()
+				if target != nil {
+					target.Dispatch(func() {
+						target.Destroy()
+					})
+				}
 			}
 		}); err != nil {
 			errCh <- err
