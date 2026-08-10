@@ -1,5 +1,7 @@
 # Mod of Us
 
+[English](README.md) | [日本語](README_JA.md)
+
 Mod of Us is a mod manager for the game "Among Us". It allows players to easily install, manage, and switch between different mods to enhance their gaming experience.
 
 ## Install
