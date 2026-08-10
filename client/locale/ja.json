@@ -104,7 +104,7 @@
     "settings.epic_logout": "ログアウト",
     "settings.epic_login_instruction": "Epic Gamesでログインすると自動的に連携が完了します。",
     "settings.epic_login_url_button": "ログインページを開く",
-    "settings.epic_login_waiting": "ブラウザでEpic Gamesログインを完了してください。認証コードはクリップボードから自動で取得します。",
+    "settings.epic_login_waiting": "Epic Gamesアカウントのログインを完了してください。",
     "settings.epic_login_code_detected": "認証コードを検出しました。ログインを完了しています...",
     "settings.epic_login_code_failed": "コード検証に失敗しました。ブラウザで再ログイン後、もう一度お試しください。",
     "settings.epic_login_fallback_title": "WebViewログイン失敗",
