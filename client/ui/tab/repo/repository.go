@@ -41,8 +41,9 @@ const (
 )
 
 type Repository struct {
-	state *uicommon.State
-	mu    sync.Mutex
+	state    *uicommon.State
+	loadOnce sync.Once
+	mu       sync.Mutex
 
 	thumbMu             sync.Mutex
 	thumbnailImageCache map[string]image.Image
@@ -133,15 +134,17 @@ func NewRepository(state *uicommon.State) *Repository {
 		repo.updateModList(repo.searchBar.Text)
 	}))
 
-	repo.init()
 	return repo
 }
 
-func (r *Repository) init() {
-	r.LoadNext()
+func (r *Repository) EnsureLoaded() {
+	r.loadOnce.Do(func() {
+		r.LoadNext()
+	})
 }
 
 func (r *Repository) Tab() (*container.TabItem, error) {
+	r.EnsureLoaded()
 	return container.NewTabItem(lang.LocalizeKey("repository.tab_name", "Repository"), r.mainContainer), nil
 }
 

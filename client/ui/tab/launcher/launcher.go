@@ -1701,6 +1701,7 @@ func (l *Launcher) switchProfileView() {
 		return
 	}
 	if l.isGridView {
+		l.refreshProfileGrid()
 		l.profileGridScroll.Show()
 		l.profileList.Hide()
 		return
@@ -1710,7 +1711,7 @@ func (l *Launcher) switchProfileView() {
 }
 
 func (l *Launcher) refreshProfileGrid() {
-	if l.profileGrid == nil {
+	if l.profileGrid == nil || !l.isGridView {
 		return
 	}
 	var items []fyne.CanvasObject

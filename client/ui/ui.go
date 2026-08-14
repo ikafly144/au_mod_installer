@@ -6,14 +6,17 @@ import (
 	"context"
 	"log/slog"
 	"runtime"
+	"runtime/debug"
 	"sync"
+	"time"
+
+	"github.com/zzl/go-win32api/v2/win32"
 
 	"github.com/ikafly144/au_mod_installer/client/ui/tab/launcher"
 	"github.com/ikafly144/au_mod_installer/client/ui/tab/repo"
 	servertab "github.com/ikafly144/au_mod_installer/client/ui/tab/server"
 	"github.com/ikafly144/au_mod_installer/client/ui/tab/settings"
 	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
-	"github.com/zzl/go-win32api/v2/win32"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -65,51 +68,118 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 		init(state)
 	}
 
-	l := launcher.NewLauncherTab(state)
-	launcherTab, err := l.Tab()
-	if err != nil {
-		return err
-	}
-
-	r := repo.NewRepository(state)
-	repoTab, err := r.Tab()
-	if err != nil {
-		return err
-	}
-
-	s := settings.NewSettings(state)
-	settingsTab, err := s.Tab()
-	if err != nil {
-		return err
-	}
-
-	st := servertab.NewServerTab(state)
-	serverTab, err := st.Tab()
-	if err != nil {
-		return err
-	}
-
-	canvas := container.NewAppTabs(
-		launcherTab,
-		repoTab,
-		serverTab,
-		settingsTab,
-	)
-	w.SetOnDropped(func(_ fyne.Position, uris []fyne.URI) {
-		if state.OnDroppedURIs != nil {
-			state.OnDroppedURIs(uris)
-		}
-	})
-	w.SetContent(canvas)
-	w.SetFixedSize(false)
-
 	var (
 		initOnce        sync.Once
 		textDropCleanup func()
+		launcherTabInst *launcher.Launcher
 	)
+
+	// Set fallback handlers for IPC before full UI is built
+	state.OnActivateReceived = func() {
+		fyne.Do(func() {
+			if state.ShowWindow != nil {
+				state.ShowWindow()
+			}
+		})
+	}
+	state.OnSharedURIReceived = func(uri string) {
+		state.SharedURI = uri
+		fyne.Do(func() {
+			if state.ShowWindow != nil {
+				state.ShowWindow()
+			}
+		})
+	}
+	state.OnSharedArchiveReceived = func(path string) {
+		state.SharedArchive = path
+		fyne.Do(func() {
+			if state.ShowWindow != nil {
+				state.ShowWindow()
+			}
+		})
+	}
+
+	buildFullUI := func() {
+		l := launcher.NewLauncherTab(state)
+		launcherTabInst = l
+		launcherTab, err := l.Tab()
+		if err != nil {
+			slog.Error("Failed to create launcher tab", "error", err)
+			return
+		}
+
+		repoPlaceholder := container.NewStack()
+		repoItem := container.NewTabItem(lang.LocalizeKey("repository.tab_name", "Repository"), repoPlaceholder)
+		var loadRepoOnce sync.Once
+
+		serverPlaceholder := container.NewStack()
+		serverItem := container.NewTabItem(lang.LocalizeKey("server.tab_name", "Servers"), serverPlaceholder)
+		var loadServerOnce sync.Once
+
+		settingsPlaceholder := container.NewStack()
+		settingsItem := container.NewTabItem(lang.LocalizeKey("settings.title", "Settings"), settingsPlaceholder)
+		var loadSettingsOnce sync.Once
+
+		tabs := container.NewAppTabs(
+			launcherTab,
+			repoItem,
+			serverItem,
+			settingsItem,
+		)
+		tabs.OnSelected = func(item *container.TabItem) {
+			switch item {
+			case repoItem:
+				loadRepoOnce.Do(func() {
+					r := repo.NewRepository(state)
+					t, err := r.Tab()
+					if err == nil {
+						repoPlaceholder.Objects = []fyne.CanvasObject{t.Content}
+						repoPlaceholder.Refresh()
+					} else {
+						slog.Error("Failed to create repo tab", "error", err)
+					}
+				})
+			case serverItem:
+				loadServerOnce.Do(func() {
+					st := servertab.NewServerTab(state)
+					t, err := st.Tab()
+					if err == nil {
+						serverPlaceholder.Objects = []fyne.CanvasObject{t.Content}
+						serverPlaceholder.Refresh()
+					} else {
+						slog.Error("Failed to create server tab", "error", err)
+					}
+				})
+			case settingsItem:
+				loadSettingsOnce.Do(func() {
+					s := settings.NewSettings(state)
+					t, err := s.Tab()
+					if err == nil {
+						settingsPlaceholder.Objects = []fyne.CanvasObject{t.Content}
+						settingsPlaceholder.Refresh()
+					} else {
+						slog.Error("Failed to create settings tab", "error", err)
+					}
+				})
+			}
+		}
+
+		w.SetOnDropped(func(_ fyne.Position, uris []fyne.URI) {
+			if state.OnDroppedURIs != nil {
+				state.OnDroppedURIs(uris)
+			}
+		})
+		w.SetContent(tabs)
+		w.SetFixedSize(false)
+
+		for s, ok := state.Core.DiscordService.PopQueue(); ok; s, ok = state.Core.DiscordService.PopQueue() {
+			l.HandleJoinLink(s)
+		}
+	}
 
 	state.ShowWindow = func() {
 		initOnce.Do(func() {
+			buildFullUI()
 			w.Show()
 			if _, err := state.EnableNativeCustomWindowFrame(); err != nil {
 				slog.Warn("Failed to enable native custom window frame", "error", err)
@@ -152,6 +222,11 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 			uicommon.SaveMainWindowSize(w)
 			w.Hide()
 			slog.Info("Main window hidden to system tray")
+			go func() {
+				time.Sleep(300 * time.Millisecond)
+				runtime.GC()
+				debug.FreeOSMemory()
+			}()
 		} else {
 			if onClosed != nil {
 				onClosed()
@@ -164,6 +239,13 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 
 	if !config.silent {
 		state.ShowWindow()
+	} else {
+		// In silent mode, perform a prompt GC/FreeOSMemory after setting up tray
+		go func() {
+			time.Sleep(300 * time.Millisecond)
+			runtime.GC()
+			debug.FreeOSMemory()
+		}()
 	}
 
 	if state.Core.DiscordService != nil {
@@ -213,8 +295,10 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 	w.SetOnClosed(onClosed)
 	fyne.Do(func() {
 		slog.Info("Application started", "silent", config.silent)
-		for s, ok := state.Core.DiscordService.PopQueue(); ok; s, ok = state.Core.DiscordService.PopQueue() {
-			l.HandleJoinLink(s)
+		if launcherTabInst != nil {
+			for s, ok := state.Core.DiscordService.PopQueue(); ok; s, ok = state.Core.DiscordService.PopQueue() {
+				launcherTabInst.HandleJoinLink(s)
+			}
 		}
 	})
 	runtime.LockOSThread()

@@ -20,6 +20,9 @@ cmd/bootstrapper/mod-of-us.msi
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
 
+# Profiling data
+*.pprof
+
 # Dependency directories (remove the comment below to include it)
 # vendor/
 

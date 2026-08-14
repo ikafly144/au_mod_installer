@@ -18,6 +18,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -61,6 +62,8 @@ type Settings struct {
 	scaleControlSyncing bool
 	currentDisplayScale float32
 
+	loadLicensesOnce         sync.Once
+	startPollingOnce         sync.Once
 	thirdPartyLicenses       []thirdPartyLicense
 	thirdPartyLicenseLoadErr error
 	projectLicense           projectLicense
@@ -179,35 +182,20 @@ func NewSettings(state *uicommon.State) *Settings {
 	displayScaleSlider.Step = float64(displayScaleStep)
 	displayScaleSlider.SetValue(float64(clampDisplayScale(currentScale)))
 
-	thirdPartyLicenses, thirdPartyLicenseLoadErr := loadThirdPartyLicenses()
-	if thirdPartyLicenseLoadErr != nil {
-		slog.Warn("Failed to load third-party licenses", "error", thirdPartyLicenseLoadErr)
-	}
-	projectLicense, projectLicenseErr := loadProjectLicense()
-	if projectLicenseErr != nil {
-		slog.Warn("Failed to load project license", "error", projectLicenseErr)
-	}
-	if projectLicense.LicenseURL == "" {
-		projectLicense.LicenseURL = projectLicenseURL
-	}
-
 	s := &Settings{
-		state:                    state,
-		BranchEntry:              branchEntry,
-		BranchHintLabel:          branchHintLabel,
-		BranchStatusLabel:        branchStatusLabel,
-		AutoSharingCheck:         autoSharingCheck,
-		TrayResidentCheck:        trayResidentCheck,
-		AutoStartCheck:           autoStartCheck,
-		DisplayScaleSlider:       displayScaleSlider,
-		DisplayScaleSelect:       displayScaleSelect,
-		epicAccountLabel:         widget.NewLabel(""),
-		discordAccountLabel:      widget.NewLabel(""),
-		displayScaleValues:       displayScaleValues,
-		currentDisplayScale:      clampDisplayScale(currentScale),
-		thirdPartyLicenses:       thirdPartyLicenses,
-		thirdPartyLicenseLoadErr: thirdPartyLicenseLoadErr,
-		projectLicense:           projectLicense,
+		state:               state,
+		BranchEntry:         branchEntry,
+		BranchHintLabel:     branchHintLabel,
+		BranchStatusLabel:   branchStatusLabel,
+		AutoSharingCheck:    autoSharingCheck,
+		TrayResidentCheck:   trayResidentCheck,
+		AutoStartCheck:      autoStartCheck,
+		DisplayScaleSlider:  displayScaleSlider,
+		DisplayScaleSelect:  displayScaleSelect,
+		epicAccountLabel:    widget.NewLabel(""),
+		discordAccountLabel: widget.NewLabel(""),
+		displayScaleValues:  displayScaleValues,
+		currentDisplayScale: clampDisplayScale(currentScale),
 	}
 	s.DisplayScaleSelect.OnChanged = s.onDisplayScaleChanged
 	s.DisplayScaleSlider.OnChanged = s.onDisplayScaleSliderChanged
@@ -221,22 +209,45 @@ func NewSettings(state *uicommon.State) *Settings {
 	s.discordLogoutButton = widget.NewButton(lang.LocalizeKey("settings.discord_logout", "Logout"), s.discordLogout)
 	s.discordLogoutButton.Hide()
 
-	go func() {
-		ticker := time.NewTicker(3 * time.Second)
-		defer ticker.Stop()
-		for {
-			go s.refreshDiscordAccountInfo()
-			go fyne.Do(s.refreshEpicAccountInfo)
-			<-ticker.C
-		}
-	}()
-
 	s.ClearCacheButton = widget.NewButtonWithIcon(lang.LocalizeKey("settings.clear_cache", "Clear Mod Cache"), theme.DeleteIcon(), s.clearCache)
 
 	s.DeleteAmongUsDataButton = widget.NewButtonWithIcon(lang.LocalizeKey("settings.delete_among_us_data", "Delete Among Us Data"), theme.DeleteIcon(), s.deleteAmongUsData)
 	s.DeleteAmongUsDataButton.Importance = widget.DangerImportance
 
 	return s
+}
+
+func (s *Settings) ensureLicensesLoaded() {
+	s.loadLicensesOnce.Do(func() {
+		thirdPartyLicenses, thirdPartyLicenseLoadErr := loadThirdPartyLicenses()
+		if thirdPartyLicenseLoadErr != nil {
+			slog.Warn("Failed to load third-party licenses", "error", thirdPartyLicenseLoadErr)
+		}
+		projectLicense, projectLicenseErr := loadProjectLicense()
+		if projectLicenseErr != nil {
+			slog.Warn("Failed to load project license", "error", projectLicenseErr)
+		}
+		if projectLicense.LicenseURL == "" {
+			projectLicense.LicenseURL = projectLicenseURL
+		}
+		s.thirdPartyLicenses = thirdPartyLicenses
+		s.thirdPartyLicenseLoadErr = thirdPartyLicenseLoadErr
+		s.projectLicense = projectLicense
+	})
+}
+
+func (s *Settings) startAccountPolling() {
+	s.startPollingOnce.Do(func() {
+		go func() {
+			ticker := time.NewTicker(3 * time.Second)
+			defer ticker.Stop()
+			for {
+				go s.refreshDiscordAccountInfo()
+				go fyne.Do(s.refreshEpicAccountInfo)
+				<-ticker.C
+			}
+		}()
+	})
 }
 
 func (s *Settings) clearCache() {
@@ -253,6 +264,7 @@ func (s *Settings) clearCache() {
 }
 
 func (s *Settings) Tab() (*container.TabItem, error) {
+	s.startAccountPolling()
 	entry := widget.NewLabelWithData(s.state.SelectedGamePath)
 	entry.Selectable = true
 	pathBg := canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground))
@@ -705,6 +717,7 @@ func (s *Settings) newOpenSourcePage() fyne.CanvasObject {
 	}
 
 	showListPage = func() {
+		s.ensureLicensesLoaded()
 		licenseList := container.NewVBox()
 
 		switch {
