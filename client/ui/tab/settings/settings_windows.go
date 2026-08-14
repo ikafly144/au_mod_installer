@@ -42,6 +42,8 @@ type Settings struct {
 	BranchHintLabel         *widget.Label
 	BranchStatusLabel       *widget.RichText
 	AutoSharingCheck        *widget.Check
+	TrayResidentCheck       *widget.Check
+	AutoStartCheck          *widget.Check
 	DisplayScaleSlider      *widget.Slider
 	DisplayScaleSelect      *widget.Select
 	ClearCacheButton        *widget.Button
@@ -145,6 +147,29 @@ func NewSettings(state *uicommon.State) *Settings {
 	})
 	autoSharingCheck.Checked = fyne.CurrentApp().Preferences().BoolWithFallback("auto_sharing", true)
 
+	trayResidentCheck := widget.NewCheck(lang.LocalizeKey("settings.tray_resident_label", "Stay in System Tray"), func(checked bool) {
+		fyne.CurrentApp().Preferences().SetBool("tray_resident", checked)
+	})
+	trayResidentCheck.Checked = fyne.CurrentApp().Preferences().BoolWithFallback("tray_resident", true)
+
+	var updatingAutoStart bool
+	autoStartCheck := widget.NewCheck(lang.LocalizeKey("settings.autostart_label", "Launch on OS Startup"), nil)
+	autoStartCheck.OnChanged = func(checked bool) {
+		if updatingAutoStart {
+			return
+		}
+		if err := uicommon.SetAutoStartEnabled(checked); err != nil {
+			slog.Error("Failed to update auto start setting", "error", err)
+			dialog.ShowError(err, state.Window)
+			updatingAutoStart = true
+			autoStartCheck.SetChecked(!checked)
+			updatingAutoStart = false
+			return
+		}
+		fyne.CurrentApp().Preferences().SetBool("launch_on_startup", checked)
+	}
+	autoStartCheck.Checked = fyne.CurrentApp().Preferences().BoolWithFallback("launch_on_startup", true)
+
 	currentScale := normalizedDisplayScale(fyne.CurrentApp().Settings().Scale())
 	displayScaleValues, displayScaleOptions := availableDisplayScales(currentScale)
 	displayScaleSelect := widget.NewSelect(displayScaleOptions, nil)
@@ -172,6 +197,8 @@ func NewSettings(state *uicommon.State) *Settings {
 		BranchHintLabel:          branchHintLabel,
 		BranchStatusLabel:        branchStatusLabel,
 		AutoSharingCheck:         autoSharingCheck,
+		TrayResidentCheck:        trayResidentCheck,
+		AutoStartCheck:           autoStartCheck,
 		DisplayScaleSlider:       displayScaleSlider,
 		DisplayScaleSelect:       displayScaleSelect,
 		epicAccountLabel:         widget.NewLabel(""),
@@ -304,14 +331,6 @@ func (s *Settings) Tab() (*container.TabItem, error) {
 			),
 		),
 		widget.NewCard(
-			lang.LocalizeKey("settings.auto_sharing", "Auto Sharing"),
-			"",
-			container.NewVBox(
-				s.AutoSharingCheck,
-				widget.NewLabelWithStyle(lang.LocalizeKey("settings.auto_sharing_hint", "Automatically generate and update join link when joining a room."), fyne.TextAlignLeading, fyne.TextStyle{Italic: true}),
-			),
-		),
-		widget.NewCard(
 			lang.LocalizeKey("settings.display_scale", "Display Scale"),
 			"",
 			settingsEntry(
@@ -323,6 +342,30 @@ func (s *Settings) Tab() (*container.TabItem, error) {
 					container.New(layout.NewGridWrapLayout(fyne.NewSize(110, s.DisplayScaleSelect.MinSize().Height)), s.DisplayScaleSelect),
 					s.DisplayScaleSlider,
 				),
+			),
+		),
+		widget.NewCard(
+			lang.LocalizeKey("settings.auto_sharing", "Auto Sharing"),
+			"",
+			container.NewVBox(
+				s.AutoSharingCheck,
+				widget.NewLabelWithStyle(lang.LocalizeKey("settings.auto_sharing_hint", "Automatically generate and update join link when joining a room."), fyne.TextAlignLeading, fyne.TextStyle{Italic: true}),
+			),
+		),
+		widget.NewCard(
+			lang.LocalizeKey("settings.tray_resident", "System Tray"),
+			"",
+			container.NewVBox(
+				s.TrayResidentCheck,
+				widget.NewLabelWithStyle(lang.LocalizeKey("settings.tray_resident_hint", "Keep running in the background and stay in the system tray when the window is closed."), fyne.TextAlignLeading, fyne.TextStyle{Italic: true}),
+			),
+		),
+		widget.NewCard(
+			lang.LocalizeKey("settings.autostart", "Run on Startup"),
+			"",
+			container.NewVBox(
+				s.AutoStartCheck,
+				widget.NewLabelWithStyle(lang.LocalizeKey("settings.autostart_hint", "Automatically start the application when Windows starts."), fyne.TextAlignLeading, fyne.TextStyle{Italic: true}),
 			),
 		),
 		widget.NewCard(

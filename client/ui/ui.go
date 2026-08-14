@@ -23,6 +23,13 @@ import (
 type Config struct {
 	stateOptions []uicommon.Option
 	stateInits   []func(*uicommon.State)
+	silent       bool
+}
+
+func WithSilent(silent bool) func(*Config) {
+	return func(cfg *Config) {
+		cfg.silent = silent
+	}
 }
 
 func WithStateOptions(options ...uicommon.Option) func(*Config) {
@@ -92,7 +99,9 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 	})
 	w.SetContent(canvas)
 	w.SetFixedSize(false)
-	w.Show()
+	if !config.silent {
+		w.Show()
+	}
 	if _, err := state.EnableNativeCustomWindowFrame(); err != nil {
 		slog.Warn("Failed to enable native custom window frame", "error", err)
 	}
@@ -111,10 +120,28 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 			cancel()
 		}
 	}
+
+	setupSystemTray(w, onClosed)
+
+	w.SetCloseIntercept(func() {
+		if fyne.CurrentApp().Preferences().BoolWithFallback("tray_resident", true) {
+			uicommon.SaveMainWindowSize(w)
+			w.Hide()
+			slog.Info("Main window hidden to system tray")
+		} else {
+			if onClosed != nil {
+				onClosed()
+			}
+			w.SetCloseIntercept(nil)
+			w.Close()
+			fyne.CurrentApp().Quit()
+		}
+	})
+
 	if state.Core.DiscordService != nil {
 		ds := state.Core.DiscordService
 		ds.Connect()
-		if !fyne.CurrentApp().Preferences().Bool("tried_discord_login") {
+		if !config.silent && !fyne.CurrentApp().Preferences().Bool("tried_discord_login") {
 			go func() {
 				ds.WaitReady()
 				if !ds.IsLoggedIn() {
@@ -158,9 +185,11 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 	w.SetOnClosed(onClosed)
 	fyne.Do(func() {
 		if uicommon.RestoreMainWindowSize(w) {
-			w.CenterOnScreen()
+			if !config.silent {
+				w.CenterOnScreen()
+			}
 		}
-		slog.Info("Application started")
+		slog.Info("Application started", "silent", config.silent)
 		for s, ok := state.Core.DiscordService.PopQueue(); ok; s, ok = state.Core.DiscordService.PopQueue() {
 			l.HandleJoinLink(s)
 		}

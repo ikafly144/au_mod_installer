@@ -48,5 +48,8 @@ func init() {
 		Custom: map[string]string{
 			"revision": revision,
 		},
+		Migrations: map[string]bool{
+			"fyneDo": true,
+		},
 	})
 }

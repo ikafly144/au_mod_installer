@@ -111,6 +111,7 @@ func realMain(sharedURI string, sharedArchive string) error {
 		localMode string
 		server    string
 		offline   bool
+		silent    bool
 	)
 
 	a := app.New()
@@ -145,11 +146,14 @@ func realMain(sharedURI string, sharedArchive string) error {
 	flag.StringVar(&localMode, "local", "", "Path to local mods.json file for local mode")
 	flag.StringVar(&server, "server", DefaultServer, "URL of the mod server")
 	flag.BoolVar(&offline, "offline", false, "Run in offline mode (only uninstallation and management of installed mods are available)")
+	flag.BoolVar(&silent, "silent", false, "Start minimized in system tray")
 	flag.Parse()
 
 	if err := registerScheme(); err != nil {
 		slog.Error("Failed to register scheme", "error", err)
 	}
+
+	uicommon.SyncAutoStart(a.Preferences().BoolWithFallback("launch_on_startup", true))
 
 	var client rest.Client
 	if localMode != "" {
@@ -245,6 +249,7 @@ func realMain(sharedURI string, sharedArchive string) error {
 	})
 
 	if err := ui.Main(w, version, sharedURI, sharedArchive,
+		ui.WithSilent(silent),
 		ui.WithStateOptions(
 			uicommon.WithRestClient(client),
 			uicommon.WithActivityService(activityService),

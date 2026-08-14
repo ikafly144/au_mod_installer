@@ -1,3 +1,5 @@
+//go:build windows
+
 package launcher
 
 import (
@@ -211,27 +213,57 @@ func (l *Launcher) init() {
 
 	l.state.OnSharedURIReceived = func(uri string) {
 		l.state.SharedURI = uri
-		fyne.Do(l.checkSharedURI)
+		fyne.Do(func() {
+			l.state.Window.Show()
+			l.state.Window.RequestFocus()
+			if nw, ok := l.state.Window.(driver.NativeWindow); ok {
+				nw.RunNative(func(context any) {
+					if w, ok := context.(driver.WindowsWindowContext); ok {
+						win32.ShowWindow(win32.HWND(w.HWND), win32.SW_RESTORE)
+						win32.SetForegroundWindow(win32.HWND(w.HWND))
+					}
+				})
+			}
+			l.checkSharedURI()
+		})
 	}
 	l.state.OnSharedArchiveReceived = func(path string) {
 		l.state.SharedArchive = path
-		fyne.Do(l.checkSharedArchive)
+		fyne.Do(func() {
+			l.state.Window.Show()
+			l.state.Window.RequestFocus()
+			if nw, ok := l.state.Window.(driver.NativeWindow); ok {
+				nw.RunNative(func(context any) {
+					if w, ok := context.(driver.WindowsWindowContext); ok {
+						win32.ShowWindow(win32.HWND(w.HWND), win32.SW_RESTORE)
+						win32.SetForegroundWindow(win32.HWND(w.HWND))
+					}
+				})
+			}
+			l.checkSharedArchive()
+		})
 	}
 	l.state.OnActivateReceived = func() {
-		fyne.Do(l.state.Window.RequestFocus)
-		if nw, ok := l.state.Window.(driver.NativeWindow); ok {
-			nw.RunNative(func(context any) {
-				if w, ok := context.(driver.WindowsWindowContext); ok {
-					win32.SetForegroundWindow(win32.HWND(w.HWND))
-				}
-			})
-		}
+		fyne.DoAndWait(func() {
+			l.state.Window.Show()
+			l.state.Window.RequestFocus()
+			if nw, ok := l.state.Window.(driver.NativeWindow); ok {
+				nw.RunNative(func(context any) {
+					if w, ok := context.(driver.WindowsWindowContext); ok {
+						win32.ShowWindow(win32.HWND(w.HWND), win32.SW_RESTORE)
+						win32.SetForegroundWindow(win32.HWND(w.HWND))
+					}
+				})
+			}
+		})
 	}
 	l.state.OnDroppedURIs = func(uris []fyne.URI) {
 		l.handleDroppedURIs(uris)
 	}
 	l.state.OnGameStarted = func(profileID uuid.UUID, pid int) {
-		fyne.Do(l.refreshProfileHighlights)
+		fyne.DoAndWait(func() {
+			l.refreshProfileHighlights()
+		})
 	}
 	l.state.OnGameExited = func(profileID uuid.UUID) {
 		l.state.Core.InvalidateCachedRoomShareAsync()
