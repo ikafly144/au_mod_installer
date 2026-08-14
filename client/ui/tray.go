@@ -6,13 +6,13 @@ import (
 	"log/slog"
 
 	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/driver"
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/lang"
-	"github.com/zzl/go-win32api/v2/win32"
+
+	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
 )
 
-func setupSystemTray(w fyne.Window, onQuit func()) {
+func setupSystemTray(w fyne.Window, state *uicommon.State, onQuit func()) {
 	desk, ok := fyne.CurrentApp().(desktop.App)
 	if !ok {
 		slog.Warn("Desktop system tray is not supported by current app driver")
@@ -21,15 +21,11 @@ func setupSystemTray(w fyne.Window, onQuit func()) {
 
 	showItem := fyne.NewMenuItem(lang.LocalizeKey("tray.show", "Show Mod of Us"), func() {
 		fyne.Do(func() {
-			w.Show()
-			w.RequestFocus()
-			if nw, ok := w.(driver.NativeWindow); ok {
-				nw.RunNative(func(context any) {
-					if winCtx, ok := context.(driver.WindowsWindowContext); ok {
-						win32.ShowWindow(win32.HWND(winCtx.HWND), win32.SW_RESTORE)
-						win32.SetForegroundWindow(win32.HWND(winCtx.HWND))
-					}
-				})
+			if state != nil && state.ShowWindow != nil {
+				state.ShowWindow()
+			} else {
+				w.Show()
+				w.RequestFocus()
 			}
 		})
 	})

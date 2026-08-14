@@ -25,7 +25,6 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/dialog"
-	"fyne.io/fyne/v2/driver"
 	"fyne.io/fyne/v2/lang"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/storage"
@@ -34,7 +33,6 @@ import (
 
 	"github.com/google/uuid"
 	discordsdk "github.com/ikafly144/discord_social_sdk"
-	"github.com/zzl/go-win32api/v2/win32"
 
 	"github.com/ikafly144/au_mod_installer/client/core"
 	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
@@ -214,15 +212,11 @@ func (l *Launcher) init() {
 	l.state.OnSharedURIReceived = func(uri string) {
 		l.state.SharedURI = uri
 		fyne.Do(func() {
-			l.state.Window.Show()
-			l.state.Window.RequestFocus()
-			if nw, ok := l.state.Window.(driver.NativeWindow); ok {
-				nw.RunNative(func(context any) {
-					if w, ok := context.(driver.WindowsWindowContext); ok {
-						win32.ShowWindow(win32.HWND(w.HWND), win32.SW_RESTORE)
-						win32.SetForegroundWindow(win32.HWND(w.HWND))
-					}
-				})
+			if l.state.ShowWindow != nil {
+				l.state.ShowWindow()
+			} else {
+				l.state.Window.Show()
+				l.state.Window.RequestFocus()
 			}
 			l.checkSharedURI()
 		})
@@ -230,30 +224,22 @@ func (l *Launcher) init() {
 	l.state.OnSharedArchiveReceived = func(path string) {
 		l.state.SharedArchive = path
 		fyne.Do(func() {
-			l.state.Window.Show()
-			l.state.Window.RequestFocus()
-			if nw, ok := l.state.Window.(driver.NativeWindow); ok {
-				nw.RunNative(func(context any) {
-					if w, ok := context.(driver.WindowsWindowContext); ok {
-						win32.ShowWindow(win32.HWND(w.HWND), win32.SW_RESTORE)
-						win32.SetForegroundWindow(win32.HWND(w.HWND))
-					}
-				})
+			if l.state.ShowWindow != nil {
+				l.state.ShowWindow()
+			} else {
+				l.state.Window.Show()
+				l.state.Window.RequestFocus()
 			}
 			l.checkSharedArchive()
 		})
 	}
 	l.state.OnActivateReceived = func() {
-		fyne.DoAndWait(func() {
-			l.state.Window.Show()
-			l.state.Window.RequestFocus()
-			if nw, ok := l.state.Window.(driver.NativeWindow); ok {
-				nw.RunNative(func(context any) {
-					if w, ok := context.(driver.WindowsWindowContext); ok {
-						win32.ShowWindow(win32.HWND(w.HWND), win32.SW_RESTORE)
-						win32.SetForegroundWindow(win32.HWND(w.HWND))
-					}
-				})
+		fyne.Do(func() {
+			if l.state.ShowWindow != nil {
+				l.state.ShowWindow()
+			} else {
+				l.state.Window.Show()
+				l.state.Window.RequestFocus()
 			}
 		})
 	}

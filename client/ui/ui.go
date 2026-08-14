@@ -6,16 +6,19 @@ import (
 	"context"
 	"log/slog"
 	"runtime"
+	"sync"
 
 	"github.com/ikafly144/au_mod_installer/client/ui/tab/launcher"
 	"github.com/ikafly144/au_mod_installer/client/ui/tab/repo"
 	servertab "github.com/ikafly144/au_mod_installer/client/ui/tab/server"
 	"github.com/ikafly144/au_mod_installer/client/ui/tab/settings"
 	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
+	"github.com/zzl/go-win32api/v2/win32"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/driver"
 	"fyne.io/fyne/v2/lang"
 	"fyne.io/fyne/v2/widget"
 )
@@ -99,29 +102,50 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 	})
 	w.SetContent(canvas)
 	w.SetFixedSize(false)
-	if !config.silent {
+
+	var (
+		initOnce        sync.Once
+		textDropCleanup func()
+	)
+
+	state.ShowWindow = func() {
+		initOnce.Do(func() {
+			w.Show()
+			if _, err := state.EnableNativeCustomWindowFrame(); err != nil {
+				slog.Warn("Failed to enable native custom window frame", "error", err)
+			}
+			if cleanup, err := state.EnableNativeTextDrop(); err != nil {
+				slog.Warn("Failed to enable native OLE text drop", "error", err)
+			} else {
+				textDropCleanup = cleanup
+			}
+			if uicommon.RestoreMainWindowSize(w) {
+				w.CenterOnScreen()
+			}
+		})
+
 		w.Show()
-	}
-	if _, err := state.EnableNativeCustomWindowFrame(); err != nil {
-		slog.Warn("Failed to enable native custom window frame", "error", err)
+		w.RequestFocus()
+		if nw, ok := w.(driver.NativeWindow); ok {
+			nw.RunNative(func(context any) {
+				if winCtx, ok := context.(driver.WindowsWindowContext); ok {
+					win32.ShowWindow(win32.HWND(winCtx.HWND), win32.SW_RESTORE)
+					win32.SetForegroundWindow(win32.HWND(winCtx.HWND))
+				}
+			})
+		}
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	onClosed := func() {
 		uicommon.SaveMainWindowSize(w)
+		if textDropCleanup != nil {
+			textDropCleanup()
+		}
 		cancel()
 	}
-	if cleanup, err := state.EnableNativeTextDrop(); err != nil {
-		slog.Warn("Failed to enable native OLE text drop", "error", err)
-	} else {
-		onClosed = func() {
-			uicommon.SaveMainWindowSize(w)
-			cleanup()
-			cancel()
-		}
-	}
 
-	setupSystemTray(w, onClosed)
+	setupSystemTray(w, state, onClosed)
 
 	w.SetCloseIntercept(func() {
 		if fyne.CurrentApp().Preferences().BoolWithFallback("tray_resident", true) {
@@ -137,6 +161,10 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 			fyne.CurrentApp().Quit()
 		}
 	})
+
+	if !config.silent {
+		state.ShowWindow()
+	}
 
 	if state.Core.DiscordService != nil {
 		ds := state.Core.DiscordService
@@ -184,11 +212,6 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 	state.Core.StartActivityPolling(ctx)
 	w.SetOnClosed(onClosed)
 	fyne.Do(func() {
-		if uicommon.RestoreMainWindowSize(w) {
-			if !config.silent {
-				w.CenterOnScreen()
-			}
-		}
 		slog.Info("Application started", "silent", config.silent)
 		for s, ok := state.Core.DiscordService.PopQueue(); ok; s, ok = state.Core.DiscordService.PopQueue() {
 			l.HandleJoinLink(s)
