@@ -52,3 +52,8 @@ func TestShouldPerformUpdate(t *testing.T) {
 	assert.False(t, shouldPerformUpdate("v1.0.0", "v1.0.0"))
 	assert.False(t, shouldPerformUpdate("v1.0.0", ""))
 }
+
+func TestReadUpdateBranchPreference(t *testing.T) {
+	branch := readUpdateBranchPreference()
+	assert.NotEmpty(t, branch)
+}

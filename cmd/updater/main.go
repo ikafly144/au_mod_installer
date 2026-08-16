@@ -77,22 +77,29 @@ func main() {
 	launchMainApp()
 }
 
-func readUpdateBranchPreference() string {
+func readPreferences() map[string]any {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
-		return "stable"
+		return nil
 	}
-	prefPath := filepath.Join(configDir, "com.github.ikafly.au_mod_installer", "preferences.json")
+	prefPath := filepath.Join(configDir, "fyne", "com.github.ikafly.au_mod_installer", "preferences.json")
 	data, err := os.ReadFile(prefPath)
 	if err != nil {
-		return "stable"
+		return nil
 	}
 	var prefs map[string]any
 	if err := json.Unmarshal(data, &prefs); err != nil {
-		return "stable"
+		return nil
 	}
-	if val, ok := prefs["core.update_branch"].(string); ok && val != "" {
-		return val
+	return prefs
+}
+
+func readUpdateBranchPreference() string {
+	prefs := readPreferences()
+	if prefs != nil {
+		if val, ok := prefs["core.update_branch"].(string); ok && val != "" {
+			return val
+		}
 	}
 	return "stable"
 }
