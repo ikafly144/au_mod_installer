@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"log/slog"
 	"os"
@@ -13,11 +14,9 @@ import (
 	"syscall"
 	"time"
 
-	"fyne.io/fyne/v2/app"
 	"golang.org/x/mod/semver"
 
 	"github.com/ikafly144/au_mod_installer/client/rest"
-	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
 	"github.com/ikafly144/au_mod_installer/common/versioning"
 )
 
@@ -36,13 +35,7 @@ func main() {
 	flag.BoolVar(&silentFlag, "silent", false, "Start minimized in system tray")
 	flag.Parse()
 
-	// Initialize Fyne app metadata to access preferences
-	a := app.NewWithID("com.github.ikafly.au_mod_installer")
-
-	branchName := "stable"
-	if a.Preferences() != nil {
-		branchName = a.Preferences().StringWithFallback("core.update_branch", "stable")
-	}
+	branchName := readUpdateBranchPreference()
 	branch := versioning.BranchFromString(branchName)
 
 	serverURL := serverFlag
@@ -62,7 +55,7 @@ func main() {
 		if err != nil {
 			slog.Warn("Failed to check for updates on startup", "error", err)
 		} else if info != nil {
-			tag := uicommon.FindBranchVersion(info, branch.String())
+			tag := versioning.FindBranchVersion(info, branch.String())
 			if tag != "" && shouldPerformUpdate(currentVersion, tag) {
 				slog.Info("Update available on startup, downloading and installing with /passive without confirmation", "target", tag, "current", currentVersion)
 				msiPath, err := versioning.DownloadUpdate(ctx, tag)
@@ -82,6 +75,26 @@ func main() {
 
 	// Launch main application after update with -initial flag and forwarding other arguments
 	launchMainApp()
+}
+
+func readUpdateBranchPreference() string {
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return "stable"
+	}
+	prefPath := filepath.Join(configDir, "com.github.ikafly.au_mod_installer", "preferences.json")
+	data, err := os.ReadFile(prefPath)
+	if err != nil {
+		return "stable"
+	}
+	var prefs map[string]any
+	if err := json.Unmarshal(data, &prefs); err != nil {
+		return "stable"
+	}
+	if val, ok := prefs["core.update_branch"].(string); ok && val != "" {
+		return val
+	}
+	return "stable"
 }
 
 func shouldPerformUpdate(currentVersion, targetVersion string) bool {

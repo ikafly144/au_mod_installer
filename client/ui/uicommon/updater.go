@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
-	"strings"
 	"syscall"
 	"time"
 
@@ -23,15 +22,7 @@ import (
 )
 
 func FindBranchVersion(info *restcommon.VersionInfo, branch string) string {
-	if info == nil {
-		return ""
-	}
-	for _, b := range info.Branches {
-		if strings.EqualFold(b.Name, branch) {
-			return b.Version
-		}
-	}
-	return ""
+	return versioning.FindBranchVersion(info, branch)
 }
 
 func (s *State) CheckForUpdates(ctx context.Context, interactive bool) {

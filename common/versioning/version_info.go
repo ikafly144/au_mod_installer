@@ -4,6 +4,8 @@ import (
 	"strings"
 
 	"golang.org/x/mod/semver"
+
+	restcommon "github.com/ikafly144/au_mod_installer/common/rest"
 )
 
 // LatestVersionsFromTags returns the latest tag per branch based on semver ordering.
@@ -27,4 +29,17 @@ func LatestVersionsFromTags(tags []string) map[Branch]string {
 		}
 	}
 	return latest
+}
+
+// FindBranchVersion searches VersionInfo for the specified branch name.
+func FindBranchVersion(info *restcommon.VersionInfo, branch string) string {
+	if info == nil {
+		return ""
+	}
+	for _, b := range info.Branches {
+		if strings.EqualFold(b.Name, branch) {
+			return b.Version
+		}
+	}
+	return ""
 }
