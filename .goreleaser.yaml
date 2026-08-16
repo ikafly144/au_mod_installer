@@ -26,22 +26,6 @@ before:
     - "{{ if not .IsSnapshot }}git diff --exit-code HEAD --{{ end }}"
 
 builds:
-  - id: client
-    goos:
-      - windows
-    goarch:
-      - amd64
-    env:
-      - CGO_ENABLED=1
-    main: ./client
-    ldflags:
-      - -s -w -H=windowsgui
-    flags:
-      - -trimpath
-      - -v
-    binary: Mod of Us
-    mod_timestamp: "{{ .CommitTimestamp }}"
-
   - id: updater
     goos:
       - windows
@@ -57,9 +41,25 @@ builds:
       - -v
     binary: updater
     mod_timestamp: "{{ .CommitTimestamp }}"
+
+  - id: client
+    goos:
+      - windows
+    goarch:
+      - amd64
+    env:
+      - CGO_ENABLED=1
+    main: ./client
+    ldflags:
+      - -s -w -H=windowsgui
+    flags:
+      - -trimpath
+      - -v
+    binary: Mod of Us
+    mod_timestamp: "{{ .CommitTimestamp }}"
     hooks:
       post:
-        - pwsh -NoProfile -File scripts/build_msi.ps1 -Version {{ .Version }} -BuildDirName {{ .ProjectName }}_{{ .Target }}
+        - pwsh -NoProfile -File scripts/build_msi.ps1 -Version {{ .Version }} -BuildDirName client_{{ .Target }}
 
 archives:
   - formats: [zip]
