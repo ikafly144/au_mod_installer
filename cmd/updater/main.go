@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime/debug"
+	"strings"
 	"syscall"
 	"time"
 
@@ -28,11 +29,13 @@ func main() {
 		localMode   string
 		offlineFlag bool
 		silentFlag  bool
+		targetFlag  string
 	)
 	flag.StringVar(&serverFlag, "server", "", "URL of the mod server")
 	flag.StringVar(&localMode, "local", "", "Path to local mods.json file for local mode")
 	flag.BoolVar(&offlineFlag, "offline", false, "Run in offline mode")
 	flag.BoolVar(&silentFlag, "silent", false, "Start minimized in system tray")
+	flag.StringVar(&targetFlag, "target", "", "Path to target executable to launch after update")
 	flag.Parse()
 
 	branchName := readUpdateBranchPreference()
@@ -73,7 +76,7 @@ func main() {
 		}
 	}
 
-	launchMainApp()
+	launchMainApp(targetFlag)
 }
 
 func readPreferences() map[string]any {
@@ -121,22 +124,64 @@ func readCurrentVersion() string {
 	return ""
 }
 
-func launchMainApp() {
+func resolveTargetPath(targetFlag string) string {
 	execPath, err := os.Executable()
 	if err != nil {
 		execPath = os.Args[0]
 	}
 	dir := filepath.Dir(execPath)
 
+	if targetFlag != "" {
+		if filepath.IsAbs(targetFlag) {
+			return targetFlag
+		}
+		relPath := filepath.Join(dir, targetFlag)
+		if _, err := os.Stat(relPath); err == nil {
+			return relPath
+		}
+		return targetFlag
+	}
+
 	mainExe := filepath.Join(dir, "Mod of Us.exe")
 	if _, err := os.Stat(mainExe); os.IsNotExist(err) {
 		mainExe = filepath.Join(dir, "client.exe")
 	}
+	return mainExe
+}
 
-	cmd := exec.Command(mainExe, os.Args[1:]...)
+func buildLaunchArgs(args []string) []string {
+	var forwarded []string
+	hasInitial := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "-target" || arg == "--target" {
+			if i+1 < len(args) {
+				i++
+			}
+			continue
+		}
+		if strings.HasPrefix(arg, "-target=") || strings.HasPrefix(arg, "--target=") {
+			continue
+		}
+		if arg == "-initial" || arg == "--initial" {
+			hasInitial = true
+		}
+		forwarded = append(forwarded, arg)
+	}
+	if !hasInitial {
+		forwarded = append(forwarded, "-initial")
+	}
+	return forwarded
+}
+
+func launchMainApp(targetFlag string) {
+	targetExe := resolveTargetPath(targetFlag)
+	args := buildLaunchArgs(os.Args[1:])
+
+	cmd := exec.Command(targetExe, args...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	if err := cmd.Start(); err != nil {
-		slog.Error("Failed to start main application", "error", err)
+		slog.Error("Failed to start target application", "path", targetExe, "error", err)
 		os.Exit(1)
 	}
 	os.Exit(0)

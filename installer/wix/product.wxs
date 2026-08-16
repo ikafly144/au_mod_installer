@@ -22,7 +22,7 @@
     </Feature>
 
     <!-- Custom action to launch the application if checkbox selected -->
-    <CustomAction Id="LaunchApplication" FileRef="UpdaterExeFile" ExeCommand="" Return="asyncNoWait" Impersonate="yes" />
+    <CustomAction Id="LaunchApplication" FileRef="UpdaterExeFile" ExeCommand="-target &quot;[INSTALLFOLDER]Mod of Us.exe&quot;" Return="asyncNoWait" Impersonate="yes" />
 
     <UI>
       <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
@@ -56,7 +56,7 @@
     <StandardDirectory Id="ProgramMenuFolder">
       <Directory Id="ProgramMenuDir" Name="!(loc.InstallFolder)">
         <Component Id="StartMenuShortcut" Guid="{E2EF6B58-4FD5-46E0-9C4A-C0B1E2C4C2B1}">
-          <Shortcut Id="StartMenuShortcut" Name="!(loc.ShortcutName)" Target="[INSTALLFOLDER]updater.exe" WorkingDirectory="INSTALLFOLDER" Icon="appIcon" IconIndex="0">
+          <Shortcut Id="StartMenuShortcut" Name="!(loc.ShortcutName)" Target="[INSTALLFOLDER]updater.exe" Arguments="-target &quot;[INSTALLFOLDER]Mod of Us.exe&quot;" WorkingDirectory="INSTALLFOLDER" Icon="appIcon" IconIndex="0">
             <ShortcutProperty Key="System.AppUserModel.ID" Value="com.github.ikafly.au_mod_installer" />
           </Shortcut>
           <RemoveFolder Id="RemoveProgramMenuDir" On="uninstall" />

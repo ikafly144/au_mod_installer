@@ -53,7 +53,12 @@ func SetAutoStartEnabled(enabled bool) error {
 			targetPath = updaterPath
 		}
 		// Register command with -silent flag so it starts in background/tray
-		cmd := fmt.Sprintf("\"%s\" -silent", targetPath)
+		var cmd string
+		if targetPath == updaterPath {
+			cmd = fmt.Sprintf("\"%s\" -target \"%s\" -silent", targetPath, execPath)
+		} else {
+			cmd = fmt.Sprintf("\"%s\" -silent", targetPath)
+		}
 		if err := key.SetStringValue(startupValueName, cmd); err != nil {
 			return fmt.Errorf("failed to write startup registry value: %w", err)
 		}
