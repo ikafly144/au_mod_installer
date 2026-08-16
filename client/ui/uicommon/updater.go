@@ -57,7 +57,7 @@ func (s *State) CheckForUpdates(ctx context.Context, interactive bool) {
 
 	if tag != "" {
 		slog.Info("Update available", "version", tag, "current", s.Version)
-		isMandatory := s.Version != "(devel)" && semver.Prerelease(tag) == "" && stable != "" && semver.Compare(stable, s.Version) > 0
+		isMandatory := s.Version != "(devel)" && semver.Prerelease(tag) == "" && semver.Build(tag) == "" && stable != "" && semver.Compare(stable, s.Version) > 0
 		s.ShowUpdateDialog(tag, isMandatory)
 	} else {
 		slog.Info("No updates available", "current", s.Version)
