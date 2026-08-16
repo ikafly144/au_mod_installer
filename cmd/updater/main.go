@@ -73,7 +73,6 @@ func main() {
 		}
 	}
 
-	// Launch main application after update with -initial flag and forwarding other arguments
 	launchMainApp()
 }
 
@@ -122,17 +121,6 @@ func readCurrentVersion() string {
 	return ""
 }
 
-func buildLaunchArgs(originalArgs []string) []string {
-	args := []string{"-initial"}
-	for _, arg := range originalArgs {
-		if arg == "-initial" || arg == "--initial" {
-			continue
-		}
-		args = append(args, arg)
-	}
-	return args
-}
-
 func launchMainApp() {
 	execPath, err := os.Executable()
 	if err != nil {
@@ -145,9 +133,7 @@ func launchMainApp() {
 		mainExe = filepath.Join(dir, "client.exe")
 	}
 
-	args := buildLaunchArgs(os.Args[1:])
-
-	cmd := exec.Command(mainExe, args...)
+	cmd := exec.Command(mainExe, os.Args[1:]...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	if err := cmd.Start(); err != nil {
 		slog.Error("Failed to start main application", "error", err)
