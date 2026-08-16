@@ -27,6 +27,7 @@ func TestBuildLaunchArgs(t *testing.T) {
 	assert.Equal(t, []string{"-silent", "-initial"}, buildLaunchArgs([]string{"-target", "Mod of Us.exe", "-silent"}))
 	assert.Equal(t, []string{"-silent", "-initial"}, buildLaunchArgs([]string{"-target=Mod of Us.exe", "-silent"}))
 	assert.Equal(t, []string{"-silent", "-initial"}, buildLaunchArgs([]string{"--target", "C:\\Mod of Us.exe", "-silent"}))
+	assert.Equal(t, []string{"-silent", "-initial"}, buildLaunchArgs([]string{"-from-temp", "-target", "Mod of Us.exe", "-silent"}))
 	assert.Equal(t, []string{"-silent", "-initial"}, buildLaunchArgs([]string{"-silent", "-initial"}))
 }
 

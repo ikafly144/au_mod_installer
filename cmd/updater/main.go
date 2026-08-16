@@ -30,13 +30,19 @@ func main() {
 		offlineFlag bool
 		silentFlag  bool
 		targetFlag  string
+		fromTemp    bool
 	)
 	flag.StringVar(&serverFlag, "server", "", "URL of the mod server")
 	flag.StringVar(&localMode, "local", "", "Path to local mods.json file for local mode")
 	flag.BoolVar(&offlineFlag, "offline", false, "Run in offline mode")
 	flag.BoolVar(&silentFlag, "silent", false, "Start minimized in system tray")
 	flag.StringVar(&targetFlag, "target", "", "Path to target executable to launch after update")
+	flag.BoolVar(&fromTemp, "from-temp", false, "Internal flag indicating updater is running from temp directory")
 	flag.Parse()
+
+	if !fromTemp {
+		maybeRelaunchFromTemp(targetFlag)
+	}
 
 	branchName := readUpdateBranchPreference()
 	branch := versioning.BranchFromString(branchName)
@@ -149,6 +155,71 @@ func resolveTargetPath(targetFlag string) string {
 	return mainExe
 }
 
+func maybeRelaunchFromTemp(targetFlag string) {
+	execPath, err := os.Executable()
+	if err != nil {
+		execPath = os.Args[0]
+	}
+	execPath, err = filepath.Abs(execPath)
+	if err != nil {
+		return
+	}
+
+	tempDir := os.TempDir()
+	rel, err := filepath.Rel(tempDir, execPath)
+	if err == nil && !strings.HasPrefix(rel, "..") {
+		// Already executing inside Temp directory
+		return
+	}
+
+	dir, err := os.MkdirTemp("", "modofus-updater-*")
+	if err != nil {
+		slog.Warn("Failed to create temp directory for updater, running in place", "error", err)
+		return
+	}
+
+	tempExe := filepath.Join(dir, "updater.exe")
+	input, err := os.ReadFile(execPath)
+	if err != nil {
+		slog.Warn("Failed to read updater binary, running in place", "error", err)
+		return
+	}
+	if err := os.WriteFile(tempExe, input, 0755); err != nil {
+		slog.Warn("Failed to write updater binary to temp, running in place", "error", err)
+		return
+	}
+
+	absTarget := resolveTargetPath(targetFlag)
+	var args []string
+	args = append(args, "-from-temp", "-target", absTarget)
+	for i := 1; i < len(os.Args); i++ {
+		arg := os.Args[i]
+		if arg == "-target" || arg == "--target" {
+			if i+1 < len(os.Args) {
+				i++
+			}
+			continue
+		}
+		if strings.HasPrefix(arg, "-target=") || strings.HasPrefix(arg, "--target=") {
+			continue
+		}
+		if arg == "-from-temp" || arg == "--from-temp" {
+			continue
+		}
+		args = append(args, arg)
+	}
+
+	cmd := exec.Command(tempExe, args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	if err := cmd.Start(); err != nil {
+		slog.Warn("Failed to start temp updater, running in place", "error", err)
+		return
+	}
+
+	// Terminate original updater so the file lock on INSTALLFOLDER\updater.exe is freed!
+	os.Exit(0)
+}
+
 func buildLaunchArgs(args []string) []string {
 	var forwarded []string
 	hasInitial := false
@@ -161,6 +232,9 @@ func buildLaunchArgs(args []string) []string {
 			continue
 		}
 		if strings.HasPrefix(arg, "-target=") || strings.HasPrefix(arg, "--target=") {
+			continue
+		}
+		if arg == "-from-temp" || arg == "--from-temp" {
 			continue
 		}
 		if arg == "-initial" || arg == "--initial" {
