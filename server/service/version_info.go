@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/go-github/v88/github"
+	"github.com/google/go-github/v90/github"
 
 	restcommon "github.com/ikafly144/au_mod_installer/common/rest"
 	"github.com/ikafly144/au_mod_installer/common/versioning"
