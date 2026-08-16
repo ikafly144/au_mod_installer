@@ -196,6 +196,9 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 
 		w.Show()
 		w.RequestFocus()
+		if state.Core != nil && state.Core.DiscordService != nil {
+			state.Core.DiscordService.SetIdleActivityEnabled(true)
+		}
 		if nw, ok := w.(driver.NativeWindow); ok {
 			nw.RunNative(func(context any) {
 				if winCtx, ok := context.(driver.WindowsWindowContext); ok {
@@ -208,6 +211,9 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 
 	ctx, cancel := context.WithCancel(context.Background())
 	onClosed := func() {
+		if state.Core != nil && state.Core.DiscordService != nil {
+			state.Core.DiscordService.SetIdleActivityEnabled(false)
+		}
 		uicommon.SaveMainWindowSize(w)
 		if textDropCleanup != nil {
 			textDropCleanup()
@@ -221,6 +227,9 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 		if fyne.CurrentApp().Preferences().BoolWithFallback("tray_resident", true) {
 			uicommon.SaveMainWindowSize(w)
 			w.Hide()
+			if state.Core != nil && state.Core.DiscordService != nil {
+				state.Core.DiscordService.SetIdleActivityEnabled(false)
+			}
 			slog.Info("Main window hidden to system tray")
 			go func() {
 				time.Sleep(300 * time.Millisecond)

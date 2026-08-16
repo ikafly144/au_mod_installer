@@ -7,6 +7,34 @@ import (
 	discord "github.com/ikafly144/discord_social_sdk"
 )
 
+func (s *DiscordService) SetIdleActivityEnabled(enabled bool) {
+	s.activityMu.Lock()
+	if s.idleActivityEnabled == enabled {
+		s.activityMu.Unlock()
+		return
+	}
+	s.idleActivityEnabled = enabled
+	if !enabled {
+		if s.currentActivity != nil && s.currentActivity == s.idleActivity {
+			s.currentActivity = nil
+			s.idleActivity = nil
+			s.activityMu.Unlock()
+			s.client.ClearRichPresence()
+			return
+		}
+		s.activityMu.Unlock()
+		return
+	}
+	s.activityMu.Unlock()
+	s.updateIdleActivity()
+}
+
+func (s *DiscordService) IsIdleActivityEnabled() bool {
+	s.activityMu.Lock()
+	defer s.activityMu.Unlock()
+	return s.idleActivityEnabled
+}
+
 func (s *DiscordService) SetIdleActivity(provider func() *discord.Activity, callback func(*discord.ClientResult)) {
 	s.activityMu.Lock()
 	s.idleActivityProvider = provider
@@ -17,7 +45,7 @@ func (s *DiscordService) SetIdleActivity(provider func() *discord.Activity, call
 
 func (s *DiscordService) updateIdleActivity() {
 	s.activityMu.Lock()
-	if s.idleActivityProvider != nil && s.currentActivity == nil {
+	if s.idleActivityProvider != nil && s.currentActivity == nil && s.idleActivityEnabled {
 		activity := s.idleActivityProvider()
 		s.idleActivity = activity
 		callback := s.idleActivityCallback
@@ -34,6 +62,7 @@ func (s *DiscordService) updateIdleActivity() {
 			s.SetActivity(activity, callback)
 		}
 	} else if s.currentActivity == nil {
+		s.idleActivity = nil
 		s.activityMu.Unlock()
 		s.client.ClearRichPresence()
 	} else {

@@ -36,6 +36,7 @@ type DiscordService struct {
 
 	idleActivityProvider func() *discord.Activity
 	idleActivityCallback func(*discord.ClientResult)
+	idleActivityEnabled  bool
 
 	idleActivity    *discord.Activity
 	currentActivity *discord.Activity
