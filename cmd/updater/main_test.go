@@ -36,3 +36,8 @@ func TestResolveTargetPath(t *testing.T) {
 	assert.Equal(t, absPath, resolveTargetPath(absPath))
 	assert.NotEmpty(t, resolveTargetPath(""))
 }
+
+func TestIsMainAppRunning(t *testing.T) {
+	// Calling isMainAppRunning should succeed and return boolean without error/panic
+	_ = isMainAppRunning()
+}

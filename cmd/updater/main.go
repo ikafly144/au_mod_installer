@@ -16,12 +16,32 @@ import (
 	"time"
 
 	"golang.org/x/mod/semver"
+	"golang.org/x/sys/windows"
+
+	"github.com/nightlyone/lockfile"
 
 	"github.com/ikafly144/au_mod_installer/client/rest"
 	"github.com/ikafly144/au_mod_installer/common/versioning"
 )
 
 var defaultServer = "https://modofus.sabafly.net/api/v1"
+
+func isMainAppRunning() bool {
+	pd, err := windows.KnownFolderPath(windows.FOLDERID_ProgramData, 0)
+	if err != nil {
+		return false
+	}
+	lockPath := filepath.Join(pd, "au_mod_installer.lock")
+	lock, err := lockfile.New(lockPath)
+	if err != nil {
+		return false
+	}
+	proc, err := lock.GetOwner()
+	if err == nil && proc != nil {
+		return true
+	}
+	return false
+}
 
 func main() {
 	var (
@@ -40,6 +60,13 @@ func main() {
 	flag.BoolVar(&fromTemp, "from-temp", false, "Internal flag indicating updater is running from temp directory")
 	flag.Parse()
 
+	// If the main application is already running, skip update check and directly forward to main app
+	if isMainAppRunning() {
+		slog.Info("Main application is already running, skipping update check and activating instance")
+		launchMainApp(targetFlag)
+		return
+	}
+
 	if !fromTemp {
 		maybeRelaunchFromTemp(targetFlag)
 	}
@@ -54,8 +81,8 @@ func main() {
 
 	currentVersion := readCurrentVersion()
 
-	// If not in offline or local mode, perform update check without confirmation
-	if !offlineFlag && localMode == "" {
+	// If not in offline or local mode, and main app is not running, perform update check without confirmation
+	if !offlineFlag && localMode == "" && !isMainAppRunning() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
 
