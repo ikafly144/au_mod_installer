@@ -117,7 +117,7 @@ func shouldPerformUpdate(currentVersion, targetVersion string) bool {
 		return false
 	}
 	if currentVersion == "" || currentVersion == "unknown" || semver.Build(currentVersion) != "" || semver.Prerelease(currentVersion) != "" {
-		return true
+		return currentVersion != targetVersion
 	}
 	return semver.Compare(targetVersion, currentVersion) > 0
 }
