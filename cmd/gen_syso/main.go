@@ -98,10 +98,11 @@ func main() {
 		},
 		StringFileInfo: goversioninfo.StringFileInfo{
 			CompanyName:      "ikafly144",
+			FileDescription:  "Mod of Us - Among Us Mod Manager",
 			FileVersion:      fileVerStr,
 			LegalCopyright:   "Copyright (C) 2026 ikafly144.",
 			OriginalFilename: "MOD-OF-US.EXE",
-			ProductName:      "Mod of Us - Among Us Mod Manager",
+			ProductName:      "Mod of Us",
 			ProductVersion:   fileVerStr,
 		},
 		VarFileInfo: goversioninfo.VarFileInfo{

@@ -101,6 +101,7 @@ if (Test-Path $updaterPath) {
 $clientStage = Join-Path $stagePath 'client'
 if (-not (Test-Path $clientStage)) { New-Item -Path $clientStage -ItemType Directory | Out-Null }
 Copy-Item -Path $iconPath -Destination (Join-Path $clientStage (Split-Path $iconPath -Leaf)) -Force
+Copy-Item -Path $iconPath -Destination (Join-Path $stagePath "app.ico") -Force
 
 $licenseRtfPath = Join-Path $repoRoot "installer\wix\LICENSE.rtf"
 if (Test-Path $licenseRtfPath) {

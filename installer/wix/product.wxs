@@ -17,6 +17,7 @@
       <ComponentRef Id="MainExe" />
       <ComponentRef Id="UpdaterExe" />
       <ComponentRef Id="DiscordSdkDll" />
+      <ComponentRef Id="AppIconFile" />
       <ComponentRef Id="StartMenuShortcut" />
     </Feature>
 
@@ -47,12 +48,15 @@
         <Component Id="DiscordSdkDll" Guid="{1B9E7135-9326-4E38-8C96-3C4B16F6E4F9}">
           <File Id="DiscordSdkDllFile" Source="$(var.SourceDir)\\discord_partner_sdk.dll" KeyPath="yes" />
         </Component>
+        <Component Id="AppIconFile" Guid="{C7A2E991-8D9E-4F90-A821-4B9F1E2A3C4D}">
+          <File Id="AppIconIco" Source="$(var.SourceDir)\\app.ico" KeyPath="yes" />
+        </Component>
       </Directory>
     </StandardDirectory>
     <StandardDirectory Id="ProgramMenuFolder">
       <Directory Id="ProgramMenuDir" Name="!(loc.InstallFolder)">
         <Component Id="StartMenuShortcut" Guid="{E2EF6B58-4FD5-46E0-9C4A-C0B1E2C4C2B1}">
-          <Shortcut Id="StartMenuShortcut" Name="!(loc.ShortcutName)" Target="[INSTALLFOLDER]updater.exe" WorkingDirectory="INSTALLFOLDER" />
+          <Shortcut Id="StartMenuShortcut" Name="!(loc.ShortcutName)" Target="[INSTALLFOLDER]updater.exe" WorkingDirectory="INSTALLFOLDER" Icon="appIcon" IconIndex="0" />
           <RemoveFolder Id="RemoveProgramMenuDir" On="uninstall" />
           <RegistryValue Root="HKCU" Key="Software\\ikafly144\\ModOfUs" Name="installed" Type="integer" Value="1" KeyPath="yes" />
         </Component>
