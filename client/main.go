@@ -21,6 +21,7 @@ import (
 	sdk "github.com/ikafly144/discord_social_sdk"
 	"github.com/nightlyone/lockfile"
 	"github.com/sqweek/dialog"
+	"github.com/zzl/go-win32api/v2/win32"
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 
@@ -30,10 +31,15 @@ import (
 	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
 )
 
+const AppUserModelID = "com.github.ikafly.au_mod_installer"
+
 var DefaultServer = "https://modofus.sabafly.net/api/v1"
 var pipeName = `\\.\pipe\au_mod_installer_ipc`
 
 func main() {
+	if hr := win32.SetCurrentProcessExplicitAppUserModelID(win32.StrToPwstr(AppUserModelID)); win32.FAILED(hr) {
+		slog.Warn("SetCurrentProcessExplicitAppUserModelID returned error", "hresult", hr)
+	}
 	sharedURI := ""
 	sharedArchive := ""
 	for _, arg := range os.Args[1:] {
