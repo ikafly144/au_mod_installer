@@ -24,6 +24,7 @@ type Option func(*Config)
 type Config struct {
 	rest            rest.Client
 	activityService *discord.DiscordService
+	initial         bool
 }
 
 func WithRestClient(c rest.Client) func(*Config) {
@@ -35,6 +36,12 @@ func WithRestClient(c rest.Client) func(*Config) {
 func WithActivityService(a *discord.DiscordService) func(*Config) {
 	return func(cfg *Config) {
 		cfg.activityService = a
+	}
+}
+
+func WithInitial(initial bool) func(*Config) {
+	return func(cfg *Config) {
+		cfg.initial = initial
 	}
 }
 
@@ -59,6 +66,7 @@ func NewState(w fyne.Window, version string, options ...Option) (*State, error) 
 	var s State
 	s = State{
 		Version:          version,
+		IsInitial:        cfg.initial,
 		Window:           w,
 		Core:             app,
 		SelectedGamePath: binding.NewString(),
@@ -110,8 +118,9 @@ func NewState(w fyne.Window, version string, options ...Option) (*State, error) 
 }
 
 type State struct {
-	Version string
-	Window  fyne.Window
+	Version   string
+	IsInitial bool
+	Window    fyne.Window
 	// ModPath          string
 	SelectedGamePath binding.String
 	DetectedGamePath string

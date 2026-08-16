@@ -26,7 +26,8 @@ before:
     - "{{ if not .IsSnapshot }}git diff --exit-code HEAD --{{ end }}"
 
 builds:
-  - goos:
+  - id: client
+    goos:
       - windows
     goarch:
       - amd64
@@ -39,6 +40,22 @@ builds:
       - -trimpath
       - -v
     binary: Mod of Us
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+  - id: updater
+    goos:
+      - windows
+    goarch:
+      - amd64
+    env:
+      - CGO_ENABLED=0
+    main: ./cmd/updater
+    ldflags:
+      - -s -w -H=windowsgui
+    flags:
+      - -trimpath
+      - -v
+    binary: updater
     mod_timestamp: "{{ .CommitTimestamp }}"
     hooks:
       post:

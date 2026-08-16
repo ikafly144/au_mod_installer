@@ -198,12 +198,14 @@ func (s *State) showMandatoryUpdateRequiredDialog() {
 
 func (s *State) StartPeriodicUpdateChecker(ctx context.Context) {
 	go func() {
-		// Initial check after 3 seconds
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(3 * time.Second):
-			s.CheckForUpdates(ctx, false)
+		// Initial check after 3 seconds (skip if updater already performed initial check)
+		if !s.IsInitial {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(3 * time.Second):
+				s.CheckForUpdates(ctx, false)
+			}
 		}
 
 		// Periodic check every 1 hour

@@ -45,6 +45,7 @@ type Settings struct {
 	BranchStatusLabel       *widget.RichText
 	AutoSharingCheck        *widget.Check
 	TrayResidentCheck       *widget.Check
+	StartSilentCheck        *widget.Check
 	AutoStartCheck          *widget.Check
 	DisplayScaleSlider      *widget.Slider
 	DisplayScaleSelect      *widget.Select
@@ -157,6 +158,11 @@ func NewSettings(state *uicommon.State) *Settings {
 	})
 	trayResidentCheck.Checked = fyne.CurrentApp().Preferences().BoolWithFallback("tray_resident", true)
 
+	startSilentCheck := widget.NewCheck(lang.LocalizeKey("settings.start_silent_label", "Start Minimized to Tray"), func(checked bool) {
+		fyne.CurrentApp().Preferences().SetBool("start_silent", checked)
+	})
+	startSilentCheck.Checked = fyne.CurrentApp().Preferences().BoolWithFallback("start_silent", false)
+
 	var updatingAutoStart bool
 	autoStartCheck := widget.NewCheck(lang.LocalizeKey("settings.autostart_label", "Launch on OS Startup"), nil)
 	autoStartCheck.OnChanged = func(checked bool) {
@@ -191,6 +197,7 @@ func NewSettings(state *uicommon.State) *Settings {
 		BranchStatusLabel:   branchStatusLabel,
 		AutoSharingCheck:    autoSharingCheck,
 		TrayResidentCheck:   trayResidentCheck,
+		StartSilentCheck:    startSilentCheck,
 		AutoStartCheck:      autoStartCheck,
 		DisplayScaleSlider:  displayScaleSlider,
 		DisplayScaleSelect:  displayScaleSelect,
@@ -387,6 +394,8 @@ func (s *Settings) Tab() (*container.TabItem, error) {
 			container.NewVBox(
 				s.TrayResidentCheck,
 				widget.NewLabelWithStyle(lang.LocalizeKey("settings.tray_resident_hint", "Keep running in the background and stay in the system tray when the window is closed."), fyne.TextAlignLeading, fyne.TextStyle{Italic: true}),
+				s.StartSilentCheck,
+				widget.NewLabelWithStyle(lang.LocalizeKey("settings.start_silent_hint", "Start the application minimized in the system tray on startup."), fyne.TextAlignLeading, fyne.TextStyle{Italic: true}),
 			),
 		),
 		widget.NewCard(

@@ -106,6 +106,7 @@ func realMain(sharedURI string, sharedArchive string) error {
 		server    string
 		offline   bool
 		silent    bool
+		initial   bool
 	)
 
 	a := app.New()
@@ -141,7 +142,20 @@ func realMain(sharedURI string, sharedArchive string) error {
 	flag.StringVar(&server, "server", DefaultServer, "URL of the mod server")
 	flag.BoolVar(&offline, "offline", false, "Run in offline mode (only uninstallation and management of installed mods are available)")
 	flag.BoolVar(&silent, "silent", false, "Start minimized in system tray")
+	flag.BoolVar(&initial, "initial", false, "Indicates the application was launched from updater on startup")
 	flag.Parse()
+
+	if initial {
+		silentFlagProvided := false
+		flag.Visit(func(f *flag.Flag) {
+			if f.Name == "silent" {
+				silentFlagProvided = true
+			}
+		})
+		if !silentFlagProvided {
+			silent = a.Preferences().BoolWithFallback("start_silent", false)
+		}
+	}
 
 	if err := registerScheme(); err != nil {
 		slog.Error("Failed to register scheme", "error", err)
@@ -207,6 +221,7 @@ func realMain(sharedURI string, sharedArchive string) error {
 		ui.WithStateOptions(
 			uicommon.WithRestClient(client),
 			uicommon.WithActivityService(activityService),
+			uicommon.WithInitial(initial),
 		),
 		ui.WithStateInit(func(s *uicommon.State) {
 			go startIPCListener(s)

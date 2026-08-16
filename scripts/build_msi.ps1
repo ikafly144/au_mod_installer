@@ -81,6 +81,23 @@ New-Item -Path $stagePath -ItemType Directory | Out-Null
 
 Copy-Item -Path $exePath -Destination $stagePath -Force
 Copy-Item -Path $dllPath -Destination $stagePath -Force
+
+$updaterPath = Join-Path $buildPath "updater.exe"
+if (-not (Test-Path $updaterPath)) {
+    $updaterCandidate = Get-ChildItem -Path $distPath -Directory -ErrorAction SilentlyContinue | Where-Object {
+        Test-Path (Join-Path $_.FullName "updater.exe")
+    } | Select-Object -First 1
+    if ($updaterCandidate) {
+        $updaterPath = Join-Path $updaterCandidate.FullName "updater.exe"
+    } else {
+        Write-Host "Building updater.exe for staging..."
+        & go build -ldflags "-s -w -H=windowsgui" -o (Join-Path $stagePath "updater.exe") ./cmd/updater
+    }
+}
+if (Test-Path $updaterPath) {
+    Copy-Item -Path $updaterPath -Destination $stagePath -Force
+}
+
 $clientStage = Join-Path $stagePath 'client'
 if (-not (Test-Path $clientStage)) { New-Item -Path $clientStage -ItemType Directory | Out-Null }
 Copy-Item -Path $iconPath -Destination (Join-Path $clientStage (Split-Path $iconPath -Leaf)) -Force

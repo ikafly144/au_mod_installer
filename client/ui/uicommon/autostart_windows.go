@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"golang.org/x/sys/windows/registry"
@@ -45,8 +46,14 @@ func SetAutoStartEnabled(enabled bool) error {
 		if err != nil {
 			return fmt.Errorf("failed to get executable path: %w", err)
 		}
+		targetPath := execPath
+		dir := filepath.Dir(execPath)
+		updaterPath := filepath.Join(dir, "updater.exe")
+		if _, err := os.Stat(updaterPath); err == nil {
+			targetPath = updaterPath
+		}
 		// Register command with -silent flag so it starts in background/tray
-		cmd := fmt.Sprintf("\"%s\" -silent", execPath)
+		cmd := fmt.Sprintf("\"%s\" -silent", targetPath)
 		if err := key.SetStringValue(startupValueName, cmd); err != nil {
 			return fmt.Errorf("failed to write startup registry value: %w", err)
 		}

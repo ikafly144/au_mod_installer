@@ -100,6 +100,8 @@
     "settings.tray_resident": "タスクトレイ常駐",
     "settings.tray_resident_label": "タスクトレイに常駐する",
     "settings.tray_resident_hint": "ウィンドウを閉じてもバックグラウンドで実行を継続し、タスクトレイに常駐します。",
+    "settings.start_silent_label": "起動時にトレイに格納",
+    "settings.start_silent_hint": "起動時にメインウィンドウを開かず、タスクトレイに格納した状態で開始します。",
     "settings.autostart": "OS起動時の実行",
     "settings.autostart_label": "OS起動時に実行する",
     "settings.autostart_hint": "Windows起動時に自動的にアプリケーションを起動します。",
