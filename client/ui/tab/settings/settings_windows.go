@@ -3,6 +3,7 @@
 package settings
 
 import (
+	"context"
 	_ "embed"
 	"encoding/json"
 	"errors"
@@ -49,6 +50,7 @@ type Settings struct {
 	DisplayScaleSelect      *widget.Select
 	ClearCacheButton        *widget.Button
 	DeleteAmongUsDataButton *widget.Button
+	CheckForUpdatesButton   *widget.Button
 
 	epicAccountLabel *widget.Label
 	epicLoginButton  *widget.Button
@@ -214,6 +216,18 @@ func NewSettings(state *uicommon.State) *Settings {
 	s.DeleteAmongUsDataButton = widget.NewButtonWithIcon(lang.LocalizeKey("settings.delete_among_us_data", "Delete Among Us Data"), theme.DeleteIcon(), s.deleteAmongUsData)
 	s.DeleteAmongUsDataButton.Importance = widget.DangerImportance
 
+	s.CheckForUpdatesButton = widget.NewButtonWithIcon(lang.LocalizeKey("settings.check_for_updates", "Check for Updates"), theme.ViewRefreshIcon(), func() {
+		s.CheckForUpdatesButton.Disable()
+		s.CheckForUpdatesButton.SetText(lang.LocalizeKey("update.checking", "Checking for updates..."))
+		go func() {
+			defer fyne.Do(func() {
+				s.CheckForUpdatesButton.Enable()
+				s.CheckForUpdatesButton.SetText(lang.LocalizeKey("settings.check_for_updates", "Check for Updates"))
+			})
+			s.state.CheckForUpdates(context.Background(), true)
+		}()
+	})
+
 	return s
 }
 
@@ -317,7 +331,10 @@ func (s *Settings) Tab() (*container.TabItem, error) {
 			lang.LocalizeKey("settings.app.title", "Mod of Us"),
 			lang.LocalizeKey("settings.app.subtitle",
 				"Among Us Mod Manager"),
-			versionContent,
+			container.NewVBox(
+				versionContent,
+				container.NewCenter(s.CheckForUpdatesButton),
+			),
 		),
 		widget.NewCard(
 			lang.LocalizeKey("installation.select_install_info", "Among Us Installation Information"),

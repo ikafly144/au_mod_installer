@@ -1,0 +1,106 @@
+package uicommon
+
+import (
+	"context"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+
+	restcommon "github.com/ikafly144/au_mod_installer/common/rest"
+	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
+)
+
+func TestFindBranchVersion(t *testing.T) {
+	info := &restcommon.VersionInfo{
+		Branches: []restcommon.BranchInfo{
+			{Name: "stable", Version: "v1.2.0"},
+			{Name: "preview", Version: "v1.3.0-rc.1"},
+			{Name: "dev", Version: "v1.4.0-alpha.1"},
+		},
+	}
+
+	assert.Equal(t, "v1.2.0", FindBranchVersion(info, "stable"))
+	assert.Equal(t, "v1.2.0", FindBranchVersion(info, "STABLE"))
+	assert.Equal(t, "v1.3.0-rc.1", FindBranchVersion(info, "preview"))
+	assert.Equal(t, "v1.4.0-alpha.1", FindBranchVersion(info, "dev"))
+	assert.Equal(t, "", FindBranchVersion(info, "canary"))
+	assert.Equal(t, "", FindBranchVersion(nil, "stable"))
+}
+
+type mockRestClient struct {
+	versionInfo *restcommon.VersionInfo
+	err         error
+}
+
+func (m *mockRestClient) ServerBaseURL() string {
+	return "http://localhost"
+}
+
+func (m *mockRestClient) GetHealthStatus() (*restcommon.HealthStatus, error) {
+	return &restcommon.HealthStatus{Status: "ok"}, nil
+}
+
+func (m *mockRestClient) GetVersionInfo() (*restcommon.VersionInfo, error) {
+	return m.versionInfo, m.err
+}
+
+func (m *mockRestClient) GetModIDs(limit int, after string, before string) ([]string, error) {
+	return nil, nil
+}
+
+func (m *mockRestClient) GetMod(modID string) (*modmgr.Mod, error) {
+	return nil, nil
+}
+
+func (m *mockRestClient) GetModVersionIDs(modID string, limit int, after string) ([]string, error) {
+	return nil, nil
+}
+
+func (m *mockRestClient) GetModVersion(modID string, versionID string) (*modmgr.ModVersion, error) {
+	return nil, nil
+}
+
+func (m *mockRestClient) GetLatestModVersion(modID string) (*modmgr.ModVersion, error) {
+	return nil, nil
+}
+
+func (m *mockRestClient) GetModThumbnail(modID string) ([]byte, error) {
+	return nil, nil
+}
+
+func (m *mockRestClient) CheckForUpdates(installedVersions map[string]string) (map[string]*modmgr.ModVersion, error) {
+	return nil, nil
+}
+
+func (m *mockRestClient) ShareGame(aupack []byte, room restcommon.RoomInfo) (*restcommon.ShareGameResponse, error) {
+	return nil, nil
+}
+
+func (m *mockRestClient) UpdateSharedGameExpiration(sessionID, hostKey string) (*restcommon.ShareGameResponse, error) {
+	return nil, nil
+}
+
+func (m *mockRestClient) DeleteSharedGame(sessionID, hostKey string) error {
+	return nil
+}
+
+func (m *mockRestClient) GetJoinGameDownload(sessionID string) (*restcommon.JoinGameDownloadResponse, error) {
+	return nil, nil
+}
+
+func TestCheckForUpdatesNoUpdate(t *testing.T) {
+	mock := &mockRestClient{
+		versionInfo: &restcommon.VersionInfo{
+			Branches: []restcommon.BranchInfo{
+				{Name: "stable", Version: "v1.0.0"},
+			},
+		},
+	}
+
+	state := &State{
+		Version: "v1.0.0",
+		Rest:    mock,
+	}
+
+	state.CheckForUpdates(context.Background(), false)
+}

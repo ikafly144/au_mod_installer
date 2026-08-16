@@ -301,6 +301,7 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 		}
 	}
 	state.Core.StartActivityPolling(ctx)
+	state.StartPeriodicUpdateChecker(ctx)
 	w.SetOnClosed(onClosed)
 	fyne.Do(func() {
 		slog.Info("Application started", "silent", config.silent)
