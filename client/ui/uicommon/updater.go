@@ -3,6 +3,7 @@ package uicommon
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -123,7 +124,8 @@ func (s *State) PerformUpdate(tag string) {
 	}
 
 	statusLabel := widget.NewLabel(lang.LocalizeKey("update.downloading", "Downloading and applying update..."))
-	progressBar := widget.NewProgressBarInfinite()
+	progressBar := widget.NewProgressBar()
+	progressBar.SetValue(0)
 	content := container.NewVBox(
 		statusLabel,
 		progressBar,
@@ -134,10 +136,26 @@ func (s *State) PerformUpdate(tag string) {
 		content,
 		s.Window,
 	)
+	progressDialog.Resize(fyne.NewSize(380, 100))
 	progressDialog.Show()
 
 	go func() {
-		installerLaunched, err := versioning.Update(context.Background(), tag)
+		installerLaunched, err := versioning.UpdateWithProgress(context.Background(), tag, func(downloaded, total int64) {
+			if total > 0 {
+				ratio := float64(downloaded) / float64(total)
+				if ratio > 1.0 {
+					ratio = 1.0
+				}
+				fyne.Do(func() {
+					progressBar.SetValue(ratio)
+					statusLabel.SetText(fmt.Sprintf("%s (%s / %s)",
+						lang.LocalizeKey("update.downloading", "Downloading and applying update..."),
+						formatBytes(downloaded),
+						formatBytes(total),
+					))
+				})
+			}
+		})
 		if err != nil {
 			slog.Error("Failed to update", "error", err)
 			fyne.Do(func() {
@@ -166,6 +184,19 @@ func (s *State) PerformUpdate(tag string) {
 			}
 		})
 	}()
+}
+
+func formatBytes(b int64) string {
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+	div, exp := int64(unit), 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
 }
 
 func (s *State) showMandatoryUpdateRequiredDialog() {

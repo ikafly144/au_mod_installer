@@ -104,3 +104,10 @@ func TestCheckForUpdatesNoUpdate(t *testing.T) {
 
 	state.CheckForUpdates(context.Background(), false)
 }
+
+func TestFormatBytes(t *testing.T) {
+	assert.Equal(t, "500 B", formatBytes(500))
+	assert.Equal(t, "1.0 KB", formatBytes(1024))
+	assert.Equal(t, "1.5 MB", formatBytes(1572864))
+	assert.Equal(t, "10.0 MB", formatBytes(10485760))
+}

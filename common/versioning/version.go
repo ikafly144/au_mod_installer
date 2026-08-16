@@ -80,7 +80,29 @@ outer:
 	return releaseTag, latestStable, nil
 }
 
+// ProgressCallback is called during download with bytes downloaded and total size in bytes.
+type ProgressCallback func(downloaded int64, total int64)
+
+type progressWriter struct {
+	total      int64
+	downloaded int64
+	onProgress ProgressCallback
+}
+
+func (pw *progressWriter) Write(p []byte) (int, error) {
+	n := len(p)
+	pw.downloaded += int64(n)
+	if pw.onProgress != nil {
+		pw.onProgress(pw.downloaded, pw.total)
+	}
+	return n, nil
+}
+
 func DownloadUpdate(ctx context.Context, tag string) (string, error) {
+	return DownloadUpdateWithProgress(ctx, tag, nil)
+}
+
+func DownloadUpdateWithProgress(ctx context.Context, tag string, onProgress ProgressCallback) (string, error) {
 	var opts []github.ClientOptionsFunc
 	client, err := github.NewClient(opts...)
 	if err != nil {
@@ -166,7 +188,20 @@ func DownloadUpdate(ctx context.Context, tag string) (string, error) {
 		return "", fmt.Errorf("failed to create temp file: %w", err)
 	}
 	defer tempFile.Close()
-	reader := io.TeeReader(resp.Body, hasher)
+
+	total := resp.ContentLength
+	if total <= 0 && binaryAsset.GetSize() > 0 {
+		total = int64(binaryAsset.GetSize())
+	}
+	if onProgress != nil {
+		onProgress(0, total)
+	}
+	pw := &progressWriter{
+		total:      total,
+		onProgress: onProgress,
+	}
+
+	reader := io.TeeReader(resp.Body, io.MultiWriter(hasher, pw))
 	if _, err := io.Copy(tempFile, reader); err != nil {
 		return "", err
 	}
@@ -179,8 +214,8 @@ func DownloadUpdate(ctx context.Context, tag string) (string, error) {
 	return tempFile.Name(), nil
 }
 
-func Update(ctx context.Context, tag string) (bool, error) {
-	msiPath, err := DownloadUpdate(ctx, tag)
+func UpdateWithProgress(ctx context.Context, tag string, onProgress ProgressCallback) (bool, error) {
+	msiPath, err := DownloadUpdateWithProgress(ctx, tag, onProgress)
 	if err != nil {
 		return false, err
 	}
@@ -191,6 +226,10 @@ func Update(ctx context.Context, tag string) (bool, error) {
 	}
 	slog.Info("Started MSI installer", "path", msiPath)
 	return true, nil
+}
+
+func Update(ctx context.Context, tag string) (bool, error) {
+	return UpdateWithProgress(ctx, tag, nil)
 }
 
 func RunMsiPassive(ctx context.Context, msiPath string) error {
