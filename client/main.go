@@ -159,23 +159,14 @@ func realMain(sharedURI string, sharedArchive string) error {
 	flag.BoolVar(&initial, "initial", false, "Indicates the application was launched from updater on startup")
 	flag.Parse()
 
-	if initial {
-		silentFlagProvided := false
-		flag.Visit(func(f *flag.Flag) {
-			if f.Name == "silent" {
-				silentFlagProvided = true
-			}
-		})
-		if !silentFlagProvided {
-			silent = a.Preferences().BoolWithFallback("start_silent", false)
-		}
-	}
-
 	if err := registerScheme(); err != nil {
 		slog.Error("Failed to register scheme", "error", err)
 	}
 
-	uicommon.SyncAutoStart(a.Preferences().BoolWithFallback("launch_on_startup", true))
+	uicommon.SyncAutoStart(
+		a.Preferences().BoolWithFallback("launch_on_startup", true),
+		a.Preferences().BoolWithFallback("start_silent", true),
+	)
 
 	var client rest.Client
 	if localMode != "" {

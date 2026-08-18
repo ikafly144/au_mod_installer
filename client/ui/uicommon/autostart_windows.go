@@ -34,7 +34,7 @@ func IsAutoStartEnabled() bool {
 }
 
 // SetAutoStartEnabled enables or disables launching the application on Windows startup.
-func SetAutoStartEnabled(enabled bool) error {
+func SetAutoStartEnabled(enabled bool, startSilent bool) error {
 	key, _, err := registry.CreateKey(registry.CURRENT_USER, startupRegistryPath, registry.SET_VALUE)
 	if err != nil {
 		return fmt.Errorf("failed to open startup registry key: %w", err)
@@ -52,12 +52,20 @@ func SetAutoStartEnabled(enabled bool) error {
 		if _, err := os.Stat(updaterPath); err == nil {
 			targetPath = updaterPath
 		}
-		// Register command with -silent flag so it starts in background/tray
+		// Register command with -silent flag if startSilent is true so it starts in background/tray on OS startup
 		var cmd string
-		if targetPath == updaterPath {
-			cmd = fmt.Sprintf("\"%s\" -target \"%s\" -silent", targetPath, execPath)
+		if startSilent {
+			if targetPath == updaterPath {
+				cmd = fmt.Sprintf("\"%s\" -target \"%s\" -silent", targetPath, execPath)
+			} else {
+				cmd = fmt.Sprintf("\"%s\" -silent", targetPath)
+			}
 		} else {
-			cmd = fmt.Sprintf("\"%s\" -silent", targetPath)
+			if targetPath == updaterPath {
+				cmd = fmt.Sprintf("\"%s\" -target \"%s\"", targetPath, execPath)
+			} else {
+				cmd = fmt.Sprintf("\"%s\"", targetPath)
+			}
 		}
 		if err := key.SetStringValue(startupValueName, cmd); err != nil {
 			return fmt.Errorf("failed to write startup registry value: %w", err)
@@ -75,13 +83,13 @@ func SetAutoStartEnabled(enabled bool) error {
 }
 
 // SyncAutoStart ensures the registry startup entry matches the preference and current executable path.
-func SyncAutoStart(enabled bool) {
+func SyncAutoStart(enabled bool, startSilent bool) {
 	if enabled {
-		if err := SetAutoStartEnabled(true); err != nil {
+		if err := SetAutoStartEnabled(true, startSilent); err != nil {
 			slog.Warn("Failed to sync auto-start registry key", "error", err)
 		}
 	} else if IsAutoStartEnabled() {
-		if err := SetAutoStartEnabled(false); err != nil {
+		if err := SetAutoStartEnabled(false, false); err != nil {
 			slog.Warn("Failed to remove auto-start registry key", "error", err)
 		}
 	}

@@ -8,10 +8,10 @@ func IsAutoStartEnabled() bool {
 }
 
 // SetAutoStartEnabled enables or disables launching the application on startup.
-func SetAutoStartEnabled(enabled bool) error {
+func SetAutoStartEnabled(enabled bool, startSilent bool) error {
 	return nil
 }
 
 // SyncAutoStart ensures the startup entry matches the preference.
-func SyncAutoStart(enabled bool) {
+func SyncAutoStart(enabled bool, startSilent bool) {
 }

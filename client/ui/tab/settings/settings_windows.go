@@ -158,10 +158,14 @@ func NewSettings(state *uicommon.State) *Settings {
 	})
 	trayResidentCheck.Checked = fyne.CurrentApp().Preferences().BoolWithFallback("tray_resident", true)
 
-	startSilentCheck := widget.NewCheck(lang.LocalizeKey("settings.start_silent_label", "Start Minimized to Tray"), func(checked bool) {
+	startSilentCheck := widget.NewCheck(lang.LocalizeKey("settings.start_silent_label", "Start Minimized to Tray on OS Startup"), func(checked bool) {
 		fyne.CurrentApp().Preferences().SetBool("start_silent", checked)
+		uicommon.SyncAutoStart(
+			fyne.CurrentApp().Preferences().BoolWithFallback("launch_on_startup", true),
+			checked,
+		)
 	})
-	startSilentCheck.Checked = fyne.CurrentApp().Preferences().BoolWithFallback("start_silent", false)
+	startSilentCheck.Checked = fyne.CurrentApp().Preferences().BoolWithFallback("start_silent", true)
 
 	var updatingAutoStart bool
 	autoStartCheck := widget.NewCheck(lang.LocalizeKey("settings.autostart_label", "Launch on OS Startup"), nil)
@@ -169,7 +173,8 @@ func NewSettings(state *uicommon.State) *Settings {
 		if updatingAutoStart {
 			return
 		}
-		if err := uicommon.SetAutoStartEnabled(checked); err != nil {
+		startSilent := fyne.CurrentApp().Preferences().BoolWithFallback("start_silent", true)
+		if err := uicommon.SetAutoStartEnabled(checked, startSilent); err != nil {
 			slog.Error("Failed to update auto start setting", "error", err)
 			dialog.ShowError(err, state.Window)
 			updatingAutoStart = true
@@ -395,7 +400,7 @@ func (s *Settings) Tab() (*container.TabItem, error) {
 				s.TrayResidentCheck,
 				widget.NewLabelWithStyle(lang.LocalizeKey("settings.tray_resident_hint", "Keep running in the background and stay in the system tray when the window is closed."), fyne.TextAlignLeading, fyne.TextStyle{Italic: true}),
 				s.StartSilentCheck,
-				widget.NewLabelWithStyle(lang.LocalizeKey("settings.start_silent_hint", "Start the application minimized in the system tray on startup."), fyne.TextAlignLeading, fyne.TextStyle{Italic: true}),
+				widget.NewLabelWithStyle(lang.LocalizeKey("settings.start_silent_hint", "Start the application minimized in the system tray when launching on OS startup."), fyne.TextAlignLeading, fyne.TextStyle{Italic: true}),
 			),
 		),
 		widget.NewCard(
