@@ -1,4 +1,6 @@
 name: ci
+run-name: ci for ${{ github.ref_name }} (commit ${{ github.sha }})
+
 on:
   push:
     branches:

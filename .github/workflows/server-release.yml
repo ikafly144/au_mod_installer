@@ -1,5 +1,5 @@
 name: build server image
-run-name: building server image ${{ github.ref_name }}
+run-name: build server image for ${{ github.ref_name }}
 on:
   push:
     branches:
