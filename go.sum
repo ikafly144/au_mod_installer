@@ -112,6 +112,10 @@ github.com/hinshun/vt10x v0.0.0-20220119200601-820417d04eec h1:qv2VnGeEQHchGaZ/u
 github.com/hinshun/vt10x v0.0.0-20220119200601-820417d04eec/go.mod h1:Q48J4R4DvxnHolD5P8pOtXigYlRuPLGl6moFx3ulM68=
 github.com/ikafly144/discord_social_sdk v0.1.1 h1:0xySrJ99PAUy4TaIQ4UXJRQJPnYmXY/FoMOKPci5jz0=
 github.com/ikafly144/discord_social_sdk v0.1.1/go.mod h1:lcvnssMaueh6CJh7yTuEhKJhGl5EQlkzs1YC+DZE8Tc=
+github.com/ikafly144/discord_social_sdk v0.1.2-0.20260818014920-cd1cf5ed0b73 h1:dl+ClZJVlTTXRPx1Sjhvw3FJKJTZviX7B7kS6Jl/JW0=
+github.com/ikafly144/discord_social_sdk v0.1.2-0.20260818014920-cd1cf5ed0b73/go.mod h1:lcvnssMaueh6CJh7yTuEhKJhGl5EQlkzs1YC+DZE8Tc=
+github.com/ikafly144/discord_social_sdk v0.1.2 h1:DRaDBOccigi9Zd+w7Rse2VDqwYsgdJZsmIVqPy852U4=
+github.com/ikafly144/discord_social_sdk v0.1.2/go.mod h1:lcvnssMaueh6CJh7yTuEhKJhGl5EQlkzs1YC+DZE8Tc=
 github.com/jackc/pgpassfile v1.0.0 h1:/6Hmqy13Ss2zCq62VdNG8tM1wchn8zjSGOBJ6icpsIM=
 github.com/jackc/pgpassfile v1.0.0/go.mod h1:CEx0iS5ambNFdcRtxPj5JhEz+xB6uRky5eyVu/W2HEg=
 github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 h1:iCEnooe7UlwOQYpKFhBabPMi4aNAfoODPEFNiAnClxo=

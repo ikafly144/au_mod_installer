@@ -11,7 +11,7 @@ require (
 	github.com/gin-gonic/gin v1.12.0
 	github.com/google/go-github/v90 v90.0.0
 	github.com/google/uuid v1.6.0
-	github.com/ikafly144/discord_social_sdk v0.1.1
+	github.com/ikafly144/discord_social_sdk v0.1.2
 	github.com/jchv/go-webview2 v0.0.0-20260205173254-56598839c808
 	github.com/josephspurrier/goversioninfo v1.7.0
 	github.com/mcuadros/go-version v0.0.0-20190830083331-035f6764e8d2
