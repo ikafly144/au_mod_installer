@@ -108,6 +108,11 @@ release:
   prerelease: auto
   make_latest: '{{ eq .Prerelease "" }}'
   name_template: "{{.TagSubject}}"
+  header: |
+    ## [Mod of Us インストーラーをダウンロード](https://github.com/ikafly144/au_mod_installer/releases/download/{{ .Tag }}/mod-of-us_windows_x86_64.msi)
+    ## [Download the Mod of Us Installer](https://github.com/ikafly144/au_mod_installer/releases/download/{{ .Tag }}/mod-of-us_windows_x86_64.msi)
+
+    ---
   github:
     name: au_mod_installer
     owner: ikafly144
