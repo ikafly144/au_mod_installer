@@ -83,8 +83,11 @@ func (s *State) ShowEpicLoginWindow(onSuccess func(), onCancel func()) {
 		}
 	}
 
+	instructionLabel := widget.NewLabel(lang.LocalizeKey("settings.epic_login_instruction", "Logging in with Epic Games will complete the connection automatically."))
+	instructionLabel.Wrapping = fyne.TextWrapWord
+
 	content := container.NewVBox(
-		widget.NewLabel(lang.LocalizeKey("settings.epic_login_instruction", "Logging in with Epic Games will complete the connection automatically.")),
+		instructionLabel,
 		statusLabel,
 		container.NewHBox(layout.NewSpacer()),
 	)

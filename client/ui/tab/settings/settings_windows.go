@@ -646,8 +646,10 @@ func (s *Settings) discordLogin() {
 		})
 	}) {
 		progress := widget.NewProgressBarInfinite()
+		discordWaitingLabel := widget.NewLabel(lang.LocalizeKey("settings.discord_login_waiting", "Please complete the Discord login in your browser."))
+		discordWaitingLabel.Wrapping = fyne.TextWrapWord
 		content := container.NewVBox(
-			widget.NewLabel(lang.LocalizeKey("settings.discord_login_waiting", "Please complete the Discord login in your browser.")),
+			discordWaitingLabel,
 			progress,
 		)
 		loginDialog = dialog.NewCustom(
