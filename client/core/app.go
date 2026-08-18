@@ -233,6 +233,15 @@ func (a *App) updateRichPresence() {
 	act.SetDetails(fmt.Sprintf("Playing %s", prof.Name))
 	act.SetSupportedPlatforms(sdk.ActivityGamePlatformsDesktop)
 
+	assets := sdk.NewActivityAssets()
+	assets.SetLargeImage("icon")
+	if a.Version != "" {
+		assets.SetLargeText(fmt.Sprintf("Mod of Us %s", a.Version))
+	} else {
+		assets.SetLargeText("Mod of Us")
+	}
+	act.SetAssets(assets)
+
 	if !runningStartedAt.IsZero() {
 		timestamp := sdk.NewActivityTimestamps()
 		timestamp.SetStart(uint64(runningStartedAt.UnixMilli()))

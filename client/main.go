@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -216,6 +217,14 @@ func realMain(sharedURI string, sharedArchive string) error {
 		act.SetName("Mod of Us")
 		act.SetState(lang.LocalizeKey("discord.status.idle", "Idle"))
 		act.SetDetails(lang.LocalizeKey("discord.status.idle_details", "Not currently running the game"))
+		assets := sdk.NewActivityAssets()
+		assets.SetLargeImage("icon")
+		if version != "" {
+			assets.SetLargeText(fmt.Sprintf("Mod of Us %s", version))
+		} else {
+			assets.SetLargeText("Mod of Us")
+		}
+		act.SetAssets(assets)
 		return act
 	}, func(d *sdk.ClientResult) {
 		if !d.Successful() {
