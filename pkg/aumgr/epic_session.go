@@ -3,11 +3,16 @@ package aumgr
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/danieljoos/wincred"
 )
+
+const epicCredentialsKey = "ModOfUs_EpicCredentials"
 
 type EpicSessionManager struct {
 	path    string
@@ -32,22 +37,43 @@ func (m *EpicSessionManager) Load() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if _, err := os.Stat(m.path); os.IsNotExist(err) {
-		m.session = nil
-		return nil
+	// Try loading from Windows Credential Manager
+	creds, err := wincred.GetGenericCredential(epicCredentialsKey)
+	if err == nil && creds != nil {
+		var session EpicSession
+		if err := json.Unmarshal(creds.CredentialBlob, &session); err == nil {
+			m.session = &session
+			// Clean up legacy session file if present
+			if _, err := os.Stat(m.path); err == nil {
+				_ = os.Remove(m.path)
+			}
+			return nil
+		}
 	}
 
-	data, err := os.ReadFile(m.path)
-	if err != nil {
-		return fmt.Errorf("failed to read epic session: %w", err)
+	// Legacy file fallback migration if not found in Windows Credential Manager
+	if _, err := os.Stat(m.path); err == nil {
+		data, err := os.ReadFile(m.path)
+		if err == nil {
+			var session EpicSession
+			if err := json.Unmarshal(data, &session); err == nil {
+				m.session = &session
+				// Migrate session to Windows Credential Manager
+				blob, err := json.Marshal(&session)
+				if err == nil {
+					cred := wincred.NewGenericCredential(epicCredentialsKey)
+					cred.CredentialBlob = blob
+					cred.Persist = wincred.PersistLocalMachine
+					if err := cred.Write(); err == nil {
+						_ = os.Remove(m.path)
+					}
+				}
+				return nil
+			}
+		}
 	}
 
-	var session EpicSession
-	if err := json.Unmarshal(data, &session); err != nil {
-		return fmt.Errorf("failed to unmarshal epic session: %w", err)
-	}
-
-	m.session = &session
+	m.session = nil
 	return nil
 }
 
@@ -55,13 +81,24 @@ func (m *EpicSessionManager) Save(session *EpicSession) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	data, err := json.Marshal(session)
+	blob, err := json.Marshal(session)
 	if err != nil {
 		return fmt.Errorf("failed to marshal epic session: %w", err)
 	}
 
-	if err := os.WriteFile(m.path, data, 0600); err != nil {
-		return fmt.Errorf("failed to write epic session: %w", err)
+	cred, err := wincred.GetGenericCredential(epicCredentialsKey)
+	if err != nil {
+		cred = wincred.NewGenericCredential(epicCredentialsKey)
+	}
+	cred.CredentialBlob = blob
+	cred.Persist = wincred.PersistLocalMachine
+	if err := cred.Write(); err != nil {
+		return fmt.Errorf("failed to save epic session to credential manager: %w", err)
+	}
+
+	// Remove legacy file if it exists
+	if _, err := os.Stat(m.path); err == nil {
+		_ = os.Remove(m.path)
 	}
 
 	m.session = session
@@ -79,8 +116,13 @@ func (m *EpicSessionManager) Clear() error {
 	defer m.mu.Unlock()
 
 	m.session = nil
+	if cred, err := wincred.GetGenericCredential(epicCredentialsKey); err == nil && cred != nil {
+		if err := cred.Delete(); err != nil {
+			slog.Warn("Failed to delete epic credentials from Windows Credential Manager", "error", err)
+		}
+	}
 	if err := os.Remove(m.path); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("failed to remove epic session file: %w", err)
+		slog.Warn("Failed to remove legacy epic session file", "error", err)
 	}
 	return nil
 }
