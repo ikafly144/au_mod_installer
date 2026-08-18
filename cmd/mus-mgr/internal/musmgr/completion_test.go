@@ -11,43 +11,10 @@ import (
 
 func TestShellCompletionFeatures(t *testing.T) {
 	factory := newCommandFactory(nil)
+	app := NewApp()
 
-	t.Run("Flag completion without typing anything", func(t *testing.T) {
-		cmd := factory.newModAddCommand()
-		buf := new(bytes.Buffer)
-		cmd.Writer = buf
-
-		fn := factory.makeShellComplete()
-		fn(context.Background(), cmd)
-		output := buf.String()
-		// When no args are passed, subcommands would be completed if any, but mod add is a leaf command.
-		// If user types "-" or "--", flags are completed.
-		_ = output
-	})
-
-	t.Run("Flag completion when typing --", func(t *testing.T) {
-		cmd := factory.newModAddCommand()
-		buf := new(bytes.Buffer)
-		cmd.Writer = buf
-
-		// Simulate args: ["mod", "add", "--"]
-		if err := cmd.Set("name", ""); err != nil {
-			t.Fatalf("failed to set name flag: %v", err)
-		}
-		// We can test ShellComplete directly by setting up cmd
-		fn := factory.makeShellComplete()
-
-		// Test using a mock Command
-		testCmd := &cli.Command{
-			Name:          "add",
-			Flags:         cmd.Flags,
-			Writer:        buf,
-			ShellComplete: fn,
-		}
-		// In urfave/cli, cmd.Args() comes from parsed args
-		// Let's test makeShellComplete with flag args
-		_ = testCmd
-	})
+	fish, _ := app.ToFishCompletion()
+	t.Logf("FISH COMPLETION SCRIPT:\n%s", fish)
 
 	t.Run("completeFlagValue target_platform", func(t *testing.T) {
 		vals := factory.completeFlagValue(context.Background(), &cli.Command{}, "target_platform", "")
@@ -74,11 +41,11 @@ func TestShellCompletionFeatures(t *testing.T) {
 
 	t.Run("Positional completer modID and versionID without panic", func(t *testing.T) {
 		modComp := factory.modIDCompleter()
-		vals := modComp(context.Background(), &cli.Command{}, 0, "")
+		vals := modComp(context.Background(), &cli.Command{}, []string{""}, 0, "")
 		_ = vals
 
 		verComp := factory.versionIDCompleter()
-		vals = verComp(context.Background(), &cli.Command{}, 1, "")
+		vals = verComp(context.Background(), &cli.Command{}, []string{"my-mod", ""}, 1, "")
 		_ = vals
 	})
 
@@ -94,5 +61,12 @@ func TestShellCompletionFeatures(t *testing.T) {
 		if bytes.Contains(buf.Bytes(), []byte("help")) {
 			t.Errorf("did not expect help command in subcommands, got:\n%s", out)
 		}
+	})
+
+	t.Run("version edit positional 2nd arg completion", func(t *testing.T) {
+		verComp := factory.versionIDCompleter()
+		// If modID is passed in posArgs[0], versionIDCompleter uses posArgs[0]
+		res := verComp(context.Background(), nil, []string{"test-mod", "1."}, 1, "1.")
+		_ = res
 	})
 }

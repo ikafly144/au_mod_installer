@@ -11,7 +11,7 @@ import (
 )
 
 // PositionalCompleter provides completion candidates for a positional argument index.
-type PositionalCompleter func(ctx context.Context, cmd *cli.Command, argIndex int, prefix string) []string
+type PositionalCompleter func(ctx context.Context, cmd *cli.Command, posArgs []string, argIndex int, prefix string) []string
 
 func (f *commandFactory) makeShellComplete(completers ...PositionalCompleter) cli.ShellCompleteFunc {
 	return func(ctx context.Context, cmd *cli.Command) {
@@ -82,15 +82,28 @@ func (f *commandFactory) makeShellComplete(completers ...PositionalCompleter) cl
 			posArgs = append(posArgs, a)
 		}
 
-		posIndex := max(len(posArgs)-1, 0)
-
+		posIndex := 0
 		prefix := ""
-		if len(posArgs) > 0 {
+
+		if len(posArgs) == 0 {
+			posIndex = 0
+			prefix = ""
+		} else if len(posArgs) == 1 {
+			firstArg := posArgs[0]
+			if len(completers) > 1 && firstArg != "" && f.isExistingMod(firstArg) {
+				posIndex = 1
+				prefix = ""
+			} else {
+				posIndex = 0
+				prefix = firstArg
+			}
+		} else {
+			posIndex = len(posArgs) - 1
 			prefix = posArgs[len(posArgs)-1]
 		}
 
 		if posIndex < len(completers) && completers[posIndex] != nil {
-			candidates := completers[posIndex](ctx, cmd, posIndex, prefix)
+			candidates := completers[posIndex](ctx, cmd, posArgs, posIndex, prefix)
 			for _, c := range candidates {
 				if prefix == "" || strings.HasPrefix(c, prefix) {
 					_, _ = fmt.Fprintln(cmd.Writer, c)
@@ -196,22 +209,34 @@ func (f *commandFactory) completeFlagValue(ctx context.Context, cmd *cli.Command
 }
 
 func (f *commandFactory) modIDCompleter() PositionalCompleter {
-	return func(ctx context.Context, cmd *cli.Command, argIndex int, prefix string) []string {
+	return func(ctx context.Context, cmd *cli.Command, posArgs []string, argIndex int, prefix string) []string {
 		return f.getModIDs(prefix)
 	}
 }
 
 func (f *commandFactory) versionIDCompleter() PositionalCompleter {
-	return func(ctx context.Context, cmd *cli.Command, argIndex int, prefix string) []string {
-		if cmd == nil || cmd.Args() == nil {
-			return nil
+	return func(ctx context.Context, cmd *cli.Command, posArgs []string, argIndex int, prefix string) []string {
+		modID := ""
+		if len(posArgs) > 0 && posArgs[0] != "" {
+			modID = posArgs[0]
+		} else if cmd != nil && cmd.Args() != nil {
+			modID = cmd.Args().Get(0)
 		}
-		modID := cmd.Args().Get(0)
 		if modID == "" {
 			return nil
 		}
 		return f.getVersionIDs(modID, prefix)
 	}
+}
+
+func (f *commandFactory) isExistingMod(modID string) bool {
+	ids := f.getModIDs(modID)
+	for _, id := range ids {
+		if id == modID {
+			return true
+		}
+	}
+	return false
 }
 
 func (f *commandFactory) getModIDs(prefix string) []string {
