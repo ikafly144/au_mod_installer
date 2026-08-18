@@ -249,7 +249,7 @@ func (l *Launcher) init() {
 		})
 	}
 	l.state.OnGameStarted = func(profileID uuid.UUID, pid int) {
-		fyne.DoAndWait(func() {
+		fyne.Do(func() {
 			l.refreshProfileHighlights()
 		})
 	}
@@ -676,8 +676,10 @@ func (l *Launcher) showDiscordFriendsDialog() {
 					loginDialog.Hide()
 				}
 				if success {
-					l.state.Core.DiscordService.WaitReady()
-					go fyne.Do(l.showDiscordFriendsDialog)
+					go func() {
+						l.state.Core.DiscordService.WaitReady()
+						fyne.Do(l.showDiscordFriendsDialog)
+					}()
 				} else if !cancelled {
 					l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("settings.discord_login_failed", "Failed to log in to Discord.")))
 				}
@@ -709,7 +711,7 @@ func (l *Launcher) showDiscordFriendsDialog() {
 		d.Show()
 		go func() {
 			ds.WaitReady()
-			go fyne.Do(func() {
+			fyne.Do(func() {
 				d.Hide()
 				l.showDiscordFriendsDialog()
 			})
@@ -2893,10 +2895,12 @@ func (l *Launcher) showAddModDialog(onAdd func([]modmgr.ModVersion)) {
 	go func() {
 		modIDs, err := l.state.Rest.GetModIDs(100, "", "")
 		if err != nil {
-			dialog.ShowError(err, l.state.Window)
+			fyne.Do(func() {
+				dialog.ShowError(err, l.state.Window)
+			})
 			return
 		}
-		fyne.DoAndWait(func() {
+		fyne.Do(func() {
 			contentBox.Objects = nil
 			for range modIDs {
 				contentBox.Add(buildItem("", lang.LocalizeKey("profile.loading_mod", "Loading mod details..."), "", nil))
@@ -3250,8 +3254,10 @@ func (l *Launcher) newModDetailsDialog(mod *modmgr.Mod, onSelect func(modmgr.Mod
 	go func() {
 		v, err := l.state.Rest.GetModVersionIDs(mod.ID, 100, "")
 		if err != nil {
-			d.Hide()
-			dialog.ShowError(err, l.state.Window)
+			fyne.Do(func() {
+				d.Hide()
+				dialog.ShowError(err, l.state.Window)
+			})
 			return
 		}
 		fyne.Do(func() {

@@ -443,7 +443,7 @@ func (r *Repository) installModVersion(mod *modmgr.Mod, versionID string) {
 				} else {
 					slog.Info("Mod added to profile", "modId", mod.ID, "versionId", versionID, "profile", targetProfile.Name)
 					r.state.ClearError()
-					fyne.DoAndWait(func() {
+					fyne.Do(func() {
 						r.stateLabel.SetText(lang.LocalizeKey("repository.added_to_profile", "Added to profile '{{.Profile}}': {{.ModName}} ({{.Version}})", map[string]any{"Profile": targetProfile.Name, "ModName": mod.Name, "Version": versionID}))
 						r.stateLabel.Show()
 					})
@@ -541,11 +541,10 @@ func (r *Repository) fetchMods() (error, bool) {
 }
 
 func (r *Repository) currentSearchText() string {
-	var text string
-	fyne.DoAndWait(func() {
-		text = r.searchBar.Text
-	})
-	return text
+	if r.searchBar == nil {
+		return ""
+	}
+	return r.searchBar.Text
 }
 
 func (r *Repository) loadModDetailsAsync(modID string, listIndex int) {
@@ -590,7 +589,7 @@ func (r *Repository) reloadMods() {
 	r.thumbnailFetched = map[string]bool{}
 	r.thumbnailLoading = map[string]bool{}
 	r.thumbMu.Unlock()
-	fyne.DoAndWait(r.modScroll.ScrollToTop)
+	fyne.Do(r.modScroll.ScrollToTop)
 	_ = r.modsBind.Set([]*modmgr.Mod{})
 	r.LoadNext()
 }

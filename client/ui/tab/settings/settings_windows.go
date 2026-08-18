@@ -271,7 +271,7 @@ func (s *Settings) startAccountPolling() {
 			defer ticker.Stop()
 			for {
 				go s.refreshDiscordAccountInfo()
-				go fyne.Do(s.refreshEpicAccountInfo)
+				fyne.Do(s.refreshEpicAccountInfo)
 				<-ticker.C
 			}
 		}()

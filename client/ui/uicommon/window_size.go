@@ -24,7 +24,7 @@ func ApplyScaledMainWindowSize(w fyne.Window, scale float32) {
 		return
 	}
 	size := ScaledMainWindowSize(scale)
-	fyne.DoAndWait(func() {
+	fyne.Do(func() {
 		if c := w.Canvas(); c != nil {
 			c.Refresh(w.Content())
 		}
