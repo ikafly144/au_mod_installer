@@ -401,8 +401,6 @@ func (s *Settings) Tab() (*container.TabItem, error) {
 			container.NewVBox(
 				s.TrayResidentCheck,
 				newHintLabel(lang.LocalizeKey("settings.tray_resident_hint", "Keep running in the background and stay in the system tray when the window is closed.")),
-				s.StartSilentCheck,
-				newHintLabel(lang.LocalizeKey("settings.start_silent_hint", "Start the application minimized in the system tray when launching on OS startup.")),
 			),
 		),
 		widget.NewCard(
@@ -411,6 +409,8 @@ func (s *Settings) Tab() (*container.TabItem, error) {
 			container.NewVBox(
 				s.AutoStartCheck,
 				newHintLabel(lang.LocalizeKey("settings.autostart_hint", "Automatically start the application when Windows starts.")),
+				s.StartSilentCheck,
+				newHintLabel(lang.LocalizeKey("settings.start_silent_hint", "Start the application minimized in the system tray when launching on OS startup.")),
 			),
 		),
 		widget.NewCard(
@@ -764,7 +764,7 @@ func (s *Settings) newOpenSourcePage() fyne.CanvasObject {
 		default:
 			for _, dependency := range s.thirdPartyLicenses {
 				dep := dependency
-				licenseList.Add(widget.NewButton(
+				openBtn := newTruncatedButton(
 					lang.LocalizeKey("settings.opensource.package_button", "{{.Name}} ({{.License}})", map[string]any{
 						"Name":    dep.Name,
 						"License": dep.LicenseName,
@@ -776,21 +776,24 @@ func (s *Settings) newOpenSourcePage() fyne.CanvasObject {
 							dep.LicenseURL,
 						)
 					},
-				))
+				)
+				licenseList.Add(openBtn)
 			}
 		}
 
+		projLicenseBtn := newTruncatedButton(
+			lang.LocalizeKey("settings.opensource.project_license", "Project License"),
+			func() {
+				showDetailPage(
+					lang.LocalizeKey("settings.opensource.project_license", "Project License"),
+					s.projectLicense.LicenseText,
+					s.projectLicense.LicenseURL,
+				)
+			},
+		)
+
 		listPage := container.NewVScroll(container.NewVBox(
-			widget.NewButton(
-				lang.LocalizeKey("settings.opensource.project_license", "Project License"),
-				func() {
-					showDetailPage(
-						lang.LocalizeKey("settings.opensource.project_license", "Project License"),
-						s.projectLicense.LicenseText,
-						s.projectLicense.LicenseURL,
-					)
-				},
-			),
+			projLicenseBtn,
 			widget.NewCard(
 				lang.LocalizeKey("settings.opensource.dependencies", "Third-party dependencies"),
 				"",
@@ -843,6 +846,55 @@ func loadProjectLicense() (projectLicense, error) {
 	project.LicenseURL = strings.TrimSpace(strings.ReplaceAll(project.LicenseURL, "\\", "/"))
 	project.LicenseName = strings.TrimSpace(project.LicenseName)
 	return project, nil
+}
+
+type truncatedButton struct {
+	widget.BaseWidget
+	Text     string
+	OnTapped func()
+}
+
+func newTruncatedButton(text string, tapped func()) *truncatedButton {
+	b := &truncatedButton{Text: text, OnTapped: tapped}
+	b.ExtendBaseWidget(b)
+	return b
+}
+
+type truncatedButtonRenderer struct {
+	b     *truncatedButton
+	btn   *widget.Button
+	label *widget.Label
+}
+
+func (r *truncatedButtonRenderer) Objects() []fyne.CanvasObject {
+	return []fyne.CanvasObject{r.btn, r.label}
+}
+
+func (r *truncatedButtonRenderer) Destroy() {}
+
+func (r *truncatedButtonRenderer) MinSize() fyne.Size {
+	return r.label.MinSize()
+}
+
+func (r *truncatedButtonRenderer) Refresh() {
+	r.label.SetText(r.b.Text)
+	r.btn.OnTapped = r.b.OnTapped
+}
+
+func (r *truncatedButtonRenderer) Layout(size fyne.Size) {
+	r.btn.Resize(size)
+	r.label.Resize(size)
+}
+
+func (b *truncatedButton) CreateRenderer() fyne.WidgetRenderer {
+	label := widget.NewLabelWithStyle(b.Text, fyne.TextAlignCenter, fyne.TextStyle{})
+	label.Truncation = fyne.TextTruncateEllipsis
+	btn := widget.NewButton("", b.OnTapped)
+	return &truncatedButtonRenderer{
+		b:     b,
+		btn:   btn,
+		label: label,
+	}
 }
 
 func newHintLabel(text string) *widget.Label {
