@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/url"
 	"regexp"
 	"strings"
@@ -75,10 +76,13 @@ func (s *State) ShowEpicLoginWindow(onSuccess func(), onCancel func()) {
 	openLoginPage := func() {
 		u, err := url.Parse(authURL)
 		if err != nil {
+			slog.Error("Failed to parse Epic auth URL", "error", err)
 			dialog.ShowError(err, s.Window)
 			return
 		}
+		slog.Info("Opening Epic login page in external browser", "url", authURL)
 		if err := fyne.CurrentApp().OpenURL(u); err != nil {
+			slog.Error("Failed to open Epic auth URL in external browser", "error", err)
 			dialog.ShowError(err, s.Window)
 		}
 	}
@@ -100,6 +104,7 @@ func (s *State) ShowEpicLoginWindow(onSuccess func(), onCancel func()) {
 	)
 
 	popup.SetOnClosed(func() {
+		slog.Info("Epic login popup closed", "success", success.Load())
 		if flowCancel != nil {
 			flowCancel()
 		}
@@ -116,8 +121,12 @@ func (s *State) ShowEpicLoginWindow(onSuccess func(), onCancel func()) {
 
 	setStatus(lang.LocalizeKey("settings.epic_login_waiting", "Please complete Epic Games login in your browser."))
 
+	slog.Info("Initiating Epic login flow", "authURL", authURL)
 	webViewCodeCh, webViewErrCh, stopWebView := startEpicWebView2Login(authURL)
 	clipboardFallbackEnabled := webViewCodeCh == nil || webViewErrCh == nil
+	if clipboardFallbackEnabled {
+		slog.Warn("WebView2 login unavailable, falling back immediately to clipboard / browser")
+	}
 
 	go func() {
 		ticker := time.NewTicker(700 * time.Millisecond)
@@ -131,8 +140,10 @@ func (s *State) ShowEpicLoginWindow(onSuccess func(), onCancel func()) {
 		for {
 			select {
 			case <-ctx.Done():
+				slog.Info("Epic login context cancelled")
 				return
 			case <-timeout.C:
+				slog.Warn("Epic login timed out after 5 minutes")
 				fyne.Do(func() {
 					dialog.ShowError(errors.New(lang.LocalizeKey("settings.epic_login_timeout", "Epicログインがタイムアウトしました。もう一度お試しください。")), s.Window)
 				})
@@ -143,6 +154,7 @@ func (s *State) ShowEpicLoginWindow(onSuccess func(), onCancel func()) {
 					continue
 				}
 				if err != nil {
+					slog.Warn("WebView2 login error encountered", "error", err)
 					goto clipboardFallback
 				}
 			case code, ok := <-webViewCodeCh:
@@ -150,6 +162,7 @@ func (s *State) ShowEpicLoginWindow(onSuccess func(), onCancel func()) {
 					webViewCodeCh = nil
 					goto clipboardFallback
 				}
+				slog.Info("Received auth code from WebView2", "codeLength", len(code))
 				clipboardContent := code
 				lastClipboard = clipboardContent
 				if _, exists := triedCodes[clipboardContent]; exists {
@@ -161,17 +174,20 @@ func (s *State) ShowEpicLoginWindow(onSuccess func(), onCancel func()) {
 
 				session, err := s.Core.EpicApi.LoginWithCode(clipboardContent)
 				if err != nil {
+					slog.Warn("Failed to login with auth code from WebView2", "error", err)
 					setStatus(lang.LocalizeKey("settings.epic_login_code_failed", "Code verification failed. Please try again after logging in on your browser."))
 					continue
 				}
 
 				if err := s.Core.EpicSessionManager.Save(session); err != nil {
+					slog.Error("Failed to save Epic session", "error", err)
 					fyne.Do(func() {
 						dialog.ShowError(err, s.Window)
 					})
 					return
 				}
 
+				slog.Info("Successfully logged in with Epic Games via WebView2")
 				success.Store(true)
 				cancel()
 				stopWebView()
@@ -201,21 +217,25 @@ func (s *State) ShowEpicLoginWindow(onSuccess func(), onCancel func()) {
 				}
 				triedCodes[code] = struct{}{}
 
+				slog.Info("Detected auth code in clipboard", "codeLength", len(code))
 				setStatus(lang.LocalizeKey("settings.epic_login_code_detected", "Auth code detected. Completing login..."))
 
 				session, err := s.Core.EpicApi.LoginWithCode(code)
 				if err != nil {
+					slog.Warn("Failed to login with auth code from clipboard", "error", err)
 					setStatus(lang.LocalizeKey("settings.epic_login_code_failed", "Code verification failed. Please try again after logging in on your browser."))
 					continue
 				}
 
 				if err := s.Core.EpicSessionManager.Save(session); err != nil {
+					slog.Error("Failed to save Epic session from clipboard login", "error", err)
 					fyne.Do(func() {
 						dialog.ShowError(err, s.Window)
 					})
 					return
 				}
 
+				slog.Info("Successfully logged in with Epic Games via clipboard code")
 				success.Store(true)
 				cancel()
 				stopWebView()
@@ -229,15 +249,18 @@ func (s *State) ShowEpicLoginWindow(onSuccess func(), onCancel func()) {
 			}
 
 		clipboardFallback:
+			slog.Info("Prompting user for external browser login fallback")
 			fyne.Do(func() {
 				dialog.ShowConfirm(
 					lang.LocalizeKey("settings.epic_login_fallback_title", "WebView Login Failed"),
 					lang.LocalizeKey("settings.epic_login_fallback_message", "Failed to log in via WebView. Do you want to continue login in an external browser?"),
 					func(confirm bool) {
 						if !confirm {
+							slog.Info("User declined browser fallback login")
 							cancel()
 							return
 						}
+						slog.Info("User accepted browser fallback login")
 						clipboardFallbackEnabled = true
 						setStatus(lang.LocalizeKey("settings.epic_login_waiting", "Please complete Epic Games login in your browser."))
 						openLoginPage()
