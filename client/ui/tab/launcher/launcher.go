@@ -1249,6 +1249,28 @@ func (l *Launcher) handleGameLink(joinURI *core.JoinGameLink) {
 				return
 			}
 
+			if joinInfo != nil && joinInfo.GameVersion != "" {
+				gamePath := l.state.ModInstallDir()
+				if gamePath == "" {
+					gamePath, _ = l.state.Core.DetectGamePath()
+				}
+				if gamePath != "" {
+					gameVersion, err := aumgr.GetVersion(gamePath)
+					if err == nil && gameVersion != "" && joinInfo.GameVersion != gameVersion {
+						errMsg := lang.LocalizeKey(
+							"launcher.error.game_version_mismatch",
+							"The room's Among Us version ({{.RoomVersion}}) does not match your installed game version ({{.GameVersion}}).",
+							map[string]any{
+								"RoomVersion": joinInfo.GameVersion,
+								"GameVersion": gameVersion,
+							},
+						)
+						l.state.ShowErrorDialog(errors.New(errMsg))
+						return
+					}
+				}
+			}
+
 			runningProfileID, runningPID := l.state.Core.CurrentRunningProfileAndPID()
 			if runningProfile, ok := l.state.Core.ProfileManager.Get(runningProfileID); ok && runningPID > 0 && runningProfileID == shared.ID && l.state.Core.HasDirectJoinFeature(runningProfile.Versions()) {
 				if errCh := l.state.Core.SendLobbyJoinByPID(runningPID, *joinInfo); errCh != nil {

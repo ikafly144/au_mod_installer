@@ -21,6 +21,7 @@ type LaunchJoinInfo struct {
 	ServerPort     uint16
 	MatchMakerIp   string
 	MatchMakerPort uint16
+	GameVersion    string
 }
 
 // ResolveProfileDependencies resolves all required dependencies for the given profile.

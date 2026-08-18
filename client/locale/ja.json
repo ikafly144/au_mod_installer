@@ -321,5 +321,6 @@
     "launcher.error.failed_to_resolve_dependencies": "依存関係の解決に失敗しました: {{.Error}}",
     "profile.error.failed_to_create_directory": "プロファイルディレクトリの作成に失敗しました: {{.Error}}",
     "profile.error.failed_to_fetch_latest_version": "最新バージョンの取得に失敗しました ({{.ModID}}:{{.VersionID}}): {{.Error}}",
+    "launcher.error.game_version_mismatch": "ルームのAmong Usバージョン ({{.RoomVersion}}) とインストールされているゲームのバージョン ({{.GameVersion}}) が一致しません。",
     "settings.app.version": "バージョン: {{.Version}} ({{.Revision}})"
 }

@@ -234,7 +234,7 @@ func (m *shareGameManager) deleteSessionLocked(sessionID string) {
 
 func dedupeRoomKey(ip string, aupack []byte, room restcommon.RoomInfo) string {
 	sum := sha256.Sum256(aupack)
-	return fmt.Sprintf("%s|%s|%s|%s|%d", ip, hex.EncodeToString(sum[:]), room.LobbyCode, room.MatchMakerIp, room.MatchMakerPort)
+	return fmt.Sprintf("%s|%s|%s|%s|%d|%s", ip, hex.EncodeToString(sum[:]), room.LobbyCode, room.MatchMakerIp, room.MatchMakerPort, room.GameVersion)
 }
 
 func randomURLToken(size int) (string, error) {

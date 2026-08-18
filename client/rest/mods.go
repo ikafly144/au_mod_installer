@@ -104,6 +104,11 @@ func (c *clientImpl) ShareGame(aupack []byte, room rest.RoomInfo) (*rest.ShareGa
 	if err := writer.WriteField("match_maker_port", fmt.Sprint(room.MatchMakerPort)); err != nil {
 		return nil, err
 	}
+	if room.GameVersion != "" {
+		if err := writer.WriteField("game_version", room.GameVersion); err != nil {
+			return nil, err
+		}
+	}
 	if err := writer.Close(); err != nil {
 		return nil, err
 	}

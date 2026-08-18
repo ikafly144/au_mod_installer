@@ -21,6 +21,7 @@ type RoomInfo struct {
 	ServerPort     uint16 `json:"server_port,omitempty"`
 	MatchMakerIp   string `json:"match_maker_ip,omitempty"`
 	MatchMakerPort uint16 `json:"match_maker_port,omitempty"`
+	GameVersion    string `json:"game_version,omitempty"`
 }
 
 type ShareGameRequest struct {

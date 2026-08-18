@@ -171,6 +171,7 @@ func router(srv *service.ModService, versionProvider service.VersionInfoProvider
 				ServerPort:     serverPort,
 				MatchMakerIp:   strings.TrimSpace(ctx.PostForm("match_maker_ip")),
 				MatchMakerPort: matchMakerPort,
+				GameVersion:    strings.TrimSpace(ctx.PostForm("game_version")),
 			},
 		}
 		if len(req.Aupack) == 0 {

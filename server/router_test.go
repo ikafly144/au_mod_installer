@@ -36,6 +36,7 @@ func TestRouter_ShareGame_AcceptsMultipartFormData(t *testing.T) {
 	require.NoError(t, writer.WriteField("lobby_code", "ABCD"))
 	require.NoError(t, writer.WriteField("server_ip", "127.0.0.1"))
 	require.NoError(t, writer.WriteField("server_port", "22023"))
+	require.NoError(t, writer.WriteField("game_version", "2024.3.5"))
 	require.NoError(t, writer.Close())
 
 	req := httptest.NewRequest(http.MethodPost, "/share_game", body)
@@ -52,6 +53,15 @@ func TestRouter_ShareGame_AcceptsMultipartFormData(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &rs))
 	assert.NotEmpty(t, rs.SessionID)
 	assert.NotEmpty(t, rs.HostKey)
+
+	// Verify /join_game returns game_version
+	joinReq := httptest.NewRequest(http.MethodGet, "/join_game?session_id="+rs.SessionID+"&download=1", nil)
+	joinRec := httptest.NewRecorder()
+	handler.ServeHTTP(joinRec, joinReq)
+	require.Equal(t, http.StatusOK, joinRec.Code)
+	var downloadRs restcommon.JoinGameDownloadResponse
+	require.NoError(t, json.Unmarshal(joinRec.Body.Bytes(), &downloadRs))
+	assert.Equal(t, "2024.3.5", downloadRs.Room.GameVersion)
 }
 
 func TestRouter_ShareGame_RejectsInvalidServerPort(t *testing.T) {

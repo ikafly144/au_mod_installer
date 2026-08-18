@@ -2,6 +2,7 @@ package core
 
 import (
 	"log/slog"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -29,15 +30,16 @@ func (a *App) SetRunningDirectJoin(enabled bool) {
 	a.runningProfileMu.Unlock()
 }
 
-func (a *App) SetRunningPlayStartedAt(startedAt time.Time) {
+func (a *App) SetRunningPlayStartedAt(t time.Time) {
 	a.runningProfileMu.Lock()
-	a.runningStartedAt = startedAt
+	a.runningStartedAt = t
 	a.runningProfileMu.Unlock()
 }
 
 func (a *App) OnGameStartedInternal(profileID uuid.UUID, pid int) {
 	a.runningProfileMu.Lock()
 	wasRunning := a.runningProfileID == profileID && a.runningGamePID > 0
+	a.runningProfileID = profileID
 	a.runningGamePID = pid
 	directJoin := a.runningDirectJoin
 	isRunning := a.runningProfileID == profileID && a.runningGamePID > 0
@@ -57,6 +59,7 @@ func (a *App) OnGameExitedInternal(profileID uuid.UUID) {
 	a.StopLobbyPolling()
 	a.runningProfileMu.Lock()
 	wasRunning := a.runningProfileID == profileID && a.runningGamePID > 0
+	a.runningProfileID = uuid.Nil
 	a.runningGamePID = 0
 	a.runningDirectJoin = false
 	a.runningStartedAt = time.Time{}
@@ -111,9 +114,10 @@ func (a *App) StartLobbyPolling(pid int) {
 	stop := a.StartLobbyInfoPolling(pid, 2*time.Second, func(info *IPCLobbyInfo) {
 		a.runningProfileMu.Lock()
 		a.lobbyInfo = info
+		onLobbyInfoUpdated := a.OnLobbyInfoUpdated
 		a.runningProfileMu.Unlock()
-		if a.OnLobbyInfoUpdated != nil {
-			a.OnLobbyInfoUpdated(info)
+		if onLobbyInfoUpdated != nil {
+			onLobbyInfoUpdated(info)
 		}
 	}, func(err error) {
 		slog.Debug("Lobby polling failed", "error", err)
@@ -151,12 +155,32 @@ func (a *App) CurrentRoomInfo(info *IPCLobbyInfo) (commonrest.RoomInfo, bool) {
 	if info.ServerIP == "" || info.ServerPort <= 0 {
 		return commonrest.RoomInfo{}, false
 	}
+
+	gameVersion := ""
+	a.runningProfileMu.Lock()
+	profileID := a.runningProfileID
+	a.runningProfileMu.Unlock()
+	if profileID != uuid.Nil {
+		profileDir := filepath.Join(a.ConfigDir, "profiles", profileID.String())
+		if meta, err := modmgr.GetProfileMetadata(profileDir); err == nil && meta != nil {
+			gameVersion = meta.GameVersion
+		}
+	}
+	if gameVersion == "" {
+		if gamePath, err := a.DetectGamePath(); err == nil && gamePath != "" {
+			if v, err := aumgr.GetVersion(gamePath); err == nil {
+				gameVersion = v
+			}
+		}
+	}
+
 	room := commonrest.RoomInfo{
 		LobbyCode:      strings.TrimSpace(info.LobbyCode),
 		ServerIP:       strings.TrimSpace(info.ServerIP),
 		ServerPort:     uint16(info.ServerPort),
 		MatchMakerIp:   strings.TrimSpace(info.MatchMakerIp),
 		MatchMakerPort: uint16(info.MatchMakerPort),
+		GameVersion:    strings.TrimSpace(gameVersion),
 	}
 	return room, true
 }

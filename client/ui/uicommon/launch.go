@@ -69,6 +69,23 @@ func (s *State) Launch(path string, directJoinEnabled bool) {
 
 	startedAt := time.Now()
 	joinInfo := s.TakePendingJoinInfo()
+	if joinInfo != nil && joinInfo.GameVersion != "" {
+		gameVersion, err := aumgr.GetVersion(path)
+		if err == nil && gameVersion != "" && joinInfo.GameVersion != gameVersion {
+			errMsg := lang.LocalizeKey(
+				"launcher.error.game_version_mismatch",
+				"The room's Among Us version ({{.RoomVersion}}) does not match your installed game version ({{.GameVersion}}).",
+				map[string]any{
+					"RoomVersion": joinInfo.GameVersion,
+					"GameVersion": gameVersion,
+				},
+			)
+			s.ShowErrorDialog(errors.New(errMsg))
+			_ = s.CanLaunch.Set(true)
+			_ = s.CanInstall.Set(true)
+			return
+		}
+	}
 	var launchSucceeded bool
 	if err := s.Core.ExecuteLaunch(path, profileDir, joinInfo, func(pid int) error {
 		if err := profileLock.SetGamePID(pid, startedAt, directJoinEnabled); err != nil {

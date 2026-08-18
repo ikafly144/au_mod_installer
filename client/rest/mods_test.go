@@ -70,9 +70,10 @@ func TestClientImpl_CheckForUpdates(t *testing.T) {
 func TestClientImpl_ShareGame_UsesMultipartFormData(t *testing.T) {
 	expectedAupack := []byte("test-aupack-bytes")
 	expectedRoom := restcommon.RoomInfo{
-		LobbyCode:  "ABCD",
-		ServerIP:   "127.0.0.1",
-		ServerPort: 22023,
+		LobbyCode:   "ABCD",
+		ServerIP:    "127.0.0.1",
+		ServerPort:  22023,
+		GameVersion: "2024.3.5",
 	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, http.MethodPost, r.Method)
@@ -90,6 +91,7 @@ func TestClientImpl_ShareGame_UsesMultipartFormData(t *testing.T) {
 		assert.Equal(t, expectedRoom.LobbyCode, r.FormValue("lobby_code"))
 		assert.Equal(t, expectedRoom.ServerIP, r.FormValue("server_ip"))
 		assert.Equal(t, "22023", r.FormValue("server_port"))
+		assert.Equal(t, "2024.3.5", r.FormValue("game_version"))
 
 		require.NoError(t, json.NewEncoder(w).Encode(restcommon.ShareGameResponse{
 			URL:       "/join_game?session_id=s1",

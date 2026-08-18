@@ -179,7 +179,7 @@ func (a *App) HeartbeatRoomShareAsync() {
 }
 
 func RoomKeyForCache(room commonrest.RoomInfo, profileID uuid.UUID) string {
-	return strings.ToUpper(strings.TrimSpace(room.LobbyCode)) + "|" + strings.TrimSpace(room.ServerIP) + "|" + fmt.Sprint(room.ServerPort) + "|" + profileID.String()
+	return strings.ToUpper(strings.TrimSpace(room.LobbyCode)) + "|" + strings.TrimSpace(room.ServerIP) + "|" + fmt.Sprint(room.ServerPort) + "|" + strings.TrimSpace(room.GameVersion) + "|" + profileID.String()
 }
 
 func (a *App) GetLobbyInfo() *IPCLobbyInfo {
@@ -493,6 +493,7 @@ func (a *App) HandleJoinGameDownload(sessionID string, serverBase string) (*prof
 		ServerPort:     rs.Room.ServerPort,
 		MatchMakerIp:   rs.Room.MatchMakerIp,
 		MatchMakerPort: rs.Room.MatchMakerPort,
+		GameVersion:    rs.Room.GameVersion,
 	}
 	return shared, iconPNG, joinInfo, nil
 }
