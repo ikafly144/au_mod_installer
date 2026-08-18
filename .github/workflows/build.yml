@@ -1,6 +1,6 @@
 # .github/workflows/build.yml
 name: build
-run-name: build ${{ case(startsWith(github.ref, 'refs/tags/v'), 'Release', join('Snapshot', github.run_number)) }} for ${{ github.ref_name }} (commit ${{ github.sha }})
+run-name: "build ${{ case(startsWith(github.ref, 'refs/tags/v'), 'Release', format('Snapshot #{0}', github.run_number)) }} for ${{ github.ref_name }}"
 
 on:
   push:
