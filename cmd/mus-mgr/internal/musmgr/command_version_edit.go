@@ -70,13 +70,20 @@ func (f *commandFactory) newVersionEditCommand() *cli.Command {
 				changed = true
 			}
 
+			modInfo, err := repo.GetModDetails(modID)
+			if err != nil {
+				return fmt.Errorf("failed to get mod details: %w", err)
+			}
+
 			if cmd.Bool("set-latest") {
-				if err := repo.UpdateModFields(modID, map[string]any{"latest_version_id": versionID}); err != nil {
+				modInfo.LatestVersionID = &versionID
+				if err := repo.UpdateMod(modID, modInfo); err != nil {
 					return fmt.Errorf("failed to update latest version: %w", err)
 				}
 				changed = true
 			} else if cmd.Bool("clear-latest-version") {
-				if err := repo.UpdateModFields(modID, map[string]any{"latest_version_id": nil}); err != nil {
+				modInfo.LatestVersionID = nil
+				if err := repo.UpdateMod(modID, modInfo); err != nil {
 					return fmt.Errorf("failed to clear latest version: %w", err)
 				}
 				changed = true
