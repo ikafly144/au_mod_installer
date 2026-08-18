@@ -211,6 +211,8 @@ func NewSettings(state *uicommon.State) *Settings {
 		displayScaleValues:  displayScaleValues,
 		currentDisplayScale: clampDisplayScale(currentScale),
 	}
+	s.epicAccountLabel.Wrapping = fyne.TextWrapWord
+	s.discordAccountLabel.Wrapping = fyne.TextWrapWord
 	s.DisplayScaleSelect.OnChanged = s.onDisplayScaleChanged
 	s.DisplayScaleSlider.OnChanged = s.onDisplayScaleSliderChanged
 	s.DisplayScaleSlider.OnChangeEnded = s.onDisplayScaleSliderChangeEnded
@@ -390,7 +392,7 @@ func (s *Settings) Tab() (*container.TabItem, error) {
 			"",
 			container.NewVBox(
 				s.AutoSharingCheck,
-				widget.NewLabelWithStyle(lang.LocalizeKey("settings.auto_sharing_hint", "Automatically generate and update join link when joining a room."), fyne.TextAlignLeading, fyne.TextStyle{Italic: true}),
+				newHintLabel(lang.LocalizeKey("settings.auto_sharing_hint", "Automatically generate and update join link when joining a room.")),
 			),
 		),
 		widget.NewCard(
@@ -398,9 +400,9 @@ func (s *Settings) Tab() (*container.TabItem, error) {
 			"",
 			container.NewVBox(
 				s.TrayResidentCheck,
-				widget.NewLabelWithStyle(lang.LocalizeKey("settings.tray_resident_hint", "Keep running in the background and stay in the system tray when the window is closed."), fyne.TextAlignLeading, fyne.TextStyle{Italic: true}),
+				newHintLabel(lang.LocalizeKey("settings.tray_resident_hint", "Keep running in the background and stay in the system tray when the window is closed.")),
 				s.StartSilentCheck,
-				widget.NewLabelWithStyle(lang.LocalizeKey("settings.start_silent_hint", "Start the application minimized in the system tray when launching on OS startup."), fyne.TextAlignLeading, fyne.TextStyle{Italic: true}),
+				newHintLabel(lang.LocalizeKey("settings.start_silent_hint", "Start the application minimized in the system tray when launching on OS startup.")),
 			),
 		),
 		widget.NewCard(
@@ -408,7 +410,7 @@ func (s *Settings) Tab() (*container.TabItem, error) {
 			"",
 			container.NewVBox(
 				s.AutoStartCheck,
-				widget.NewLabelWithStyle(lang.LocalizeKey("settings.autostart_hint", "Automatically start the application when Windows starts."), fyne.TextAlignLeading, fyne.TextStyle{Italic: true}),
+				newHintLabel(lang.LocalizeKey("settings.autostart_hint", "Automatically start the application when Windows starts.")),
 			),
 		),
 		widget.NewCard(
@@ -843,8 +845,15 @@ func loadProjectLicense() (projectLicense, error) {
 	return project, nil
 }
 
+func newHintLabel(text string) *widget.Label {
+	lbl := widget.NewLabelWithStyle(text, fyne.TextAlignLeading, fyne.TextStyle{Italic: true})
+	lbl.Wrapping = fyne.TextWrapWord
+	return lbl
+}
+
 func settingsEntry(title string, content fyne.CanvasObject) fyne.CanvasObject {
 	label := widget.NewLabelWithStyle(title, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	label.Wrapping = fyne.TextWrapWord
 	return container.New(layout.NewBorderLayout(nil, nil, label, nil), content, label)
 }
 
