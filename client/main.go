@@ -5,6 +5,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"errors"
 	"flag"
 	"io"
 	"log/slog"
@@ -13,6 +14,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"fyne.io/fyne/v2/app"
@@ -252,13 +254,22 @@ func startIPCListener(s *uicommon.State) {
 		slog.Error("Failed to listen on pipe", "error", err)
 		return
 	}
-	defer ln.Close()
+
+	var closeOnce sync.Once
+	closePipe := func() {
+		closeOnce.Do(func() {
+			slog.Info("Closing IPC pipe listener")
+			_ = ln.Close()
+		})
+	}
+	s.CloseIPC = closePipe
+	defer closePipe()
 
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
-			slog.Error("Failed to accept pipe connection", "error", err)
-			continue
+			slog.Info("IPC listener accept loop ended", "error", err)
+			break
 		}
 		go func(c net.Conn) {
 			defer c.Close()
@@ -266,7 +277,7 @@ func startIPCListener(s *uicommon.State) {
 			for {
 				line, err := reader.ReadString('\n')
 				if err != nil {
-					if err != io.EOF {
+					if err != io.EOF && !errors.Is(err, net.ErrClosed) {
 						slog.Error("Failed to read from pipe", "error", err)
 					}
 					break

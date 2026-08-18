@@ -32,6 +32,9 @@ func setupSystemTray(w fyne.Window, state *uicommon.State, onQuit func()) {
 
 	quitItem := fyne.NewMenuItem(lang.LocalizeKey("tray.quit", "Quit"), func() {
 		slog.Info("Quitting application from system tray")
+		if state != nil && state.CloseIPC != nil {
+			state.CloseIPC()
+		}
 		if onQuit != nil {
 			onQuit()
 		}

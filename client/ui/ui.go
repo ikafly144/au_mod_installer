@@ -211,6 +211,9 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 
 	ctx, cancel := context.WithCancel(context.Background())
 	onClosed := func() {
+		if state.CloseIPC != nil {
+			state.CloseIPC()
+		}
 		if state.Core != nil && state.Core.DiscordService != nil {
 			state.Core.DiscordService.SetIdleActivityEnabled(false)
 		}

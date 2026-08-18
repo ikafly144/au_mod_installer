@@ -152,6 +152,7 @@ type State struct {
 	OnLobbyInfoUpdated      func(info *core.IPCLobbyInfo)
 	OnProfileMetricsUpdated func(profileID uuid.UUID)
 	ShowWindow              func()
+	CloseIPC                func()
 
 	pendingJoinInfo *core.LaunchJoinInfo
 }
