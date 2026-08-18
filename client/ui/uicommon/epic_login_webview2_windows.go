@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -42,7 +43,7 @@ func parseEpicCodeFromWebViewPayload(payload epicWebViewPayload) (string, bool) 
 
 	if payload.URL != "" {
 		if u, err := url.Parse(payload.URL); err == nil {
-			for _, key := range []string{"exchange_code", "code", "authorization_code"} {
+			for _, key := range []string{"exchange_code", "code", "authorization_code", "authorizationCode"} {
 				if code, ok := try(u.Query().Get(key)); ok {
 					return code, true
 				}
@@ -72,107 +73,94 @@ func parseEpicCodeFromWebViewPayload(payload epicWebViewPayload) (string, bool) 
 const epicWebView2BridgeScript = `(function () {
   if (window.top !== window.self) return;
 
-  function reportState(event, details) {
-    if (typeof window.epicReportState === 'function') {
-      try { window.epicReportState(event, String(details || "")); } catch (_) {}
+  var lastReportedHref = "";
+  var sentCode = false;
+
+  function reportNav(href) {
+    if (!href || href === lastReportedHref) return;
+    lastReportedHref = href;
+    if (typeof window.epicReportNav === 'function') {
+      try { window.epicReportNav(href); } catch (_) {}
     }
   }
 
-  reportState("script_injected", window.location.href);
-
-  const sent = new Set();
-  let lastHref = "";
-  let lastBodySample = "";
-
-  function sendPayload(payload) {
-    if (!payload || !payload.code) return;
-    const key = payload.code;
-    if (sent.has(key)) return;
-    sent.add(key);
-    reportState("code_detected", "code_len=" + key.length + ", url=" + (payload.url || window.location.href));
+  function sendCode(code, raw, url) {
+    if (!code || sentCode) return;
+    var m = String(code).trim().match(/[a-f0-9]{32}/i);
+    if (!m) return;
+    sentCode = true;
     if (typeof window.epicReportCode === 'function') {
-      try { window.epicReportCode(payload); } catch (_) {}
+      try {
+        window.epicReportCode({
+          code: m[0].toLowerCase(),
+          raw: raw || "",
+          url: url || window.location.href || ""
+        });
+      } catch (_) {}
     }
   }
 
-  function sendCandidate(value, raw) {
-    if (!value) return;
-    const code = String(value).trim();
-    if (!code) return;
-    const m = code.match(/[a-f0-9]{32}/i);
-    if (m) {
-      sendPayload({ code: m[0].toLowerCase(), raw: raw || "", url: window.location.href || "" });
-    }
-  }
-
-  function inspectText(text) {
-    if (!text) return;
-    const raw = String(text);
+  function checkUrl(href) {
+    if (!href) return;
+    reportNav(href);
     try {
-      const obj = JSON.parse(raw);
-      const keys = ['exchange_code', 'code', 'authorization_code', 'authorizationCode'];
-      for (const key of keys) {
-        if (obj && typeof obj[key] === 'string') {
-          sendCandidate(obj[key], raw);
+      var u = new URL(href, window.location.origin);
+      var params = ['exchange_code', 'code', 'authorization_code', 'authorizationCode'];
+      for (var i = 0; i < params.length; i++) {
+        var v = u.searchParams.get(params[i]);
+        if (v) {
+          sendCode(v, "", href);
+          return;
+        }
+      }
+      if (u.hash && u.hash.length > 1) {
+        var hashText = decodeURIComponent(u.hash.slice(1));
+        var m = hashText.match(/[a-f0-9]{32}/i);
+        if (m) {
+          sendCode(m[0], hashText, href);
+          return;
         }
       }
     } catch (_) {}
-    const m = raw.match(/[a-f0-9]{32}/i);
-    if (m) sendCandidate(m[0], raw);
   }
 
-  function inspectUrl(href) {
-    if (!href || href === lastHref) return;
-    lastHref = href;
-    reportState("navigated", href);
+  function checkBody() {
+    if (sentCode) return;
     try {
-      const u = new URL(href, window.location.origin);
-      ['exchange_code', 'code', 'authorization_code'].forEach((key) => {
-        const v = u.searchParams.get(key);
-        if (v) sendCandidate(v, "");
-      });
-      if (u.hash && u.hash.length > 1) {
-        inspectText(decodeURIComponent(u.hash.slice(1)));
+      if (!document || !document.body) return;
+      var text = (document.body.innerText || document.body.textContent || '').trim();
+      if (!text) return;
+      if (text.indexOf('{') !== -1 || text.indexOf('code') !== -1 || text.indexOf('Code') !== -1 || text.indexOf('exchange') !== -1) {
+        try {
+          var obj = JSON.parse(text);
+          var keys = ['exchange_code', 'code', 'authorization_code', 'authorizationCode'];
+          for (var i = 0; i < keys.length; i++) {
+            if (obj && typeof obj[keys[i]] === 'string') {
+              sendCode(obj[keys[i]], text, window.location.href);
+              return;
+            }
+          }
+        } catch (_) {}
+        var m = text.match(/[a-f0-9]{32}/i);
+        if (m) {
+          sendCode(m[0], text, window.location.href);
+        }
       }
     } catch (_) {}
   }
 
-  function inspectBodySample() {
-    try {
-      if (!document || !document.body) return;
-      const text = (document.body.textContent || '').trim();
-      if (!text) return;
-      const sample = text.length > 4096 ? text.slice(0, 4096) : text;
-      if (sample === lastBodySample) return;
-      lastBodySample = sample;
-      reportState("body_updated", "len=" + text.length + ", sample=" + (sample.length > 128 ? sample.slice(0, 128) + "..." : sample));
-      inspectText(sample);
-    } catch (_) {}
+  function onPageCheck() {
+    checkUrl(window.location.href);
+    checkBody();
   }
 
-  function tick() {
-    inspectUrl(window.location.href);
-    inspectBodySample();
-  }
+  window.addEventListener('load', onPageCheck);
+  window.addEventListener('pageshow', onPageCheck);
+  window.addEventListener('DOMContentLoaded', onPageCheck);
+  window.addEventListener('hashchange', function() { checkUrl(window.location.href); });
+  window.addEventListener('popstate', function() { checkUrl(window.location.href); });
 
-  window.addEventListener('load', function() {
-    reportState("load_event", window.location.href);
-    tick();
-  });
-  window.addEventListener('DOMContentLoaded', function() {
-    reportState("dom_content_loaded", window.location.href);
-    tick();
-  });
-  window.addEventListener('hashchange', function() {
-    reportState("hash_change", window.location.href);
-    tick();
-  });
-  window.addEventListener('popstate', function() {
-    reportState("pop_state", window.location.href);
-    tick();
-  });
-  setInterval(tick, 1000);
-  tick();
+  onPageCheck();
 })();`
 
 func startEpicWebView2Login(authURL string) (<-chan string, <-chan error, func()) {
@@ -190,13 +178,16 @@ func startEpicWebView2Login(authURL string) (<-chan string, <-chan error, func()
 			target := w
 			w = nil
 			target.Dispatch(func() {
-				slog.Debug("Destroying WebView2 instance from stop callback")
+				slog.Info("Destroying WebView2 instance from stop callback")
 				target.Destroy()
 			})
 		}
 	}
 
 	go func() {
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+
 		defer close(codeCh)
 		defer close(errCh)
 
@@ -206,9 +197,9 @@ func startEpicWebView2Login(authURL string) (<-chan string, <-chan error, func()
 			errCh <- err
 			return
 		}
-		slog.Debug("Created temporary data directory for WebView2", "path", tmpPath)
+		slog.Info("Created temporary data directory for WebView2", "path", tmpPath)
 		defer func() {
-			slog.Debug("Removing temporary data directory for WebView2", "path", tmpPath)
+			slog.Info("Removing temporary data directory for WebView2", "path", tmpPath)
 			_ = os.RemoveAll(tmpPath)
 		}()
 
@@ -240,10 +231,10 @@ func startEpicWebView2Login(authURL string) (<-chan string, <-chan error, func()
 		}()
 
 		var delivered atomic.Bool
-		if err := wv.Bind("epicReportState", func(event string, details string) {
-			slog.Debug("WebView2 state event", "event", event, "details", details)
+		if err := wv.Bind("epicReportNav", func(url string) {
+			slog.Info("WebView2 navigated to URL", "url", url)
 		}); err != nil {
-			slog.Warn("Failed to bind epicReportState to WebView2", "error", err)
+			slog.Warn("Failed to bind epicReportNav to WebView2", "error", err)
 		}
 
 		if err := wv.Bind("epicReportCode", func(payload epicWebViewPayload) {

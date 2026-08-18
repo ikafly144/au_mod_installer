@@ -103,8 +103,12 @@ func (s *State) ShowEpicLoginWindow(onSuccess func(), onCancel func()) {
 		s.Window,
 	)
 
+	var stopWebView func()
 	popup.SetOnClosed(func() {
 		slog.Info("Epic login popup closed", "success", success.Load())
+		if stopWebView != nil {
+			stopWebView()
+		}
 		if flowCancel != nil {
 			flowCancel()
 		}
@@ -122,13 +126,20 @@ func (s *State) ShowEpicLoginWindow(onSuccess func(), onCancel func()) {
 	setStatus(lang.LocalizeKey("settings.epic_login_waiting", "Please complete Epic Games login in your browser."))
 
 	slog.Info("Initiating Epic login flow", "authURL", authURL)
-	webViewCodeCh, webViewErrCh, stopWebView := startEpicWebView2Login(authURL)
+	var webViewCodeCh <-chan string
+	var webViewErrCh <-chan error
+	webViewCodeCh, webViewErrCh, stopWebView = startEpicWebView2Login(authURL)
 	clipboardFallbackEnabled := webViewCodeCh == nil || webViewErrCh == nil
 	if clipboardFallbackEnabled {
 		slog.Warn("WebView2 login unavailable, falling back immediately to clipboard / browser")
 	}
 
 	go func() {
+		defer func() {
+			if stopWebView != nil {
+				stopWebView()
+			}
+		}()
 		ticker := time.NewTicker(700 * time.Millisecond)
 		timeout := time.NewTimer(5 * time.Minute)
 		defer ticker.Stop()
