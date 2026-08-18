@@ -14,13 +14,16 @@ import (
 	"syscall"
 	"unsafe"
 
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/storage"
 	"github.com/zzl/go-win32api/v2/win32"
 )
 
 type oleTextDropTarget struct {
-	lpVtbl     *oleTextDropTargetVtbl
-	refCount   int32
-	onDropText func(string)
+	lpVtbl      *oleTextDropTargetVtbl
+	refCount    int32
+	onDropText  func(string)
+	onDropFiles func([]string)
 }
 
 type oleTextDropTargetVtbl struct {
@@ -64,6 +67,9 @@ func (s *State) EnableNativeTextDrop() (func(), error) {
 		onDropText: func(text string) {
 			s.handleOLEDroppedText(text)
 		},
+		onDropFiles: func(files []string) {
+			s.handleOLEDroppedFiles(files)
+		},
 	}
 	hr = win32.RegisterDragDrop(win32.HWND(hwnd), (*win32.IDropTarget)(unsafe.Pointer(target)))
 	if hr < 0 {
@@ -77,6 +83,26 @@ func (s *State) EnableNativeTextDrop() (func(), error) {
 		win32.OleUninitialize()
 	}
 	return cleanup, nil
+}
+
+func (s *State) handleOLEDroppedFiles(files []string) {
+	slog.Info("Received OLE dropped files", "count", len(files), "files", files)
+	for _, file := range files {
+		if strings.EqualFold(filepath.Ext(file), ".aupack") {
+			if s.OnSharedArchiveReceived != nil {
+				s.OnSharedArchiveReceived(file)
+			}
+			return
+		}
+	}
+
+	if s.OnDroppedURIs != nil && len(files) > 0 {
+		uris := make([]fyne.URI, 0, len(files))
+		for _, f := range files {
+			uris = append(uris, storage.NewFileURI(f))
+		}
+		s.OnDroppedURIs(uris)
+	}
 }
 
 func (s *State) handleOLEDroppedText(text string) {
@@ -160,10 +186,10 @@ func parseDroppedURI(token string) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	if !strings.EqualFold(u.Scheme, "http") && !strings.EqualFold(u.Scheme, "https") {
+	if !strings.EqualFold(u.Scheme, "http") && !strings.EqualFold(u.Scheme, "https") && !strings.EqualFold(u.Scheme, "mod-of-us") {
 		return "", false
 	}
-	if u.Host == "" {
+	if u.Host == "" && u.Scheme != "mod-of-us" {
 		return "", false
 	}
 	return u.String(), true
@@ -177,9 +203,12 @@ func normalizeDroppedToken(token string) string {
 	return token
 }
 
-func dataObjectHasText(dataObj *win32.IDataObject) bool {
+func dataObjectHasSupportedData(dataObj *win32.IDataObject) bool {
 	if dataObj == nil {
 		return false
+	}
+	if queryDataObjectByFormat(dataObj, uint16(win32.CF_HDROP)) {
+		return true
 	}
 	if queryDataObjectByFormat(dataObj, uint16(win32.CF_UNICODETEXT)) {
 		return true
@@ -190,7 +219,54 @@ func dataObjectHasText(dataObj *win32.IDataObject) bool {
 	if cf := registerClipboardFormatID("UniformResourceLocator"); cf != 0 && queryDataObjectByFormat(dataObj, cf) {
 		return true
 	}
+	if cf := registerClipboardFormatID("text/x-moz-url"); cf != 0 && queryDataObjectByFormat(dataObj, cf) {
+		return true
+	}
 	return false
+}
+
+func extractFilesFromDataObject(dataObj *win32.IDataObject) ([]string, bool) {
+	if dataObj == nil {
+		return nil, false
+	}
+	formatEtc := win32.FORMATETC{
+		CfFormat: uint16(win32.CF_HDROP),
+		DwAspect: uint32(win32.DVASPECT_CONTENT),
+		Lindex:   -1,
+		Tymed:    uint32(win32.TYMED_HGLOBAL),
+	}
+	var medium win32.STGMEDIUM
+	if dataObj.GetData(&formatEtc, &medium) < 0 {
+		return nil, false
+	}
+	defer win32.ReleaseStgMedium(&medium)
+
+	if medium.Tymed != win32.TYMED_HGLOBAL {
+		return nil, false
+	}
+	hGlobal := medium.HGlobalVal()
+	if hGlobal == 0 {
+		return nil, false
+	}
+
+	hDrop := win32.HDROP(hGlobal)
+	count := win32.DragQueryFile(hDrop, 0xFFFFFFFF, nil, 0)
+	if count == 0 {
+		return nil, false
+	}
+
+	var files []string
+	buf := make([]uint16, 1024)
+	for i := range count {
+		length := win32.DragQueryFile(hDrop, i, &buf[0], uint32(len(buf)))
+		if length > 0 {
+			filePath := syscall.UTF16ToString(buf[:length])
+			if filePath != "" {
+				files = append(files, filePath)
+			}
+		}
+	}
+	return files, len(files) > 0
 }
 
 func extractTextFromDataObject(dataObj *win32.IDataObject) (string, bool) {
@@ -205,6 +281,16 @@ func extractTextFromDataObject(dataObj *win32.IDataObject) (string, bool) {
 			return text, true
 		}
 	}
+	if cf := registerClipboardFormatID("text/x-moz-url"); cf != 0 {
+		if text, ok := extractUTF16TextFromDataObject(dataObj, cf); ok {
+			if idx := strings.Index(text, "\n"); idx != -1 {
+				text = strings.TrimSpace(text[:idx])
+			}
+			if text != "" {
+				return text, true
+			}
+		}
+	}
 	if cf := registerClipboardFormatID("UniformResourceLocator"); cf != 0 {
 		if text, ok := extractANSITextFromDataObject(dataObj, cf); ok {
 			return text, true
@@ -213,31 +299,16 @@ func extractTextFromDataObject(dataObj *win32.IDataObject) (string, bool) {
 	return "", false
 }
 
-func utf16PtrToString(ptr *uint16) string {
-	if ptr == nil {
-		return ""
-	}
-	chars := make([]uint16, 0, 128)
-	for offset := uintptr(0); ; offset += 2 {
-		ch := *(*uint16)(unsafe.Pointer(uintptr(unsafe.Pointer(ptr)) + offset))
-		if ch == 0 {
-			break
-		}
-		chars = append(chars, ch)
-	}
-	return syscall.UTF16ToString(chars)
-}
-
 //nolint:govet // COM callback pointers are raw Win32 pointers passed as uintptr.
 func oleDropTargetQueryInterface(this, riidPtr, ppvPtr uintptr) uintptr {
 	defer recoverOleDropCallback()
 	if ppvPtr == 0 {
-		return hresultToUintptr(win32.E_FAIL)
+		return hresultToUintptr(win32.E_POINTER)
 	}
 	ppv := (*unsafe.Pointer)(unsafe.Pointer(ppvPtr))
 	*ppv = nil
 	if riidPtr == 0 {
-		return hresultToUintptr(win32.E_NOINTERFACE)
+		return hresultToUintptr(win32.E_INVALIDARG)
 	}
 	riid := (*syscall.GUID)(unsafe.Pointer(riidPtr))
 	if *riid == win32.IID_IUnknown || *riid == win32.IID_IDropTarget {
@@ -251,6 +322,9 @@ func oleDropTargetQueryInterface(this, riidPtr, ppvPtr uintptr) uintptr {
 //nolint:govet // COM callback receives object pointer as uintptr from Win32.
 func oleDropTargetAddRef(this uintptr) uintptr {
 	defer recoverOleDropCallback()
+	if this == 0 {
+		return 0
+	}
 	target := (*oleTextDropTarget)(unsafe.Pointer(this))
 	return uintptr(atomic.AddInt32(&target.refCount, 1))
 }
@@ -258,18 +332,21 @@ func oleDropTargetAddRef(this uintptr) uintptr {
 //nolint:govet // COM callback receives object pointer as uintptr from Win32.
 func oleDropTargetRelease(this uintptr) uintptr {
 	defer recoverOleDropCallback()
+	if this == 0 {
+		return 0
+	}
 	target := (*oleTextDropTarget)(unsafe.Pointer(this))
 	return uintptr(atomic.AddInt32(&target.refCount, -1))
 }
 
 //nolint:govet // COM callback receives effect/data pointers as uintptr from Win32.
-func oleDropTargetDragEnter(this, dataObjPtr, _ uintptr, _ uintptr, effectPtr uintptr) uintptr {
+func oleDropTargetDragEnter(this, dataObjPtr, _, _, effectPtr uintptr) uintptr {
 	defer recoverOleDropCallback()
 	if effectPtr == 0 {
 		return hresultToUintptr(win32.S_OK)
 	}
 	effect := (*uint32)(unsafe.Pointer(effectPtr))
-	if dataObjectHasText((*win32.IDataObject)(unsafe.Pointer(dataObjPtr))) {
+	if dataObjectHasSupportedData((*win32.IDataObject)(unsafe.Pointer(dataObjPtr))) {
 		*effect = uint32(win32.DROPEFFECT_COPY)
 		return hresultToUintptr(win32.S_OK)
 	}
@@ -294,22 +371,46 @@ func oleDropTargetDragLeave(uintptr) uintptr {
 }
 
 //nolint:govet // COM callback receives object/effect/data pointers as uintptr from Win32.
-func oleDropTargetDrop(this, dataObjPtr, _ uintptr, _ uintptr, effectPtr uintptr) uintptr {
+func oleDropTargetDrop(this, dataObjPtr, _, _, effectPtr uintptr) uintptr {
 	defer recoverOleDropCallback()
 	if effectPtr == 0 {
 		return hresultToUintptr(win32.S_OK)
 	}
 	effect := (*uint32)(unsafe.Pointer(effectPtr))
+	*effect = uint32(win32.DROPEFFECT_NONE)
+
+	if this == 0 || dataObjPtr == 0 {
+		return hresultToUintptr(win32.E_INVALIDARG)
+	}
+
 	target := (*oleTextDropTarget)(unsafe.Pointer(this))
-	text, ok := extractTextFromDataObject((*win32.IDataObject)(unsafe.Pointer(dataObjPtr)))
-	if !ok {
-		*effect = uint32(win32.DROPEFFECT_NONE)
+	dataObj := (*win32.IDataObject)(unsafe.Pointer(dataObjPtr))
+
+	// 1. Try file drop first (CF_HDROP)
+	if files, ok := extractFilesFromDataObject(dataObj); ok && len(files) > 0 {
+		*effect = uint32(win32.DROPEFFECT_COPY)
+		if target.onDropFiles != nil {
+			filesCopy := make([]string, len(files))
+			copy(filesCopy, files)
+			// Dispatch asynchronously so IDropTarget::Drop returns immediately
+			// without blocking or freezing the OLE drag-and-drop modal loop.
+			go target.onDropFiles(filesCopy)
+		}
 		return hresultToUintptr(win32.S_OK)
 	}
-	if target.onDropText != nil {
-		target.onDropText(text)
+
+	// 2. Try text/URL drop
+	if text, ok := extractTextFromDataObject(dataObj); ok && text != "" {
+		*effect = uint32(win32.DROPEFFECT_COPY)
+		if target.onDropText != nil {
+			textCopy := text
+			// Dispatch asynchronously so IDropTarget::Drop returns immediately
+			// without blocking or freezing the OLE drag-and-drop modal loop.
+			go target.onDropText(textCopy)
+		}
+		return hresultToUintptr(win32.S_OK)
 	}
-	*effect = uint32(win32.DROPEFFECT_COPY)
+
 	return hresultToUintptr(win32.S_OK)
 }
 
@@ -318,6 +419,9 @@ func hresultToUintptr(hr win32.HRESULT) uintptr {
 }
 
 func queryDataObjectByFormat(dataObj *win32.IDataObject, format uint16) bool {
+	if dataObj == nil {
+		return false
+	}
 	formatEtc := win32.FORMATETC{
 		CfFormat: format,
 		DwAspect: uint32(win32.DVASPECT_CONTENT),
@@ -328,6 +432,9 @@ func queryDataObjectByFormat(dataObj *win32.IDataObject, format uint16) bool {
 }
 
 func extractUTF16TextFromDataObject(dataObj *win32.IDataObject, format uint16) (string, bool) {
+	if dataObj == nil {
+		return "", false
+	}
 	formatEtc := win32.FORMATETC{
 		CfFormat: format,
 		DwAspect: uint32(win32.DVASPECT_CONTENT),
@@ -355,11 +462,31 @@ func extractUTF16TextFromDataObject(dataObj *win32.IDataObject, format uint16) (
 		_, _ = win32.GlobalUnlock(hGlobal)
 	}()
 
-	text := utf16PtrToString((*uint16)(ptr))
-	return text, strings.TrimSpace(text) != ""
+	size, _ := win32.GlobalSize(hGlobal)
+	if size < 2 {
+		return "", false
+	}
+
+	maxChars := int(size / 2)
+	u16Slice := unsafe.Slice((*uint16)(ptr), maxChars)
+	nullIdx := -1
+	for i, ch := range u16Slice {
+		if ch == 0 {
+			nullIdx = i
+			break
+		}
+	}
+	if nullIdx >= 0 {
+		u16Slice = u16Slice[:nullIdx]
+	}
+	text := strings.TrimSpace(syscall.UTF16ToString(u16Slice))
+	return text, text != ""
 }
 
 func extractANSITextFromDataObject(dataObj *win32.IDataObject, format uint16) (string, bool) {
+	if dataObj == nil {
+		return "", false
+	}
 	formatEtc := win32.FORMATETC{
 		CfFormat: format,
 		DwAspect: uint32(win32.DVASPECT_CONTENT),
@@ -417,6 +544,6 @@ func registerClipboardFormatID(name string) uint16 {
 func recoverOleDropCallback() {
 	if r := recover(); r != nil {
 		stack := debug.Stack()
-		_ = stack
+		slog.Error("OLE drop callback panicked", "panic", r, "stack", string(stack))
 	}
 }

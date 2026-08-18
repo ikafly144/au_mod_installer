@@ -244,7 +244,9 @@ func (l *Launcher) init() {
 		})
 	}
 	l.state.OnDroppedURIs = func(uris []fyne.URI) {
-		l.handleDroppedURIs(uris)
+		fyne.Do(func() {
+			l.handleDroppedURIs(uris)
+		})
 	}
 	l.state.OnGameStarted = func(profileID uuid.UUID, pid int) {
 		fyne.DoAndWait(func() {
@@ -1237,33 +1239,37 @@ func (l *Launcher) handleJoinGameURI(sharedURI string) {
 }
 
 func (l *Launcher) handleGameLink(joinURI *core.JoinGameLink) {
-	shared, iconPNG, joinInfo, err := l.state.Core.HandleJoinGameDownload(joinURI.SessionID, joinURI.ServerBase)
-	if err != nil {
-		dialog.ShowError(err, l.state.Window)
-		return
-	}
+	go func() {
+		shared, iconPNG, joinInfo, err := l.state.Core.HandleJoinGameDownload(joinURI.SessionID, joinURI.ServerBase)
+		fyne.Do(func() {
+			if err != nil {
+				dialog.ShowError(err, l.state.Window)
+				return
+			}
 
-	runningProfileID, runningPID := l.state.Core.CurrentRunningProfileAndPID()
-	if runningProfile, ok := l.state.Core.ProfileManager.Get(runningProfileID); ok && runningPID > 0 && runningProfileID == shared.ID && l.state.Core.HasDirectJoinFeature(runningProfile.Versions()) {
-		if errCh := l.state.Core.SendLobbyJoinByPID(runningPID, *joinInfo); errCh != nil {
-			go func() {
-				if err := <-errCh; err != nil {
-					fyne.Do(func() {
-						dialog.ShowError(errors.New(lang.LocalizeKey("launcher.error.failed_to_send_join_request", "Failed to send join request to game process: {{.Error}}", map[string]any{"Error": err.Error()})), l.state.Window)
-					})
+			runningProfileID, runningPID := l.state.Core.CurrentRunningProfileAndPID()
+			if runningProfile, ok := l.state.Core.ProfileManager.Get(runningProfileID); ok && runningPID > 0 && runningProfileID == shared.ID && l.state.Core.HasDirectJoinFeature(runningProfile.Versions()) {
+				if errCh := l.state.Core.SendLobbyJoinByPID(runningPID, *joinInfo); errCh != nil {
+					go func() {
+						if err := <-errCh; err != nil {
+							fyne.Do(func() {
+								dialog.ShowError(errors.New(lang.LocalizeKey("launcher.error.failed_to_send_join_request", "Failed to send join request to game process: {{.Error}}", map[string]any{"Error": err.Error()})), l.state.Window)
+							})
+						}
+					}()
 				}
-			}()
-		}
-		l.state.ShowInfoDialog(
-			lang.LocalizeKey("common.success", "Success"),
-			lang.LocalizeKey("launcher.join_link.join_sent", "Sent room join request to running game."),
-		)
-		return
-	}
-	if err := l.importProfileWithJoinInfo(shared, iconPNG, joinInfo); err != nil {
-		dialog.ShowError(err, l.state.Window)
-		return
-	}
+				l.state.ShowInfoDialog(
+					lang.LocalizeKey("common.success", "Success"),
+					lang.LocalizeKey("launcher.join_link.join_sent", "Sent room join request to running game."),
+				)
+				return
+			}
+			if err := l.importProfileWithJoinInfo(shared, iconPNG, joinInfo); err != nil {
+				dialog.ShowError(err, l.state.Window)
+				return
+			}
+		})
+	}()
 }
 
 func (l *Launcher) checkSharedArchive() {
@@ -1280,24 +1286,21 @@ func (l *Launcher) importProfileFromArchiveURL(archiveURL string) {
 		return
 	}
 
-	var loadingDialog dialog.Dialog
-	var loadingProgress *progress.FyneProgress
 	bar := widget.NewProgressBar()
 	bar.SetValue(0)
-	loadingProgress = progress.NewFyneProgress(bar)
-	fyne.DoAndWait(func() {
-		content := container.NewVBox(
-			widget.NewLabel(lang.LocalizeKey("profile.import_url_loading", "Downloading archive...")),
-			bar,
-		)
-		loadingDialog = dialog.NewCustomWithoutButtons(
-			lang.LocalizeKey("profile.import_title", "Import Profile"),
-			content,
-			l.state.Window,
-		)
-		loadingDialog.Resize(fyne.NewSize(420, 130))
-		loadingDialog.Show()
-	})
+	loadingProgress := progress.NewFyneProgress(bar)
+
+	content := container.NewVBox(
+		widget.NewLabel(lang.LocalizeKey("profile.import_url_loading", "Downloading archive...")),
+		bar,
+	)
+	loadingDialog := dialog.NewCustomWithoutButtons(
+		lang.LocalizeKey("profile.import_title", "Import Profile"),
+		content,
+		l.state.Window,
+	)
+	loadingDialog.Resize(fyne.NewSize(420, 130))
+	loadingDialog.Show()
 
 	go func() {
 		path, err := l.state.Core.DownloadArchiveURLToTempFile(archiveURL, loadingProgress)
@@ -1305,15 +1308,11 @@ func (l *Launcher) importProfileFromArchiveURL(archiveURL string) {
 			if loadingDialog != nil {
 				loadingDialog.Hide()
 			}
-		})
-		if err != nil {
-			fyne.Do(func() {
+			if err != nil {
 				dialog.ShowError(err, l.state.Window)
-			})
-			return
-		}
-		defer os.Remove(path)
-		fyne.DoAndWait(func() {
+				return
+			}
+			defer os.Remove(path)
 			l.importProfileFromArchiveFile(path)
 		})
 	}()
