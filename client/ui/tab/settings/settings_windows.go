@@ -853,7 +853,6 @@ func newHintLabel(text string) *widget.Label {
 
 func settingsEntry(title string, content fyne.CanvasObject) fyne.CanvasObject {
 	label := widget.NewLabelWithStyle(title, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-	label.Wrapping = fyne.TextWrapWord
 	return container.New(layout.NewBorderLayout(nil, nil, label, nil), content, label)
 }
 
