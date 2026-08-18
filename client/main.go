@@ -70,30 +70,38 @@ func main() {
 
 		// Try to send URI to the existing instance via IPC
 		conn, err := winio.DialPipe(pipeName, nil)
-		if err != nil {
+		if err == nil {
+			defer conn.Close()
+			if sharedURI != "" || sharedArchive != "" {
+				if sharedURI != "" {
+					_, _ = conn.Write([]byte("uri:" + sharedURI + "\n"))
+					slog.Info("Sent shared URI to existing instance", "uri", sharedURI)
+				}
+				if sharedArchive != "" {
+					absArchive, absErr := filepath.Abs(sharedArchive)
+					if absErr == nil {
+						_, _ = conn.Write([]byte("archive:" + absArchive + "\n"))
+						slog.Info("Sent shared archive to existing instance", "path", absArchive)
+					}
+				}
+			} else {
+				_, _ = conn.Write([]byte("activate\n"))
+				slog.Info("Sent activate command to existing instance")
+			}
+
 			_ = lock.Unlock()
 			os.Exit(1)
 		}
-		defer conn.Close()
-		if sharedURI != "" || sharedArchive != "" {
-			if sharedURI != "" {
-				_, _ = conn.Write([]byte("uri:" + sharedURI + "\n"))
-				slog.Info("Sent shared URI to existing instance", "uri", sharedURI)
-			}
-			if sharedArchive != "" {
-				absArchive, absErr := filepath.Abs(sharedArchive)
-				if absErr == nil {
-					_, _ = conn.Write([]byte("archive:" + absArchive + "\n"))
-					slog.Info("Sent shared archive to existing instance", "path", absArchive)
-				}
-			}
-		} else {
-			_, _ = conn.Write([]byte("activate\n"))
-			slog.Info("Sent activate command to existing instance")
-		}
 
-		_ = lock.Unlock()
-		os.Exit(1)
+		// If pipe is not available, it means the existing instance is not available. So we can continue to run the new instance.
+		slog.Warn("Failed to connect to existing instance via IPC", "error", err)
+		if err := os.RemoveAll(lockPath); err != nil {
+			slog.Error("Failed to remove lockfile", "error", err)
+		}
+		if err := lock.TryLock(); err != nil {
+			slog.Error("Failed to acquire lockfile after removing it", "error", err)
+			os.Exit(1)
+		}
 	}
 	defer func() {
 		if err := lock.Unlock(); err != nil {
