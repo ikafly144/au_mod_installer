@@ -56,7 +56,7 @@
     <StandardDirectory Id="ProgramMenuFolder">
       <Directory Id="ProgramMenuDir" Name="!(loc.InstallFolder)">
         <Component Id="StartMenuShortcut" Guid="{E2EF6B58-4FD5-46E0-9C4A-C0B1E2C4C2B1}">
-          <Shortcut Id="StartMenuShortcut" Name="!(loc.ShortcutName)" Target="[INSTALLFOLDER]updater.exe" Arguments="-target &quot;[INSTALLFOLDER]Mod of Us.exe&quot;" WorkingDirectory="INSTALLFOLDER" Icon="appIcon" IconIndex="0">
+          <Shortcut Id="StartMenuShortcut" Name="!(loc.ShortcutName)" Target="[INSTALLFOLDER]updater.exe" Arguments="-target &quot;[INSTALLFOLDER]Mod of Us.exe&quot;" WorkingDirectory="INSTALLFOLDER" Icon="[INSTALLFOLDER]app.ico" IconIndex="0">
             <ShortcutProperty Key="System.AppUserModel.ID" Value="com.github.ikafly.au_mod_installer" />
           </Shortcut>
           <RemoveFolder Id="RemoveProgramMenuDir" On="uninstall" />
