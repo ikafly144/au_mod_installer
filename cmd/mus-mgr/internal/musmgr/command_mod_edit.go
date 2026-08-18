@@ -9,15 +9,10 @@ import (
 
 func (f *commandFactory) newModEditCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "edit",
-		Usage:     "Edit an existing mod",
-		ArgsUsage: "<mod-id>",
-		ShellComplete: func(ctx context.Context, cmd *cli.Command) {
-			if cmd.NArg() <= 1 {
-				f.printModIDCompletions(cmd)
-			}
-			cli.DefaultCompleteWithFlags(ctx, cmd)
-		},
+		Name:          "edit",
+		Usage:         "Edit an existing mod",
+		ArgsUsage:     "<mod-id>",
+		ShellComplete: f.makeShellComplete(f.modIDCompleter()),
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "name", Usage: "Updated mod name"},
 			&cli.StringFlag{Name: "author", Usage: "Updated mod author"},
@@ -28,7 +23,7 @@ func (f *commandFactory) newModEditCommand() *cli.Command {
 			&cli.BoolFlag{Name: "clear-latest-version", Usage: "Clear latest version ID"},
 		},
 		DisableSliceFlagSeparator: true,
-		Action: wrapAction(func(ctx context.Context, cmd *cli.Command) error {
+		Action: func(ctx context.Context, cmd *cli.Command) error {
 			if err := requireDB(cmd); err != nil {
 				return err
 			}
@@ -63,7 +58,12 @@ func (f *commandFactory) newModEditCommand() *cli.Command {
 			if cmd.Bool("clear-latest-version") {
 				updates["latest_version_id"] = nil
 			} else if cmd.IsSet("latest-version-id") {
-				updates["latest_version_id"] = cmd.String("latest-version-id")
+				targetVer := cmd.String("latest-version-id")
+				verDetails, err := repo.GetModVersionDetails(modID, targetVer)
+				if err != nil {
+					return fmt.Errorf("version %s not found for mod %s: %w", targetVer, modID, err)
+				}
+				updates["latest_version_id"] = verDetails.ID
 			}
 
 			if len(updates) == 0 {
@@ -75,6 +75,6 @@ func (f *commandFactory) newModEditCommand() *cli.Command {
 			}
 			fmt.Println("Updated mod:", modID)
 			return nil
-		}),
+		},
 	}
 }

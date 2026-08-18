@@ -7,11 +7,10 @@ func NewApp() *cli.Command {
 	factory := newCommandFactory(&dbURL)
 
 	return &cli.Command{
-		Name:                       "mus-mgr",
-		Usage:                      "Manage the au_mod_installer server database",
-		EnableShellCompletion:      true,
-		ShellCompletionCommandName: "completion",
-		Suggest:                    true,
+		Name:                  "mus-mgr",
+		Usage:                 "Manage the au_mod_installer server database",
+		EnableShellCompletion: true,
+		Suggest:               true,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:        "db",
@@ -20,6 +19,7 @@ func NewApp() *cli.Command {
 				Destination: &dbURL,
 			},
 		},
+		ShellComplete: factory.makeShellComplete(),
 		Commands: []*cli.Command{
 			factory.newMigrateCommand(),
 			factory.newModCommand(),

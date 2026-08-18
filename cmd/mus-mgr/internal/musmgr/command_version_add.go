@@ -23,8 +23,8 @@ func (f *commandFactory) newVersionAddCommand() *cli.Command {
 			&cli.BoolFlag{Name: "set-latest", Usage: "Set this version as the latest version for the mod"},
 		},
 		DisableSliceFlagSeparator: true,
-		ShellComplete:             cli.DefaultCompleteWithFlags,
-		Action: wrapAction(func(ctx context.Context, cmd *cli.Command) error {
+		ShellComplete:             f.makeShellComplete(),
+		Action: func(ctx context.Context, cmd *cli.Command) error {
 			if err := requireDB(cmd); err != nil {
 				return err
 			}
@@ -67,7 +67,7 @@ func (f *commandFactory) newVersionAddCommand() *cli.Command {
 				verFile := model.ModVersionFile{
 					ID:             uuid.New().String(),
 					ModID:          &modID,
-					VersionID:      &ver.VersionID,
+					VersionID:      &ver.ID,
 					Filename:       filename,
 					ContentType:    model.FileType(pf.Type),
 					Size:           size,
@@ -93,6 +93,6 @@ func (f *commandFactory) newVersionAddCommand() *cli.Command {
 			}
 
 			return nil
-		}),
+		},
 	}
 }

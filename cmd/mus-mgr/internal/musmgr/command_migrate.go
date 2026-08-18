@@ -9,9 +9,10 @@ import (
 
 func (f *commandFactory) newMigrateCommand() *cli.Command {
 	return &cli.Command{
-		Name:  "migrate",
-		Usage: "Migrate the database schema",
-		Action: wrapAction(func(ctx context.Context, cmd *cli.Command) error {
+		Name:          "migrate",
+		Usage:         "Migrate the database schema",
+		ShellComplete: f.makeShellComplete(),
+		Action: func(ctx context.Context, cmd *cli.Command) error {
 			if err := requireDB(cmd); err != nil {
 				return err
 			}
@@ -24,6 +25,6 @@ func (f *commandFactory) newMigrateCommand() *cli.Command {
 			}
 			fmt.Println("Migration successful.")
 			return nil
-		}),
+		},
 	}
 }

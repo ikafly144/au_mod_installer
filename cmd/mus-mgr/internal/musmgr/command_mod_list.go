@@ -9,9 +9,10 @@ import (
 
 func (f *commandFactory) newModListCommand() *cli.Command {
 	return &cli.Command{
-		Name:  "list",
-		Usage: "List mods",
-		Action: wrapAction(func(ctx context.Context, cmd *cli.Command) error {
+		Name:          "list",
+		Usage:         "List mods",
+		ShellComplete: f.makeShellComplete(),
+		Action: func(ctx context.Context, cmd *cli.Command) error {
 			if err := requireDB(cmd); err != nil {
 				return err
 			}
@@ -32,6 +33,6 @@ func (f *commandFactory) newModListCommand() *cli.Command {
 				fmt.Printf("%s\t%s\t%s\n", mod.ID, mod.Name, mod.Author)
 			}
 			return nil
-		}),
+		},
 	}
 }

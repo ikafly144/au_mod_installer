@@ -4,8 +4,9 @@ import "github.com/urfave/cli/v3"
 
 func (f *commandFactory) newModCommand() *cli.Command {
 	return &cli.Command{
-		Name:  "mod",
-		Usage: "Manage mods",
+		Name:          "mod",
+		Usage:         "Manage mods",
+		ShellComplete: f.makeShellComplete(),
 		Commands: []*cli.Command{
 			f.newModAddCommand(),
 			f.newModListCommand(),

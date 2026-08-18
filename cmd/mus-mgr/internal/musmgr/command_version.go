@@ -4,8 +4,9 @@ import "github.com/urfave/cli/v3"
 
 func (f *commandFactory) newVersionCommand() *cli.Command {
 	return &cli.Command{
-		Name:  "version",
-		Usage: "Manage mod versions",
+		Name:          "version",
+		Usage:         "Manage mod versions",
+		ShellComplete: f.makeShellComplete(),
 		Commands: []*cli.Command{
 			f.newVersionAddCommand(),
 			f.newVersionListCommand(),

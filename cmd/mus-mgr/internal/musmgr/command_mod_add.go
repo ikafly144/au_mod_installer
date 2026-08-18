@@ -22,8 +22,8 @@ func (f *commandFactory) newModAddCommand() *cli.Command {
 			&cli.StringFlag{Name: "thumbnail-url", Usage: "Mod thumbnail URL"},
 		},
 		DisableSliceFlagSeparator: true,
-		ShellComplete:             cli.DefaultCompleteWithFlags,
-		Action: wrapAction(func(ctx context.Context, cmd *cli.Command) error {
+		ShellComplete:             f.makeShellComplete(),
+		Action: func(ctx context.Context, cmd *cli.Command) error {
 			if err := requireDB(cmd); err != nil {
 				return err
 			}
@@ -61,6 +61,6 @@ func (f *commandFactory) newModAddCommand() *cli.Command {
 			}
 			fmt.Printf("Created mod: %s\n", mod.ID)
 			return nil
-		}),
+		},
 	}
 }

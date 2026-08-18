@@ -11,19 +11,10 @@ import (
 
 func (f *commandFactory) newVersionEditCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "edit",
-		Usage:     "Edit an existing mod version",
-		ArgsUsage: "<mod-id> <version-id>",
-		ShellComplete: func(ctx context.Context, cmd *cli.Command) {
-			if cmd.NArg() <= 1 {
-				f.printModIDCompletions(cmd)
-				return
-			}
-			if cmd.NArg() <= 2 {
-				f.printVersionIDCompletions(cmd, cmd.Args().Get(0))
-			}
-			cli.DefaultCompleteWithFlags(ctx, cmd)
-		},
+		Name:          "edit",
+		Usage:         "Edit an existing mod version",
+		ArgsUsage:     "<mod-id> <version-id>",
+		ShellComplete: f.makeShellComplete(f.modIDCompleter(), f.versionIDCompleter()),
 		Flags: []cli.Flag{
 			&cli.StringSliceFlag{Name: "dependency", Usage: "Replace dependencies. Format: mod_id:version_id:type"},
 			&cli.StringSliceFlag{Name: "feature", Usage: "Replace features. Format: name=true|false"},
@@ -70,20 +61,18 @@ func (f *commandFactory) newVersionEditCommand() *cli.Command {
 				changed = true
 			}
 
-			modInfo, err := repo.GetModDetails(modID)
-			if err != nil {
-				return fmt.Errorf("failed to get mod details: %w", err)
-			}
-
 			if cmd.Bool("set-latest") {
-				modInfo.LatestVersionID = &versionID
-				if err := repo.UpdateMod(modID, modInfo); err != nil {
+				verDetails, err := repo.GetModVersionDetails(modID, versionID)
+				if err != nil {
+					return fmt.Errorf("failed to get version details: %w", err)
+				}
+				update := &model.ModDetails{LatestVersionID: &verDetails.ID}
+				if err := repo.UpdateMod(modID, update); err != nil {
 					return fmt.Errorf("failed to update latest version: %w", err)
 				}
 				changed = true
 			} else if cmd.Bool("clear-latest-version") {
-				modInfo.LatestVersionID = nil
-				if err := repo.UpdateMod(modID, modInfo); err != nil {
+				if err := repo.UpdateModFields(modID, map[string]any{"latest_version_id": nil}); err != nil {
 					return fmt.Errorf("failed to clear latest version: %w", err)
 				}
 				changed = true

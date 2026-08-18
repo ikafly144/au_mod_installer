@@ -9,16 +9,11 @@ import (
 
 func (f *commandFactory) newVersionListCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "list",
-		Usage:     "List versions for a mod",
-		ArgsUsage: "<mod-id>",
-		ShellComplete: func(ctx context.Context, cmd *cli.Command) {
-			if cmd.NArg() <= 1 {
-				f.printModIDCompletions(cmd)
-			}
-			cli.DefaultCompleteWithFlags(ctx, cmd)
-		},
-		Action: wrapAction(func(ctx context.Context, cmd *cli.Command) error {
+		Name:          "list",
+		Usage:         "List versions for a mod",
+		ArgsUsage:     "<mod-id>",
+		ShellComplete: f.makeShellComplete(f.modIDCompleter()),
+		Action: func(ctx context.Context, cmd *cli.Command) error {
 			if err := requireDB(cmd); err != nil {
 				return err
 			}
@@ -39,6 +34,6 @@ func (f *commandFactory) newVersionListCommand() *cli.Command {
 				fmt.Println(id)
 			}
 			return nil
-		}),
+		},
 	}
 }

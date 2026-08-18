@@ -10,16 +10,11 @@ import (
 
 func (f *commandFactory) newModInfoCommand() *cli.Command {
 	return &cli.Command{
-		Name:      "info",
-		Usage:     "Get details of a mod",
-		ArgsUsage: "<mod-id>",
-		ShellComplete: func(ctx context.Context, cmd *cli.Command) {
-			if cmd.NArg() <= 1 {
-				f.printModIDCompletions(cmd)
-			}
-			cli.DefaultCompleteWithFlags(ctx, cmd)
-		},
-		Action: wrapAction(func(ctx context.Context, cmd *cli.Command) error {
+		Name:          "info",
+		Usage:         "Get details of a mod",
+		ArgsUsage:     "<mod-id>",
+		ShellComplete: f.makeShellComplete(f.modIDCompleter()),
+		Action: func(ctx context.Context, cmd *cli.Command) error {
 			if err := requireDB(cmd); err != nil {
 				return err
 			}
@@ -42,6 +37,6 @@ func (f *commandFactory) newModInfoCommand() *cli.Command {
 			}
 			fmt.Println(string(b))
 			return nil
-		}),
+		},
 	}
 }
