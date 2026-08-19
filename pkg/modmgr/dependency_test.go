@@ -626,10 +626,8 @@ func TestResolveDependencies_MergeConstraintsNoValidVersion(t *testing.T) {
 
 func modVersion(modID, versionID string, deps ...model.ModVersionDependency) ModVersion {
 	return ModVersion{
-		ModVersionDetails: model.ModVersionDetails{
-			VersionID:    versionID,
-			ModID:        modID,
-			Dependencies: deps,
-		},
+		VersionID:    versionID,
+		ModID:        modID,
+		Dependencies: deps,
 	}
 }

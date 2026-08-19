@@ -238,8 +238,7 @@ func RunMsiPassive(ctx context.Context, msiPath string) error {
 	if err == nil {
 		return nil
 	}
-	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) {
+	if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 		code := exitErr.ExitCode()
 		// 0: SUCCESS, 3010: ERROR_SUCCESS_REBOOT_REQUIRED, 1641: ERROR_SUCCESS_REBOOT_INITIATED
 		if code == 0 || code == 3010 || code == 1641 {

@@ -104,7 +104,7 @@ func nextVersionID(existingIDs []string) string {
 		return "1.0.0"
 	}
 
-	base := strings.SplitN(strings.TrimPrefix(highest, "v"), "-", 2)[0]
+	base, _, _ := strings.Cut(strings.TrimPrefix(highest, "v"), "-")
 	base = strings.SplitN(base, "+", 2)[0]
 	parts := strings.Split(base, ".")
 	var major, minor, patch int

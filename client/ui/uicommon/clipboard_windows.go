@@ -57,7 +57,7 @@ func (s *State) ClipboardSetFile(path string) error {
 	header.PFiles = uint32(headerSize)
 	header.FWide = 1
 
-	dataPtr := unsafe.Pointer(uintptr(ptr) + uintptr(header.PFiles))
+	dataPtr := unsafe.Add(ptr, header.PFiles)
 	dst := unsafe.Slice((*uint16)(dataPtr), len(fileList))
 	copy(dst, fileList)
 	_ = w32.GlobalUnlock(mem)

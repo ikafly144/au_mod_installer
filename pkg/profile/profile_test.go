@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ikafly144/au_mod_installer/common/rest/model"
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 )
 
@@ -31,10 +30,8 @@ func TestProfileManager_AddAndGet(t *testing.T) {
 		UpdatedAt: time.Now(),
 	}
 	p.AddModVersion(modmgr.ModVersion{
-		ModVersionDetails: model.ModVersionDetails{
-			VersionID: versionID,
-			ModID:     modID,
-		},
+		VersionID: versionID,
+		ModID:     modID,
 	})
 
 	err = manager.Add(p)
@@ -62,16 +59,12 @@ func TestProfile_VersionTracking(t *testing.T) {
 
 	modID := "example-mod"
 	v1 := modmgr.ModVersion{
-		ModVersionDetails: model.ModVersionDetails{
-			VersionID: "v1",
-			ModID:     modID,
-		},
+		VersionID: "v1",
+		ModID:     modID,
 	}
 	v2 := modmgr.ModVersion{
-		ModVersionDetails: model.ModVersionDetails{
-			VersionID: "v2",
-			ModID:     modID,
-		},
+		VersionID: "v2",
+		ModID:     modID,
 	}
 
 	p.AddModVersion(v1)

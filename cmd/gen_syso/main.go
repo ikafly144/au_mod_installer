@@ -105,12 +105,8 @@ func main() {
 			ProductName:      "Mod of Us",
 			ProductVersion:   fileVerStr,
 		},
-		VarFileInfo: goversioninfo.VarFileInfo{
-			Translation: goversioninfo.Translation{
-				LangID:    goversioninfo.LngJapanese,
-				CharsetID: goversioninfo.CsMultilingual,
-			},
-		},
+		LangID:    goversioninfo.LngJapanese,
+		CharsetID: goversioninfo.CsMultilingual,
 	}
 
 	vi.Build()
