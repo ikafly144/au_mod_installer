@@ -193,6 +193,14 @@ func NewLauncherTab(s *uicommon.State) *Launcher {
 }
 
 func (l *Launcher) HandleJoinLink(s string) {
+	fyne.Do(func() {
+		if l.state.ShowWindow != nil {
+			l.state.ShowWindow()
+		} else if l.state.Window != nil {
+			l.state.Window.Show()
+			l.state.Window.RequestFocus()
+		}
+	})
 	uri, err := url.Parse(s)
 	if err != nil {
 		slog.Error("Failed to parse join URI", "error", err, "uri", s)
@@ -1200,6 +1208,14 @@ func (l *Launcher) checkSharedURI() {
 	if sharedURI == "" {
 		return
 	}
+	fyne.Do(func() {
+		if l.state.ShowWindow != nil {
+			l.state.ShowWindow()
+		} else if l.state.Window != nil {
+			l.state.Window.Show()
+			l.state.Window.RequestFocus()
+		}
+	})
 
 	if parsed, err := url.Parse(sharedURI); err == nil {
 		switch {
@@ -1241,6 +1257,14 @@ func (l *Launcher) handleJoinGameURI(sharedURI string) {
 }
 
 func (l *Launcher) handleGameLink(joinURI *core.JoinGameLink) {
+	fyne.Do(func() {
+		if l.state.ShowWindow != nil {
+			l.state.ShowWindow()
+		} else if l.state.Window != nil {
+			l.state.Window.Show()
+			l.state.Window.RequestFocus()
+		}
+	})
 	go func() {
 		shared, iconPNG, joinInfo, err := l.state.Core.HandleJoinGameDownload(joinURI.SessionID, joinURI.ServerBase)
 		fyne.Do(func() {
@@ -1302,6 +1326,14 @@ func (l *Launcher) checkSharedArchive() {
 	}
 	path := l.state.SharedArchive
 	l.state.SharedArchive = ""
+	fyne.Do(func() {
+		if l.state.ShowWindow != nil {
+			l.state.ShowWindow()
+		} else if l.state.Window != nil {
+			l.state.Window.Show()
+			l.state.Window.RequestFocus()
+		}
+	})
 	l.importProfileFromArchiveFile(path)
 }
 

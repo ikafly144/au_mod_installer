@@ -205,8 +205,12 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 		if nw, ok := w.(driver.NativeWindow); ok {
 			nw.RunNative(func(context any) {
 				if winCtx, ok := context.(driver.WindowsWindowContext); ok {
-					win32.ShowWindow(win32.HWND(winCtx.HWND), win32.SW_RESTORE)
-					win32.SetForegroundWindow(win32.HWND(winCtx.HWND))
+					hwnd := win32.HWND(winCtx.HWND)
+					win32.ShowWindow(hwnd, win32.SW_RESTORE)
+					win32.SetWindowPos(hwnd, win32.HWND_TOPMOST, 0, 0, 0, 0, win32.SWP_NOMOVE|win32.SWP_NOSIZE|win32.SWP_SHOWWINDOW)
+					win32.SetWindowPos(hwnd, win32.HWND_NOTOPMOST, 0, 0, 0, 0, win32.SWP_NOMOVE|win32.SWP_NOSIZE|win32.SWP_SHOWWINDOW)
+					win32.SetForegroundWindow(hwnd)
+					win32.BringWindowToTop(hwnd)
 				}
 			})
 		}
@@ -271,7 +275,7 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 		})
 	})
 
-	if !config.silent {
+	if !config.silent || sharedURI != "" || sharedArchive != "" {
 		state.ShowWindow()
 	} else {
 		// In silent mode, perform a prompt GC/FreeOSMemory after setting up tray
