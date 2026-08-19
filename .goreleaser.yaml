@@ -11,7 +11,7 @@ version: 2
 project_name: mod-of-us
 
 snapshot:
-  version_template: "{{ .Version }}-dev{{ if .Env.GITHUB_RUN_NUMBER }}.{{ .Env.GITHUB_RUN_NUMBER }}{{ end }}-{{ .Branch }}-{{ .ShortCommit }}"
+  version_template: '{{ .Version }}-dev{{ if ne (indexOrDefault .Env "GITHUB_RUN_NUMBER" "false") "false" }}.{{ .Env.GITHUB_RUN_NUMBER }}{{ end }}+{{ .Branch }}-{{ .ShortCommit }}'
 
 git:
   tag_sort: -version:creatordate

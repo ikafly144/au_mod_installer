@@ -2,8 +2,8 @@
   xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util"
   xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
   <Package Name="!(loc.ProductName)" Language="1041" Version="$(var.ProductVersion)" Manufacturer="!(loc.ManufacturerName)" UpgradeCode="{3C7B19C3-5A2D-4C4E-8B71-88D8F8DE18B2}" Scope="perUser">
-    <Icon Id="appIcon" SourceFile="$(var.SourceDir)\\client\\icon.ico" />
-    <Property Id="ARPPRODUCTICON" Value="appIcon" />
+    <Icon Id="AppIconIco" SourceFile="$(var.SourceDir)\\app.ico" />
+    <Property Id="ARPPRODUCTICON" Value="AppIconIco" />
 
     <MajorUpgrade DowngradeErrorMessage="!(loc.DowngradeError)" AllowSameVersionUpgrades="yes" />
 
@@ -56,7 +56,7 @@
     <StandardDirectory Id="ProgramMenuFolder">
       <Directory Id="ProgramMenuDir" Name="!(loc.InstallFolder)">
         <Component Id="StartMenuShortcut" Guid="{E2EF6B58-4FD5-46E0-9C4A-C0B1E2C4C2B1}">
-          <Shortcut Id="StartMenuShortcut" Name="!(loc.ShortcutName)" Target="[INSTALLFOLDER]updater.exe" Arguments="-target &quot;[INSTALLFOLDER]Mod of Us.exe&quot;" WorkingDirectory="INSTALLFOLDER" Icon="[INSTALLFOLDER]app.ico" IconIndex="0">
+          <Shortcut Id="StartMenuShortcut" Name="!(loc.ShortcutName)" Target="[INSTALLFOLDER]updater.exe" Arguments="-target &quot;[INSTALLFOLDER]Mod of Us.exe&quot;" WorkingDirectory="INSTALLFOLDER">
             <ShortcutProperty Key="System.AppUserModel.ID" Value="com.github.ikafly.au_mod_installer" />
           </Shortcut>
           <RemoveFolder Id="RemoveProgramMenuDir" On="uninstall" />
@@ -64,5 +64,13 @@
         </Component>
       </Directory>
     </StandardDirectory>
+
+    <SetProperty Id="SetShortcutIcon" Value="&quot;powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command &quot;$$w=New-Object -ComObject WScript.Shell; $$s=$$w.CreateShortcut('[ProgramMenuDir]!(loc.ShortcutName).lnk'); $$s.IconLocation='[INSTALLFOLDER]app.ico'; $$s.Save()&quot;" Before="SetShortcutIcon" Sequence="execute" />
+
+    <CustomAction Id="SetShortcutIcon" BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)" DllEntry="WixQuietExec" Execute="deferred" Return="ignore" Impersonate="yes" />
+
+    <InstallExecuteSequence>
+      <Custom Action="SetShortcutIcon" After="CreateShortcuts" Condition="NOT Installed" />
+    </InstallExecuteSequence>
   </Package>
 </Wix>
