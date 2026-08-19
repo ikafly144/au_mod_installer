@@ -181,5 +181,3 @@ func TestCheckAvailableUpdate(t *testing.T) {
 	_, _, errOffline := stateOffline.CheckAvailableUpdate()
 	assert.Error(t, errOffline)
 }
-
-
