@@ -107,6 +107,13 @@ func NewState(w fyne.Window, version string, options ...Option) (*State, error) 
 		if s.OnGameExited != nil {
 			s.OnGameExited(profileID)
 		}
+		s.gameExitedMu.Lock()
+		listeners := make([]func(uuid.UUID), len(s.onGameExitedListeners))
+		copy(listeners, s.onGameExitedListeners)
+		s.gameExitedMu.Unlock()
+		for _, listener := range listeners {
+			listener(profileID)
+		}
 	}
 	app.OnLobbyInfoUpdated = func(info *core.IPCLobbyInfo) {
 		if s.OnLobbyInfoUpdated != nil {
@@ -130,6 +137,12 @@ type State struct {
 	joinInfoLock     sync.Mutex
 	dialogLock       sync.Mutex
 	activeDialog     dialog.Dialog
+
+	windowVisibilityMu sync.RWMutex
+	isWindowVisible    bool
+
+	gameExitedMu          sync.Mutex
+	onGameExitedListeners []func(uuid.UUID)
 
 	Core           *core.App
 	Rest           rest.Client
@@ -155,6 +168,27 @@ type State struct {
 	CloseIPC                func()
 
 	pendingJoinInfo *core.LaunchJoinInfo
+}
+
+func (s *State) IsWindowVisible() bool {
+	s.windowVisibilityMu.RLock()
+	defer s.windowVisibilityMu.RUnlock()
+	return s.isWindowVisible
+}
+
+func (s *State) SetWindowVisible(visible bool) {
+	s.windowVisibilityMu.Lock()
+	s.isWindowVisible = visible
+	s.windowVisibilityMu.Unlock()
+}
+
+func (s *State) AddOnGameExitedListener(listener func(uuid.UUID)) {
+	if listener == nil {
+		return
+	}
+	s.gameExitedMu.Lock()
+	s.onGameExitedListeners = append(s.onGameExitedListeners, listener)
+	s.gameExitedMu.Unlock()
 }
 
 func (s *State) ModInstallDir() string {

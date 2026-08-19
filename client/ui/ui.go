@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/zzl/go-win32api/v2/win32"
 
 	"github.com/ikafly144/au_mod_installer/client/ui/tab/launcher"
@@ -181,6 +182,7 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 		initOnce.Do(func() {
 			buildFullUI()
 			w.Show()
+			state.SetWindowVisible(true)
 			if _, err := state.EnableNativeCustomWindowFrame(); err != nil {
 				slog.Warn("Failed to enable native custom window frame", "error", err)
 			}
@@ -195,6 +197,7 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 		})
 
 		w.Show()
+		state.SetWindowVisible(true)
 		w.RequestFocus()
 		if state.Core != nil && state.Core.DiscordService != nil {
 			state.Core.DiscordService.SetIdleActivityEnabled(true)
@@ -211,6 +214,7 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 
 	ctx, cancel := context.WithCancel(context.Background())
 	onClosed := func() {
+		state.SetWindowVisible(false)
 		if state.CloseIPC != nil {
 			state.CloseIPC()
 		}
@@ -227,13 +231,16 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 	setupSystemTray(w, state, onClosed)
 
 	w.SetCloseIntercept(func() {
-		if fyne.CurrentApp().Preferences().BoolWithFallback("tray_resident", true) {
+		resident := fyne.CurrentApp().Preferences().BoolWithFallback("tray_resident", true)
+		gameRunning := state.Core != nil && state.Core.IsAnyProfileBusy()
+		if resident || gameRunning {
 			uicommon.SaveMainWindowSize(w)
 			w.Hide()
+			state.SetWindowVisible(false)
 			if state.Core != nil && state.Core.DiscordService != nil {
 				state.Core.DiscordService.SetIdleActivityEnabled(false)
 			}
-			slog.Info("Main window hidden to system tray")
+			slog.Info("Main window hidden to system tray", "tray_resident", resident, "game_running", gameRunning)
 			go func() {
 				time.Sleep(300 * time.Millisecond)
 				runtime.GC()
@@ -247,6 +254,21 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 			w.Close()
 			fyne.CurrentApp().Quit()
 		}
+	})
+
+	state.AddOnGameExitedListener(func(profileID uuid.UUID) {
+		fyne.Do(func() {
+			resident := fyne.CurrentApp().Preferences().BoolWithFallback("tray_resident", true)
+			if !resident && !state.IsWindowVisible() && (state.Core == nil || !state.Core.IsAnyProfileBusy()) {
+				slog.Info("Game exited and tray residency is disabled while window is hidden; quitting application")
+				if onClosed != nil {
+					onClosed()
+				}
+				w.SetCloseIntercept(nil)
+				w.Close()
+				fyne.CurrentApp().Quit()
+			}
+		})
 	})
 
 	if !config.silent {

@@ -3,6 +3,7 @@ package musmgr
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/urfave/cli/v3"
@@ -231,12 +232,7 @@ func (f *commandFactory) versionIDCompleter() PositionalCompleter {
 
 func (f *commandFactory) isExistingMod(modID string) bool {
 	ids := f.getModIDs(modID)
-	for _, id := range ids {
-		if id == modID {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(ids, modID)
 }
 
 func (f *commandFactory) getModIDs(prefix string) []string {

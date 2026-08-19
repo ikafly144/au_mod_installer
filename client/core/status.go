@@ -99,11 +99,11 @@ func (a *App) WatchRestoredRunningProfile(profileID uuid.UUID, pid int, startedA
 			if !a.IsCurrentRunningProcess(profileID, pid) {
 				return
 			}
-			a.OnGameExitedInternal(profileID)
-			a.ClearRunningProfile(profileID)
 			if onExited != nil {
 				onExited()
 			}
+			a.OnGameExitedInternal(profileID)
+			a.ClearRunningProfile(profileID)
 			return
 		}
 	}()
