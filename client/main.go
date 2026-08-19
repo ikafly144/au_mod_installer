@@ -206,9 +206,12 @@ func realMain(sharedURI string, sharedArchive string) error {
 	}
 
 	w := a.NewWindow(lang.LocalizeKey("app.name", "Mod of Us") + " " + version)
-	if !social.RegisterLaunchCommand(APPLICATION_ID, "") {
-		slog.Warn("Failed to register launch command to Discord SDK")
-	}
+	go func() {
+		activityService.WaitReady()
+		if !social.RegisterLaunchCommand(APPLICATION_ID, "") {
+			slog.Warn("Failed to register launch command to Discord SDK")
+		}
+	}()
 
 	activityService.SetIdleActivity(func() *sdk.Activity {
 		act := sdk.NewActivity()
