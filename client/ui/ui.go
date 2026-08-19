@@ -207,10 +207,10 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 				if winCtx, ok := context.(driver.WindowsWindowContext); ok {
 					hwnd := win32.HWND(winCtx.HWND)
 					win32.ShowWindow(hwnd, win32.SW_RESTORE)
-					win32.SetWindowPos(hwnd, win32.HWND_TOPMOST, 0, 0, 0, 0, win32.SWP_NOMOVE|win32.SWP_NOSIZE|win32.SWP_SHOWWINDOW)
-					win32.SetWindowPos(hwnd, win32.HWND_NOTOPMOST, 0, 0, 0, 0, win32.SWP_NOMOVE|win32.SWP_NOSIZE|win32.SWP_SHOWWINDOW)
+					_, _ = win32.SetWindowPos(hwnd, win32.HWND_TOPMOST, 0, 0, 0, 0, win32.SWP_NOMOVE|win32.SWP_NOSIZE|win32.SWP_SHOWWINDOW)
+					_, _ = win32.SetWindowPos(hwnd, win32.HWND_NOTOPMOST, 0, 0, 0, 0, win32.SWP_NOMOVE|win32.SWP_NOSIZE|win32.SWP_SHOWWINDOW)
 					win32.SetForegroundWindow(hwnd)
-					win32.BringWindowToTop(hwnd)
+					_, _ = win32.BringWindowToTop(hwnd)
 				}
 			})
 		}
