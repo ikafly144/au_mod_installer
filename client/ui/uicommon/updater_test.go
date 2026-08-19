@@ -111,3 +111,75 @@ func TestFormatBytes(t *testing.T) {
 	assert.Equal(t, "1.5 MB", formatBytes(1572864))
 	assert.Equal(t, "10.0 MB", formatBytes(10485760))
 }
+
+func TestResolveLatestUpdateTag(t *testing.T) {
+	mock := &mockRestClient{
+		versionInfo: &restcommon.VersionInfo{
+			Branches: []restcommon.BranchInfo{
+				{Name: "stable", Version: "v1.2.0"},
+			},
+		},
+	}
+
+	state := &State{
+		Version: "v1.0.0",
+		Rest:    mock,
+	}
+
+	// When newer version exists on server, returns the newer version
+	assert.Equal(t, "v1.2.0", state.ResolveLatestUpdateTag("v1.1.0"))
+
+	// When tag passed is already newer than or equal to server, preserves tag
+	assert.Equal(t, "v1.3.0", state.ResolveLatestUpdateTag("v1.3.0"))
+	assert.Equal(t, "v1.2.0", state.ResolveLatestUpdateTag("v1.2.0"))
+
+	// When initial tag is empty, resolves to server version
+	assert.Equal(t, "v1.2.0", state.ResolveLatestUpdateTag(""))
+
+	// When Rest is nil, returns original tag
+	stateNoRest := &State{
+		Version: "v1.0.0",
+		Rest:    nil,
+	}
+	assert.Equal(t, "v1.1.0", stateNoRest.ResolveLatestUpdateTag("v1.1.0"))
+}
+
+func TestCheckAvailableUpdate(t *testing.T) {
+	mock := &mockRestClient{
+		versionInfo: &restcommon.VersionInfo{
+			Branches: []restcommon.BranchInfo{
+				{Name: "stable", Version: "v1.2.0"},
+			},
+		},
+	}
+
+	state := &State{
+		Version: "v1.0.0",
+		Rest:    mock,
+	}
+
+	tag, isMandatory, err := state.CheckAvailableUpdate()
+	assert.NoError(t, err)
+	assert.Equal(t, "v1.2.0", tag)
+	assert.True(t, isMandatory)
+
+	// Up to date
+	stateUpToDate := &State{
+		Version: "v1.2.0",
+		Rest:    mock,
+	}
+	tagUpToDate, isMandatoryUpToDate, errUpToDate := stateUpToDate.CheckAvailableUpdate()
+	assert.NoError(t, errUpToDate)
+	assert.Equal(t, "", tagUpToDate)
+	assert.False(t, isMandatoryUpToDate)
+
+	// Offline / no rest
+	stateOffline := &State{
+		Version: "v1.0.0",
+		Rest:    nil,
+	}
+	_, _, errOffline := stateOffline.CheckAvailableUpdate()
+	assert.Error(t, errOffline)
+}
+
+

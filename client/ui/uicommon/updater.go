@@ -26,12 +26,11 @@ func FindBranchVersion(info *restcommon.VersionInfo, branch string) string {
 	return versioning.FindBranchVersion(info, branch)
 }
 
-func (s *State) CheckForUpdates(ctx context.Context, interactive bool) {
+// CheckAvailableUpdate queries the server to check if an update is available for the current branch and version.
+// It returns the target branch release tag (empty if up to date), whether the update is mandatory, and any error.
+func (s *State) CheckAvailableUpdate() (tag string, isMandatory bool, err error) {
 	if s.Rest == nil {
-		if interactive {
-			s.ShowErrorDialog(errors.New(lang.LocalizeKey("update.error.offline", "Cannot check for updates in offline mode.")))
-		}
-		return
+		return "", false, errors.New("cannot check for updates in offline mode")
 	}
 
 	branchName := "stable"
@@ -42,6 +41,28 @@ func (s *State) CheckForUpdates(ctx context.Context, interactive bool) {
 
 	info, err := s.Rest.GetVersionInfo()
 	if err != nil {
+		return "", false, err
+	}
+
+	branchTag := FindBranchVersion(info, branch.String())
+	stableTag := FindBranchVersion(info, versioning.BranchStable.String())
+	if branchTag != "" && semver.Compare(branchTag, s.Version) > 0 {
+		tag = branchTag
+		isMandatory = s.Version != "(devel)" && semver.Prerelease(tag) == "" && semver.Build(tag) == "" && stableTag != "" && semver.Compare(stableTag, s.Version) > 0
+	}
+	return tag, isMandatory, nil
+}
+
+func (s *State) CheckForUpdates(ctx context.Context, interactive bool) {
+	if s.Rest == nil {
+		if interactive {
+			s.ShowErrorDialog(errors.New(lang.LocalizeKey("update.error.offline", "Cannot check for updates in offline mode.")))
+		}
+		return
+	}
+
+	tag, isMandatory, err := s.CheckAvailableUpdate()
+	if err != nil {
 		slog.Error("Failed to check for updates via server", "error", err)
 		if interactive {
 			s.ShowErrorDialog(errors.New(lang.LocalizeKey("update.check_failed", "Failed to check for updates: {{.Error}}", map[string]any{"Error": err.Error()})))
@@ -49,15 +70,8 @@ func (s *State) CheckForUpdates(ctx context.Context, interactive bool) {
 		return
 	}
 
-	tag := FindBranchVersion(info, branch.String())
-	stable := FindBranchVersion(info, versioning.BranchStable.String())
-	if tag != "" && semver.Compare(tag, s.Version) <= 0 {
-		tag = ""
-	}
-
 	if tag != "" {
 		slog.Info("Update available", "version", tag, "current", s.Version)
-		isMandatory := s.Version != "(devel)" && semver.Prerelease(tag) == "" && semver.Build(tag) == "" && stable != "" && semver.Compare(stable, s.Version) > 0
 		s.ShowUpdateDialog(tag, isMandatory)
 	} else {
 		slog.Info("No updates available", "current", s.Version)
@@ -118,6 +132,19 @@ func (s *State) ShowUpdateDialog(tag string, isMandatory bool) {
 	})
 }
 
+func (s *State) ResolveLatestUpdateTag(tag string) string {
+	latestTag, _, err := s.CheckAvailableUpdate()
+	if err != nil {
+		slog.Warn("Failed to fetch latest version info before update download; using previous tag", "error", err, "tag", tag)
+		return tag
+	}
+	if latestTag != "" && (tag == "" || semver.Compare(latestTag, tag) > 0) {
+		slog.Info("Newer version available at download time, upgrading target tag", "original", tag, "latest", latestTag)
+		return latestTag
+	}
+	return tag
+}
+
 func (s *State) PerformUpdate(tag string) {
 	if s.Window == nil {
 		return
@@ -140,7 +167,8 @@ func (s *State) PerformUpdate(tag string) {
 	progressDialog.Show()
 
 	go func() {
-		installerLaunched, err := versioning.UpdateWithProgress(context.Background(), tag, func(downloaded, total int64) {
+		targetTag := s.ResolveLatestUpdateTag(tag)
+		installerLaunched, err := versioning.UpdateWithProgress(context.Background(), targetTag, func(downloaded, total int64) {
 			if total > 0 {
 				ratio := float64(downloaded) / float64(total)
 				if ratio > 1.0 {
