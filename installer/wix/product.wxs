@@ -22,7 +22,7 @@
     </Feature>
 
     <!-- Custom action to launch the application if checkbox selected -->
-    <CustomAction Id="LaunchApplication" FileRef="UpdaterExeFile" ExeCommand="-target &quot;[INSTALLFOLDER]Mod of Us.exe&quot;" Return="asyncNoWait" Impersonate="yes" />
+    <CustomAction Id="LaunchApplication" Directory="INSTALLFOLDER" ExeCommand="&quot;[INSTALLFOLDER]updater.exe&quot; -target &quot;[INSTALLFOLDER]Mod of Us.exe&quot;" Return="asyncNoWait" Impersonate="yes" />
 
     <UI>
       <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
