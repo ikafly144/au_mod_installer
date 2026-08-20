@@ -12,7 +12,7 @@ const ApplicationID uint64 = 1472154358291501171
 func NewDiscordService(client *discord.Client) *DiscordService {
 	ds := &DiscordService{
 		client:                       client,
-		relationShipChangedCallbacks: make(map[int]func([]discord.RelationshipHandle)),
+		relationShipChangedCallbacks: make(map[int]func([]discord.UserHandle)),
 		activityInviteCallbacks:      make(map[int]func(*discord.ActivityInvite)),
 	}
 	ds.resetReady()
@@ -63,7 +63,7 @@ type DiscordService struct {
 	signingIn bool
 	loggedIn  bool
 
-	relationShipChangedCallbacks map[int]func([]discord.RelationshipHandle)
+	relationShipChangedCallbacks map[int]func([]discord.UserHandle)
 	nextRelationshipCallbackID   int
 	relationshipsMu              sync.Mutex
 

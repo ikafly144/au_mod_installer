@@ -227,8 +227,8 @@ func (l *Launcher) handleActivityInvite(invite *discordsdk.ActivityInvite) {
 		senderName := fmt.Sprintf("User %d", senderID)
 		if l.state.Core.DiscordService.IsLoggedIn() {
 			if friends, err := l.state.Core.DiscordService.GetFriends(); err == nil {
-				for _, f := range friends {
-					if u, ok := f.User(); ok && u.Id() == senderID {
+				for _, u := range friends {
+					if u.Id() == senderID {
 						if name := strings.TrimSpace(u.DisplayName()); name != "" {
 							senderName = name
 						} else if name := strings.TrimSpace(u.Username()); name != "" {
@@ -961,10 +961,21 @@ func (l *Launcher) showDiscordFriendsDialog() {
 		mySeq := searchSeq
 		loading.Show()
 		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					slog.Error("Panic in discord friends updateList", "recover", r)
+					fyne.Do(func() {
+						if mySeq == searchSeq {
+							loading.Hide()
+						}
+					})
+				}
+			}()
+
 			var userHandles []discordsdk.UserHandle
 			query = strings.TrimSpace(query)
 			if query == "" {
-				relationships, err := l.state.Core.DiscordService.GetFriends()
+				friends, err := l.state.Core.DiscordService.GetFriends()
 				if err != nil {
 					fyne.Do(func() {
 						if mySeq != searchSeq {
@@ -975,12 +986,7 @@ func (l *Launcher) showDiscordFriendsDialog() {
 					})
 					return
 				}
-				userHandles = make([]discordsdk.UserHandle, 0, len(relationships))
-				for _, r := range relationships {
-					if user, ok := r.User(); ok {
-						userHandles = append(userHandles, user)
-					}
-				}
+				userHandles = friends
 			} else {
 				searchResult, err := l.state.Core.DiscordService.SearchFriends(query)
 				if err != nil {
@@ -1000,14 +1006,6 @@ func (l *Launcher) showDiscordFriendsDialog() {
 			var clientAppID uint64
 			if client != nil {
 				clientAppID = client.GetApplicationId()
-			}
-			playingGameIDs := make(map[uint64]bool)
-			if client != nil {
-				for _, rel := range client.GetRelationshipsByGroup(discordsdk.RelationshipGroupTypeOnlinePlayingGame) {
-					if u, ok := rel.User(); ok {
-						playingGameIDs[u.Id()] = true
-					}
-				}
 			}
 
 			newFriends := make([]discordFriend, 0, len(userHandles))
@@ -1030,11 +1028,11 @@ func (l *Launcher) showDiscordFriendsDialog() {
 				} else {
 					avatarURL = fmt.Sprintf("https://cdn.discordapp.com/embed/avatars/%d.png", (user.Id()>>22)%6)
 				}
-				isPlayingModOfUs := playingGameIDs[user.Id()]
+				isPlayingModOfUs := false
 				canJoin := false
 				if act, ok := user.GameActivity(); ok {
 					if appID, hasAppID := act.ApplicationId(); hasAppID {
-						if (clientAppID != 0 && appID == clientAppID) || appID == discord.ApplicationID {
+						if appID == discord.ApplicationID || (clientAppID != 0 && appID == clientAppID) {
 							isPlayingModOfUs = true
 							if secrets, hasSec := act.Secrets(); hasSec && strings.TrimSpace(secrets.Join()) != "" {
 								canJoin = true
@@ -1109,7 +1107,7 @@ func (l *Launcher) showDiscordFriendsDialog() {
 		l.state.Window,
 	)
 
-	callbackID := ds.AddRelationshipChangedCallback(func(friends []discordsdk.RelationshipHandle) {
+	callbackID := ds.AddRelationshipChangedCallback(func(friends []discordsdk.UserHandle) {
 		fyne.Do(func() {
 			updateList(searchBar.Text)
 		})
