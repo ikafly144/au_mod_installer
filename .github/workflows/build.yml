@@ -27,7 +27,7 @@ jobs:
         run: |
           git config --global core.autocrlf false
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
           token: ${{ secrets.MUS_LIBS_PAT }}
@@ -64,7 +64,7 @@ jobs:
         run: |
           git config --global core.autocrlf false
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
           token: ${{ secrets.MUS_LIBS_PAT }}
@@ -156,7 +156,7 @@ jobs:
         run: |
           git config --global core.autocrlf false
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
           token: ${{ secrets.MUS_LIBS_PAT }}
@@ -241,7 +241,7 @@ jobs:
           DISCORD_WEBHOOK_ID: ${{ secrets.DISCORD_WEBHOOK_ID }}
           DISCORD_WEBHOOK_TOKEN: ${{ secrets.DISCORD_WEBHOOK_TOKEN }}
           GORELEASER_PREVIOUS_TAG: ${{ steps.get_previous_stable.outputs.previous_stable }}
-      - uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
         with:
           subject-checksums: ./dist/checksums.txt
       - name: Upload installer artifact
