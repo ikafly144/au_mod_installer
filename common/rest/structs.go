@@ -18,9 +18,9 @@ type BranchInfo struct {
 type RoomInfo struct {
 	LobbyCode      string `json:"lobby_code,omitempty"`
 	ServerIP       string `json:"server_ip,omitempty"`
-	ServerPort     uint16 `json:"server_port,omitempty"`
+	ServerPort     uint16 `json:"server_port,omitzero"`
 	MatchMakerIp   string `json:"match_maker_ip,omitempty"`
-	MatchMakerPort uint16 `json:"match_maker_port,omitempty"`
+	MatchMakerPort uint16 `json:"match_maker_port,omitzero"`
 	GameVersion    string `json:"game_version,omitempty"`
 }
 

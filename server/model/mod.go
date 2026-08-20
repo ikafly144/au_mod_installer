@@ -2,7 +2,7 @@ package model
 
 import (
 	"database/sql/driver"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"time"
 )
@@ -104,7 +104,7 @@ type ModVersionFile struct {
 	ContentType FileType `gorm:"not null" json:"content_type"`
 	Size        int64    `gorm:"not null" json:"size"`
 
-	ExtractPath    *string        `gorm:"default:null" json:"extract_path,omitempty"`
+	ExtractPath    *string        `gorm:"default:null" json:"extract_path,omitzero"`
 	TargetPlatform TargetPlatform `gorm:"not null;default:'any'" json:"target_platform"`
 
 	Hashes    StringMap   `gorm:"type:json" json:"hashes"`

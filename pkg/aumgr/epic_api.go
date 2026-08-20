@@ -2,7 +2,7 @@ package aumgr
 
 import (
 	"encoding/base64"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"net/http"
@@ -126,7 +126,7 @@ func (a *EpicApi) oauthRequest(data url.Values) (*EpicSession, error) {
 	}
 
 	var tokenResp oauthTokenResponse
-	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &tokenResp); err != nil {
 		return nil, err
 	}
 
@@ -165,7 +165,7 @@ func (a *EpicApi) GetExchangeCode(accessToken string) (string, error) {
 	}
 
 	var exchangeResp exchangeCodeResponse
-	if err := json.NewDecoder(resp.Body).Decode(&exchangeResp); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &exchangeResp); err != nil {
 		return "", err
 	}
 

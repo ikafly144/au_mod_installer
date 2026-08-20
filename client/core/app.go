@@ -6,7 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"log/slog"
@@ -352,7 +352,7 @@ func (a *App) HandleSharedProfile(uri string) (*profile.SharedProfile, error) {
 	defer reader.Close()
 
 	var prof profile.SharedProfile
-	if err := json.NewDecoder(reader).Decode(&prof); err != nil {
+	if err := json.UnmarshalRead(reader, &prof); err != nil {
 		return nil, fmt.Errorf("failed to decode profile JSON: %w", err)
 	}
 
@@ -389,7 +389,7 @@ func (a *App) ExportProfile(prof profile.Profile) (string, error) {
 	writer := zlib.NewWriter(base64.NewEncoder(base64.RawURLEncoding, builder))
 	defer writer.Close()
 
-	if err := json.NewEncoder(writer).Encode(prof.MakeShared()); err != nil {
+	if err := json.MarshalWrite(writer, prof.MakeShared()); err != nil {
 		return "", err
 	}
 	if err := writer.Flush(); err != nil {

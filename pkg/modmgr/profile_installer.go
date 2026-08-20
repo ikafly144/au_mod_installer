@@ -1,7 +1,7 @@
 package modmgr
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"log/slog"
@@ -167,7 +167,7 @@ func PrepareProfileDirectory(profileDir string, gamePath string, cacheDir string
 			if metaFile, err := cacheRoot.Open("metadata.json"); err != nil {
 				slog.Warn("Failed to open mod cache metadata, will re-download", "modId", mod.ModID, "versionId", mod.VersionID, "error", err)
 				return fmt.Errorf("mod cache metadata not found for %s: %w", mod.ModID, err)
-			} else if err := json.NewDecoder(metaFile).Decode(&metadata); err != nil {
+			} else if err := json.UnmarshalRead(metaFile, &metadata); err != nil {
 				_ = metaFile.Close()
 				slog.Warn("Failed to decode mod cache metadata, will re-download", "modId", mod.ModID, "versionId", mod.VersionID, "error", err)
 				return fmt.Errorf("failed to decode mod cache metadata for %s: %w", mod.ModID, err)

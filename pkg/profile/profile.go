@@ -18,7 +18,7 @@ type Profile struct {
 	Description    string                       `json:"description,omitempty"`
 	ModVersions    map[string]modmgr.ModVersion `json:"mod_versions,omitempty"`
 	UpdatedAt      time.Time                    `json:"updated_at"`
-	PlayDurationNS int64                        `json:"play_duration_ns,omitempty"`
+	PlayDurationNS int64                        `json:"play_duration_ns,omitzero"`
 	LastLaunchedAt time.Time                    `json:"last_launched_at"`
 }
 

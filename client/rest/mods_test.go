@@ -1,7 +1,7 @@
 package rest
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -23,25 +23,25 @@ func TestClientImpl_CheckForUpdates(t *testing.T) {
 		case "/mod/mod-1":
 			// Mod 1 の詳細（最新バージョンは v1.1.0）
 			mod := model.ModDetails{ID: "mod-1", LatestVersionID: "v1.1.0"}
-			if err := json.NewEncoder(w).Encode(mod); err != nil {
+			if err := json.MarshalWrite(w, mod); err != nil {
 				t.Errorf("Failed to encode response: %v", err)
 			}
 		case "/mod/mod-1/version/v1.1.0":
 			// Mod 1 の最新バージョンの詳細
 			version := model.ModVersionDetails{VersionID: "v1.1.0", ModID: "mod-1"}
-			if err := json.NewEncoder(w).Encode(version); err != nil {
+			if err := json.MarshalWrite(w, version); err != nil {
 				t.Errorf("Failed to encode response: %v", err)
 			}
 		case "/mod/mod-2":
 			// Mod 2 の詳細（最新バージョンは v2.0.0）
 			mod := model.ModDetails{ID: "mod-2", LatestVersionID: "v2.0.0"}
-			if err := json.NewEncoder(w).Encode(mod); err != nil {
+			if err := json.MarshalWrite(w, mod); err != nil {
 				t.Errorf("Failed to encode response: %v", err)
 			}
 		case "/mod/mod-2/version/v2.0.0":
 			// Mod 2 の最新バージョンの詳細
 			version := model.ModVersionDetails{VersionID: "v2.0.0", ModID: "mod-2"}
-			if err := json.NewEncoder(w).Encode(version); err != nil {
+			if err := json.MarshalWrite(w, version); err != nil {
 				t.Errorf("Failed to encode response: %v", err)
 			}
 		default:
@@ -93,7 +93,7 @@ func TestClientImpl_ShareGame_UsesMultipartFormData(t *testing.T) {
 		assert.Equal(t, "22023", r.FormValue("server_port"))
 		assert.Equal(t, "2024.3.5", r.FormValue("game_version"))
 
-		require.NoError(t, json.NewEncoder(w).Encode(restcommon.ShareGameResponse{
+		require.NoError(t, json.MarshalWrite(w, restcommon.ShareGameResponse{
 			URL:       "/join_game?session_id=s1",
 			SessionID: "s1",
 			HostKey:   "h1",

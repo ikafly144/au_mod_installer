@@ -3,7 +3,8 @@ package main
 import (
 	"bytes"
 	"encoding/csv"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"flag"
 	"fmt"
 	"os"
@@ -152,7 +153,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	encoded, err := json.MarshalIndent(document, "", "  ")
+	encoded, err := json.Marshal(document, jsontext.WithIndent("  "))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "failed to encode JSON:", err)
 		os.Exit(1)

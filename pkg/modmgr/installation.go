@@ -2,7 +2,7 @@ package modmgr
 
 import (
 	"archive/zip"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"log/slog"
@@ -57,7 +57,7 @@ func DownloadMods(cacheDir string, modVersions []ModVersion, binaryType aumgr.Bi
 					goto download
 				}
 				var metadata CacheMetadata
-				if err := json.NewDecoder(metaFile).Decode(&metadata); err != nil {
+				if err := json.UnmarshalRead(metaFile, &metadata); err != nil {
 					slog.Warn("Failed to decode mod cache metadata, will re-download", "modId", modVersions[i].ModID, "versionId", modVersions[i].VersionID, "error", err)
 					goto download
 				} else if metadata.ModVersion.VersionID != modVersions[i].VersionID {
@@ -198,7 +198,7 @@ func DownloadMods(cacheDir string, modVersions []ModVersion, binaryType aumgr.Bi
 			return err
 		}
 		defer metaFile.Close()
-		if err := json.NewEncoder(metaFile).Encode(metadata); err != nil {
+		if err := json.MarshalWrite(metaFile, metadata); err != nil {
 			return err
 		}
 	}

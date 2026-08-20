@@ -3,7 +3,8 @@ package profile
 import (
 	"archive/zip"
 	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"strings"
@@ -18,7 +19,7 @@ const (
 )
 
 type sharedArchiveProfileDocument struct {
-	SharedProfile json.RawMessage `json:"sharedprofile"`
+	SharedProfile jsontext.Value `json:"sharedprofile"`
 }
 
 func EncodeSharedArchive(shared SharedProfile, iconPNG []byte) ([]byte, error) {

@@ -2,7 +2,8 @@ package main
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"flag"
 	"fmt"
 	"net/url"
@@ -120,7 +121,7 @@ func main() {
 			})
 		}
 
-		outJson, _ := json.MarshalIndent(output, "", "  ")
+		outJson, _ := json.Marshal(output, jsontext.WithIndent("  "))
 		fmt.Println(string(outJson))
 		return
 	}
@@ -215,6 +216,6 @@ func main() {
 		out.Features = append(out.Features, fmt.Sprintf("%s=%v", name, value))
 	}
 
-	outJson, _ := json.MarshalIndent(out, "", "  ")
+	outJson, _ := json.Marshal(out, jsontext.WithIndent("  "))
 	fmt.Println(string(outJson))
 }

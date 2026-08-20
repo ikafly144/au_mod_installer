@@ -2,7 +2,7 @@ package rest
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"net/http"
@@ -101,7 +101,7 @@ func (c *clientImpl) do(endpoint *rest.CompiledEndpoint, rqBody any, rsBody any,
 				return err
 			}
 		default:
-			if err := json.NewDecoder(resp.Body).Decode(rsBody); err != nil {
+			if err := json.UnmarshalRead(resp.Body, rsBody); err != nil {
 				return err
 			}
 		}

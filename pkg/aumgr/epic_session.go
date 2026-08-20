@@ -1,7 +1,7 @@
 package aumgr
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"log/slog"
 	"os"

@@ -2,7 +2,8 @@ package main
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -371,7 +372,7 @@ func run(ctx context.Context) error {
 		return err
 	}
 
-	data, err := json.MarshalIndent(rule, "", "  ")
+	data, err := json.Marshal(rule, jsontext.WithIndent("  "))
 	if err != nil {
 		return err
 	}

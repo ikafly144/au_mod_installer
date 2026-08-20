@@ -1,7 +1,7 @@
 package core
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -25,10 +25,10 @@ const (
 
 type profileLaunchLockState struct {
 	State             string `json:"state"`
-	StarterPID        int    `json:"starter_pid,omitempty"`
-	GamePID           int    `json:"game_pid,omitempty"`
-	DirectJoinEnabled bool   `json:"direct_join_enabled,omitempty"`
-	StartedAtUnixNano int64  `json:"started_at_unix_nano,omitempty"`
+	StarterPID        int    `json:"starter_pid,omitzero"`
+	GamePID           int    `json:"game_pid,omitzero"`
+	DirectJoinEnabled bool   `json:"direct_join_enabled,omitzero"`
+	StartedAtUnixNano int64  `json:"started_at_unix_nano,omitzero"`
 }
 
 type ProfileLaunchLock struct {
@@ -120,9 +120,9 @@ func writeInitialProfileLock(lockPath string) error {
 		State:      profileLockStateStarting,
 		StarterPID: os.Getpid(),
 	}
-	if err := json.NewEncoder(file).Encode(state); err != nil {
+	if err := json.MarshalWrite(file, state); err != nil {
 		_ = os.Remove(lockPath)
-		return fmt.Errorf("failed to write initial profile lock state: %w", err)
+		return fmt.Errorf("failed to write profile lock payload: %w", err)
 	}
 	return nil
 }
@@ -133,7 +133,8 @@ func writeProfileLockState(lockPath string, state profileLaunchLockState) error 
 		return err
 	}
 	defer file.Close()
-	return json.NewEncoder(file).Encode(state)
+
+	return json.MarshalWrite(file, state)
 }
 
 func readProfileLockState(lockPath string) (profileLaunchLockState, error) {
@@ -142,8 +143,9 @@ func readProfileLockState(lockPath string) (profileLaunchLockState, error) {
 		return profileLaunchLockState{}, err
 	}
 	defer file.Close()
+
 	var state profileLaunchLockState
-	if err := json.NewDecoder(file).Decode(&state); err != nil {
+	if err := json.UnmarshalRead(file, &state); err != nil {
 		return profileLaunchLockState{}, err
 	}
 	return state, nil

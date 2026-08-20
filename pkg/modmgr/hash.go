@@ -7,7 +7,7 @@ import (
 	"crypto/sha3"
 	"crypto/sha512"
 	"encoding/hex"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"hash"
 	"io"
@@ -16,7 +16,7 @@ import (
 
 func hashModVersion(version ModVersion) (string, error) {
 	hasher := sha256.New()
-	err := json.NewEncoder(hasher).Encode(version)
+	err := json.MarshalWrite(hasher, version, json.Deterministic(true))
 	if err != nil {
 		return "", err
 	}

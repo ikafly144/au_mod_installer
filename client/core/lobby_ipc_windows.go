@@ -4,7 +4,7 @@ package core
 
 import (
 	"bufio"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"log/slog"

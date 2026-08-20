@@ -2,7 +2,8 @@ package musmgr
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 
 	"github.com/urfave/cli/v3"
@@ -31,7 +32,7 @@ func (f *commandFactory) newModInfoCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			b, err := json.MarshalIndent(mod, "", "  ")
+			b, err := json.Marshal(mod, jsontext.WithIndent("  "))
 			if err != nil {
 				return err
 			}

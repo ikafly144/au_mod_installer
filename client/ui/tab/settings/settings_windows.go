@@ -5,7 +5,7 @@ package settings
 import (
 	"context"
 	_ "embed"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"image/color"
@@ -1062,7 +1062,7 @@ func loadDisplaySettings(path string, schema *fyneapp.SettingsSchema) error {
 		return err
 	}
 	defer file.Close()
-	if err := json.NewDecoder(file).Decode(schema); err != nil && !errors.Is(err, io.EOF) {
+	if err := json.UnmarshalRead(file, schema); err != nil && !errors.Is(err, io.EOF) {
 		return err
 	}
 	return nil

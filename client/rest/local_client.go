@@ -1,7 +1,7 @@
 package rest
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"log/slog"
 	"os"
@@ -34,7 +34,7 @@ func (f *FileClient) LoadData() error {
 		Versions []modmgr.ModVersion `json:"versions"`
 	}
 	var fileMods []fileMod
-	if err = json.NewDecoder(source).Decode(&fileMods); err != nil {
+	if err = json.UnmarshalRead(source, &fileMods); err != nil {
 		return err
 	}
 	f.modStore = make(map[string]modmgr.Mod)

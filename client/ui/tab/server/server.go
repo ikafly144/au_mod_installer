@@ -3,7 +3,8 @@
 package server
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"image/color"
 	"os"
@@ -39,12 +40,12 @@ var officialServerIcon = theme.NewThemedResource(fyne.NewStaticResource("server-
 var customServerIcon = theme.NewThemedResource(fyne.NewStaticResource("server-build-circle.svg", []byte(buildCircleIconSVG)))
 
 type regionInfo struct {
-	CurrentRegionIdx int               `json:"CurrentRegionIdx"`
-	Regions          []json.RawMessage `json:"Regions"`
+	CurrentRegionIdx int              `json:"CurrentRegionIdx"`
+	Regions          []jsontext.Value `json:"Regions"`
 }
 
 type staticRegionInfo struct {
-	Type          string   `json:"$type,omitempty"`
+	Type          string   `json:"$type,omitzero"`
 	Name          string   `json:"Name"`
 	PingServer    string   `json:"PingServer"`
 	Servers       []ipPort `json:"Servers"`
@@ -54,7 +55,7 @@ type staticRegionInfo struct {
 }
 
 type dnsRegionInfo struct {
-	Type          string  `json:"$type,omitempty"`
+	Type          string  `json:"$type,omitzero"`
 	Fqdn          string  `json:"Fqdn"`
 	DefaultIP     *string `json:"DefaultIp"`
 	Port          uint16  `json:"Port"`
@@ -393,7 +394,7 @@ func (s *ServerTab) saveToDisk() error {
 	}
 	payload := regionInfo{
 		CurrentRegionIdx: currentIdx,
-		Regions:          make([]json.RawMessage, 0, len(regions)),
+		Regions:          make([]jsontext.Value, 0, len(regions)),
 	}
 	for _, r := range regions {
 		raw, err := json.Marshal(r)
@@ -402,7 +403,7 @@ func (s *ServerTab) saveToDisk() error {
 		}
 		payload.Regions = append(payload.Regions, raw)
 	}
-	raw, err := json.MarshalIndent(payload, "", "    ")
+	raw, err := json.Marshal(payload, jsontext.WithIndent("    "))
 	if err != nil {
 		return err
 	}
@@ -474,8 +475,8 @@ func buildServerEntry(nameText, ipText, portText string, base regionEntry, isNew
 	return base, nil
 }
 
-func decodeRegionEntry(raw json.RawMessage) (regionEntry, error) {
-	var probe map[string]json.RawMessage
+func decodeRegionEntry(raw jsontext.Value) (regionEntry, error) {
+	var probe map[string]jsontext.Value
 	if err := json.Unmarshal(raw, &probe); err != nil {
 		return regionEntry{}, err
 	}
