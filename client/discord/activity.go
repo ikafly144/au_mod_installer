@@ -1,6 +1,7 @@
 package discord
 
 import (
+	"fmt"
 	"log/slog"
 
 	"fyne.io/fyne/v2/lang"
@@ -116,6 +117,38 @@ func (s *DiscordService) SendInvite(userId uint64) {
 			slog.Warn("Failed to send Discord invite", "error", result.ErrorCode())
 		} else {
 			slog.Info("Successfully sent Discord invite")
+		}
+	})
+}
+
+func (s *DiscordService) SendActivityJoinRequest(userId uint64, callback func(error)) {
+	s.client.SendActivityJoinRequest(userId, func(result *discord.ClientResult) {
+		if !result.Successful() {
+			slog.Warn("Failed to send Discord activity join request", "error", result.ErrorCode(), "userId", userId)
+			if callback != nil {
+				callback(fmt.Errorf("failed with error code: %d", result.ErrorCode()))
+			}
+		} else {
+			slog.Info("Successfully sent Discord activity join request", "userId", userId)
+			if callback != nil {
+				callback(nil)
+			}
+		}
+	})
+}
+
+func (s *DiscordService) SendActivityJoinRequestReply(invite *discord.ActivityInvite, callback func(error)) {
+	s.client.SendActivityJoinRequestReply(invite, func(result *discord.ClientResult) {
+		if !result.Successful() {
+			slog.Warn("Failed to send Discord activity join request reply", "error", result.ErrorCode())
+			if callback != nil {
+				callback(fmt.Errorf("failed with error code: %d", result.ErrorCode()))
+			}
+		} else {
+			slog.Info("Successfully replied to Discord activity join request")
+			if callback != nil {
+				callback(nil)
+			}
 		}
 	})
 }

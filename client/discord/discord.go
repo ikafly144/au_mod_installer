@@ -13,6 +13,7 @@ func NewDiscordService(client *discord.Client) *DiscordService {
 	ds := &DiscordService{
 		client:                       client,
 		relationShipChangedCallbacks: make(map[int]func([]discord.RelationshipHandle)),
+		activityInviteCallbacks:      make(map[int]func(*discord.ActivityInvite)),
 	}
 	ds.resetReady()
 	client.SetRelationshipGroupsUpdatedCallback(func(userId uint64) {
@@ -27,6 +28,17 @@ func NewDiscordService(client *discord.Client) *DiscordService {
 			callback(friends)
 		}
 		ds.relationshipsMu.Unlock()
+	})
+	client.SetActivityInviteCreatedCallback(func(invite *discord.ActivityInvite) {
+		ds.activityInviteMu.Lock()
+		callbacks := make([]func(*discord.ActivityInvite), 0, len(ds.activityInviteCallbacks))
+		for _, cb := range ds.activityInviteCallbacks {
+			callbacks = append(callbacks, cb)
+		}
+		ds.activityInviteMu.Unlock()
+		for _, cb := range callbacks {
+			cb(invite)
+		}
 	})
 	return ds
 }
@@ -54,6 +66,25 @@ type DiscordService struct {
 	relationShipChangedCallbacks map[int]func([]discord.RelationshipHandle)
 	nextRelationshipCallbackID   int
 	relationshipsMu              sync.Mutex
+
+	activityInviteCallbacks      map[int]func(*discord.ActivityInvite)
+	nextActivityInviteCallbackID int
+	activityInviteMu             sync.Mutex
+}
+
+func (s *DiscordService) AddActivityInviteCallback(callback func(*discord.ActivityInvite)) int {
+	s.activityInviteMu.Lock()
+	defer s.activityInviteMu.Unlock()
+	id := s.nextActivityInviteCallbackID
+	s.activityInviteCallbacks[id] = callback
+	s.nextActivityInviteCallbackID++
+	return id
+}
+
+func (s *DiscordService) RemoveActivityInviteCallback(id int) {
+	s.activityInviteMu.Lock()
+	defer s.activityInviteMu.Unlock()
+	delete(s.activityInviteCallbacks, id)
 }
 
 func (s *DiscordService) resetReady() {

@@ -101,6 +101,7 @@ type discordFriend struct {
 	avatarURL      string
 	status         discordsdk.StatusType
 	playingModOfUs bool
+	canJoin        bool
 }
 
 var _ uicommon.Tab = (*Launcher)(nil)
@@ -215,9 +216,81 @@ func (l *Launcher) HandleJoinLink(s string) {
 	l.handleGameLink(gameLink)
 }
 
+func (l *Launcher) handleActivityInvite(invite *discordsdk.ActivityInvite) {
+	if invite == nil {
+		return
+	}
+	switch invite.Type() {
+	case discordsdk.ActivityActionTypesJoinRequest:
+		senderID := invite.SenderId()
+		senderName := fmt.Sprintf("User %d", senderID)
+		if l.state.Core.DiscordService.IsLoggedIn() {
+			if friends, err := l.state.Core.DiscordService.GetFriends(); err == nil {
+				for _, f := range friends {
+					if u, ok := f.User(); ok && u.Id() == senderID {
+						if name := strings.TrimSpace(u.DisplayName()); name != "" {
+							senderName = name
+						} else if name := strings.TrimSpace(u.Username()); name != "" {
+							senderName = name
+						}
+						break
+					}
+				}
+			}
+		}
+
+		fyne.Do(func() {
+			if l.state.ShowWindow != nil {
+				l.state.ShowWindow()
+			} else if l.state.Window != nil {
+				l.state.Window.Show()
+				l.state.Window.RequestFocus()
+			}
+
+			title := lang.LocalizeKey("launcher.discord_friends.join_request_received_title", "Join Request Received")
+			msg := lang.LocalizeKey(
+				"launcher.discord_friends.join_request_received_message",
+				"{{.Name}} has requested to join your game. Accept?",
+				map[string]any{"Name": senderName},
+			)
+
+			d := dialog.NewConfirm(
+				title,
+				msg,
+				func(accept bool) {
+					if accept {
+						l.state.Core.DiscordService.SendActivityJoinRequestReply(invite, func(err error) {
+							if err != nil {
+								fyne.Do(func() {
+									l.state.ShowErrorDialog(err)
+								})
+							}
+						})
+					}
+				},
+				l.state.Window,
+			)
+			d.SetDismissText(lang.LocalizeKey("launcher.discord_friends.join_request_reject", "Decline"))
+			d.SetConfirmText(lang.LocalizeKey("launcher.discord_friends.join_request_accept", "Accept"))
+			d.Show()
+		})
+
+	case discordsdk.ActivityActionTypesJoin:
+		client := l.state.Core.DiscordService.Client()
+		if client != nil {
+			client.AcceptActivityInvite(invite, func(result *discordsdk.ClientResult, secret string) {
+				if result.Successful() && secret != "" {
+					l.HandleJoinLink(secret)
+				}
+			})
+		}
+	}
+}
+
 func (l *Launcher) init() {
 	client := l.state.Core.DiscordService.Client()
 	client.SetActivityJoinCallback(l.HandleJoinLink)
+	l.state.Core.DiscordService.AddActivityInviteCallback(l.handleActivityInvite)
 
 	l.state.OnSharedURIReceived = func(uri string) {
 		l.state.SharedURI = uri
@@ -654,21 +727,24 @@ func discordStatusColor(status discordsdk.StatusType, isPlayingModOfUs bool) col
 	}
 }
 
-func discordStatusPriority(status discordsdk.StatusType, isPlayingModOfUs bool) int {
+func discordStatusPriority(status discordsdk.StatusType, isPlayingModOfUs bool, canJoin bool) int {
 	if isPlayingModOfUs {
-		return 0
+		if canJoin {
+			return 0
+		}
+		return 1
 	}
 	switch status {
 	case discordsdk.StatusTypeOnline:
-		return 1
-	case discordsdk.StatusTypeIdle, discordsdk.StatusTypeStreaming:
 		return 2
-	case discordsdk.StatusTypeDnd:
+	case discordsdk.StatusTypeIdle, discordsdk.StatusTypeStreaming:
 		return 3
-	case discordsdk.StatusTypeOffline, discordsdk.StatusTypeInvisible:
+	case discordsdk.StatusTypeDnd:
 		return 4
-	default:
+	case discordsdk.StatusTypeOffline, discordsdk.StatusTypeInvisible:
 		return 5
+	default:
+		return 6
 	}
 }
 
@@ -776,6 +852,30 @@ func (l *Launcher) showDiscordFriendsDialog() {
 		name.Wrapping = fyne.TextWrapOff
 		name.Truncation = fyne.TextTruncateEllipsis
 
+		var actionButtons []fyne.CanvasObject
+
+		if friend.canJoin {
+			joinButton := widget.NewButtonWithIcon(lang.LocalizeKey("launcher.discord_friends.join", "Join"), theme.LoginIcon(), nil)
+			joinButton.Importance = widget.HighImportance
+			friendID := friend.id
+			friendName := friend.name
+			joinButton.OnTapped = func() {
+				l.state.Core.DiscordService.SendActivityJoinRequest(friendID, func(err error) {
+					fyne.Do(func() {
+						if err != nil {
+							l.state.ShowErrorDialog(fmt.Errorf("%s: %w", lang.LocalizeKey("launcher.discord_friends.join_request_failed_title", "Failed to Send Join Request"), err))
+						} else {
+							l.state.ShowInfoDialog(
+								lang.LocalizeKey("launcher.discord_friends.join_request_sent_title", "Join Request Sent"),
+								lang.LocalizeKey("launcher.discord_friends.join_request_sent_message", "Sent join request to {{.Name}}.", map[string]any{"Name": friendName}),
+							)
+						}
+					})
+				})
+			}
+			actionButtons = append(actionButtons, joinButton)
+		}
+
 		inviteButton := widget.NewButtonWithIcon(lang.LocalizeKey("launcher.discord_friends.invite", "Invite"), theme.MailSendIcon(), nil)
 		inviteButton.Importance = widget.LowImportance
 		if l.canSendDiscordInvite() {
@@ -793,8 +893,10 @@ func (l *Launcher) showDiscordFriendsDialog() {
 			}
 			l.state.Core.DiscordService.SendInvite(friend.id)
 		}
+		actionButtons = append(actionButtons, inviteButton)
 
-		itemContent := container.NewBorder(nil, nil, avatarContainer, inviteButton, container.NewPadded(container.NewVBox(name)))
+		rightContainer := container.NewHBox(actionButtons...)
+		itemContent := container.NewBorder(nil, nil, avatarContainer, rightContainer, container.NewPadded(container.NewVBox(name)))
 
 		bg := canvas.NewRectangle(theme.Color(theme.ColorNameBackground))
 		bg.StrokeColor = theme.Color(theme.ColorNameButton)
@@ -912,11 +1014,17 @@ func (l *Launcher) showDiscordFriendsDialog() {
 					avatarURL = fmt.Sprintf("https://cdn.discordapp.com/embed/avatars/%d.png", (user.Id()>>22)%6)
 				}
 				isPlayingModOfUs := playingGameIDs[user.Id()]
-				if !isPlayingModOfUs {
-					if act, ok := user.GameActivity(); ok {
-						if appID, hasAppID := act.ApplicationId(); hasAppID {
-							if (clientAppID != 0 && appID == clientAppID) || appID == discord.ApplicationID {
-								isPlayingModOfUs = true
+				canJoin := false
+				if act, ok := user.GameActivity(); ok {
+					if appID, hasAppID := act.ApplicationId(); hasAppID {
+						if (clientAppID != 0 && appID == clientAppID) || appID == discord.ApplicationID {
+							isPlayingModOfUs = true
+							if secrets, hasSec := act.Secrets(); hasSec && strings.TrimSpace(secrets.Join()) != "" {
+								canJoin = true
+							} else if party, hasParty := act.Party(); hasParty && strings.TrimSpace(party.Id()) != "" {
+								if party.MaxSize() <= 0 || party.CurrentSize() < party.MaxSize() {
+									canJoin = true
+								}
 							}
 						}
 					}
@@ -927,11 +1035,12 @@ func (l *Launcher) showDiscordFriendsDialog() {
 					avatarURL:      avatarURL,
 					status:         user.Status(),
 					playingModOfUs: isPlayingModOfUs,
+					canJoin:        canJoin,
 				})
 			}
 			sort.Slice(newFriends, func(i, j int) bool {
-				pI := discordStatusPriority(newFriends[i].status, newFriends[i].playingModOfUs)
-				pJ := discordStatusPriority(newFriends[j].status, newFriends[j].playingModOfUs)
+				pI := discordStatusPriority(newFriends[i].status, newFriends[i].playingModOfUs, newFriends[i].canJoin)
+				pJ := discordStatusPriority(newFriends[j].status, newFriends[j].playingModOfUs, newFriends[j].canJoin)
 				if pI != pJ {
 					return pI < pJ
 				}
