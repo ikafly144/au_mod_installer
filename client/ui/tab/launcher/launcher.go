@@ -221,9 +221,12 @@ func (l *Launcher) handleActivityInvite(invite *discordsdk.ActivityInvite) {
 	if invite == nil {
 		return
 	}
-	switch invite.Type() {
+	var clonedInvite discordsdk.ActivityInvite
+	clonedInvite.Clone(invite)
+
+	switch clonedInvite.Type() {
 	case discordsdk.ActivityActionTypesJoinRequest:
-		senderID := invite.SenderId()
+		senderID := clonedInvite.SenderId()
 		senderName := fmt.Sprintf("User %d", senderID)
 		if l.state.Core.DiscordService.IsLoggedIn() {
 			if friends, err := l.state.Core.DiscordService.GetFriends(); err == nil {
@@ -267,8 +270,9 @@ func (l *Launcher) handleActivityInvite(invite *discordsdk.ActivityInvite) {
 				title,
 				msg,
 				func(accept bool) {
+					defer clonedInvite.Drop()
 					if accept {
-						l.state.Core.DiscordService.SendActivityJoinRequestReply(invite, func(err error) {
+						l.state.Core.DiscordService.SendActivityJoinRequestReply(&clonedInvite, func(err error) {
 							if err != nil {
 								fyne.Do(func() {
 									l.state.ShowErrorDialog(err)
@@ -295,12 +299,17 @@ func (l *Launcher) handleActivityInvite(invite *discordsdk.ActivityInvite) {
 
 		client := l.state.Core.DiscordService.Client()
 		if client != nil {
-			client.AcceptActivityInvite(invite, func(result *discordsdk.ClientResult, secret string) {
+			client.AcceptActivityInvite(&clonedInvite, func(result *discordsdk.ClientResult, secret string) {
+				defer clonedInvite.Drop()
 				if result.Successful() && secret != "" {
 					l.HandleJoinLink(secret)
 				}
 			})
+		} else {
+			clonedInvite.Drop()
 		}
+	default:
+		clonedInvite.Drop()
 	}
 }
 
