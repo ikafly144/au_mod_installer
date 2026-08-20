@@ -353,6 +353,7 @@ func (l *Launcher) init() {
 	l.state.OnGameStarted = func(profileID uuid.UUID, pid int) {
 		fyne.Do(func() {
 			l.refreshProfileHighlights()
+			l.checkLaunchState()
 		})
 	}
 	l.state.OnGameExited = func(profileID uuid.UUID) {
@@ -360,6 +361,7 @@ func (l *Launcher) init() {
 		fyne.Do(func() {
 			l.refreshProfileHighlights()
 			l.refreshRoomLinkUI(nil, false)
+			l.checkLaunchState()
 		})
 	}
 	l.state.OnLobbyInfoUpdated = func(info *core.IPCLobbyInfo) {
@@ -1718,13 +1720,13 @@ func (l *Launcher) setupProfileList() {
 		}
 		l.selectedProfileID = l.profiles[id].ID
 		_ = l.state.ActiveProfile.Set(l.selectedProfileID.String())
-		// l.checkLaunchState()
+		l.checkLaunchState()
 		l.refreshProfileGrid()
 		l.profileList.Refresh()
 	}
 	l.profileList.OnUnselected = func(id widget.ListItemID) {
 		l.selectedProfileID = uuid.Nil
-		// l.checkLaunchState()
+		l.checkLaunchState()
 		l.refreshProfileGrid()
 		l.profileList.Refresh()
 	}

@@ -94,7 +94,7 @@ func IsProcessRunning(pid int) (bool, error) {
 	if pid <= 0 {
 		return false, nil
 	}
-	handle, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
+	handle, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION|windows.SYNCHRONIZE, false, uint32(pid))
 	if err != nil {
 		if errors.Is(err, windows.ERROR_INVALID_PARAMETER) {
 			return false, nil
@@ -109,9 +109,16 @@ func IsProcessRunning(pid int) (bool, error) {
 			slog.Warn("Failed to close process handle", "pid", pid, "error", err)
 		}
 	}()
-	var code uint32
-	if err := windows.GetExitCodeProcess(handle, &code); err != nil {
+	event, err := windows.WaitForSingleObject(handle, 0)
+	if err != nil {
+		var code uint32
+		if exitErr := windows.GetExitCodeProcess(handle, &code); exitErr == nil {
+			return code == processExitCodeStillActive, nil
+		}
 		return false, err
 	}
-	return code == processExitCodeStillActive, nil
+	if event == uint32(windows.WAIT_TIMEOUT) {
+		return true, nil
+	}
+	return false, nil
 }

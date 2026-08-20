@@ -124,14 +124,14 @@ func (s *State) Launch(path string, directJoinEnabled bool) {
 			}
 		}
 	}
+
+	s.Core.OnGameExitedInternal(activeProfileID)
 	_ = s.CanLaunch.Set(true)
 	_ = s.CanInstall.Set(true)
 
 	if s.IsWindowVisible() && s.OnActivateReceived != nil {
 		s.OnActivateReceived()
 	}
-
-	s.Core.OnGameExitedInternal(activeProfileID)
 }
 
 func (s *State) UpdateProfileLaunchMetrics(profileID uuid.UUID, startedAt, finishedAt time.Time) error {
