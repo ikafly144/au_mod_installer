@@ -3,6 +3,7 @@
 package uicommon
 
 import (
+	"errors"
 	"fmt"
 	"image/color"
 	"unsafe"
@@ -158,8 +159,8 @@ func callDwmSetWindowAttribute(hwnd uintptr, attr uint32, value unsafe.Pointer, 
 		size,
 	)
 	if int32(hr) < 0 {
-		if callErr != nil && callErr != windows.ERROR_SUCCESS {
-			return fmt.Errorf("DwmSetWindowAttribute(attr=%d) failed: hr=0x%08X, err=%v", attr, uint32(hr), callErr)
+		if !errors.Is(callErr, windows.ERROR_SUCCESS) {
+			return fmt.Errorf("DwmSetWindowAttribute(attr=%d) failed: hr=0x%08X, err=%w", attr, uint32(hr), callErr)
 		}
 		return fmt.Errorf("DwmSetWindowAttribute(attr=%d) failed: hr=0x%08X", attr, uint32(hr))
 	}
@@ -172,8 +173,8 @@ func extendFrameIntoClientArea(hwnd uintptr, margins dwmMargins) error {
 		uintptr(unsafe.Pointer(&margins)),
 	)
 	if int32(hr) < 0 {
-		if callErr != nil && callErr != windows.ERROR_SUCCESS {
-			return fmt.Errorf("DwmExtendFrameIntoClientArea failed: hr=0x%08X, err=%v", uint32(hr), callErr)
+		if !errors.Is(callErr, windows.ERROR_SUCCESS) {
+			return fmt.Errorf("DwmExtendFrameIntoClientArea failed: hr=0x%08X, err=%w", uint32(hr), callErr)
 		}
 		return fmt.Errorf("DwmExtendFrameIntoClientArea failed: hr=0x%08X", uint32(hr))
 	}
