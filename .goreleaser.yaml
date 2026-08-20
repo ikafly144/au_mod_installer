@@ -108,6 +108,12 @@ release:
   prerelease: auto
   make_latest: '{{ eq .Prerelease "" }}'
   name_template: "{{.TagSubject}}"
+  header: |
+    {{ if ne .TagBody "" -}}
+    {{ .TagBody }}
+
+    ---
+    {{- end }}
   footer: |
     ---
 
