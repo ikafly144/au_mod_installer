@@ -35,6 +35,7 @@ import (
 	discordsdk "github.com/ikafly144/discord_social_sdk"
 
 	"github.com/ikafly144/au_mod_installer/client/core"
+	"github.com/ikafly144/au_mod_installer/client/discord"
 	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
 	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
@@ -95,10 +96,11 @@ type Launcher struct {
 }
 
 type discordFriend struct {
-	id        uint64
-	name      string
-	avatarURL string
-	status    discordsdk.StatusType
+	id             uint64
+	name           string
+	avatarURL      string
+	status         discordsdk.StatusType
+	playingModOfUs bool
 }
 
 var _ uicommon.Tab = (*Launcher)(nil)
@@ -632,7 +634,12 @@ func (l *Launcher) canSendDiscordInvite() bool {
 	return active
 }
 
-func discordStatusColor(status discordsdk.StatusType) color.Color {
+var discordModOfUsStatusColor = color.NRGBA{R: 145, G: 70, B: 255, A: 255}
+
+func discordStatusColor(status discordsdk.StatusType, isPlayingModOfUs bool) color.Color {
+	if isPlayingModOfUs {
+		return discordModOfUsStatusColor
+	}
 	switch status {
 	case discordsdk.StatusTypeOnline:
 		return theme.Color(theme.ColorNameSuccess)
@@ -647,7 +654,10 @@ func discordStatusColor(status discordsdk.StatusType) color.Color {
 	}
 }
 
-func discordStatusPriority(status discordsdk.StatusType) int {
+func discordStatusPriority(status discordsdk.StatusType, isPlayingModOfUs bool) int {
+	if isPlayingModOfUs {
+		return 0
+	}
 	switch status {
 	case discordsdk.StatusTypeOnline:
 		return 1
@@ -748,7 +758,7 @@ func (l *Launcher) showDiscordFriendsDialog() {
 		avatar.CornerRadius = 8
 		avatar.SetMinSize(fyne.NewSquareSize(friendAvatarSize))
 		avatar.FillMode = canvas.ImageFillContain
-		status := canvas.NewCircle(discordStatusColor(friend.status))
+		status := canvas.NewCircle(discordStatusColor(friend.status, friend.playingModOfUs))
 		status.StrokeColor = theme.Color(theme.ColorNameBackground)
 		status.StrokeWidth = 2
 		avatarContainer := container.New(&discordFriendAvatarLayout{
@@ -867,6 +877,20 @@ func (l *Launcher) showDiscordFriendsDialog() {
 				userHandles = searchResult
 			}
 
+			client := l.state.Core.DiscordService.Client()
+			var clientAppID uint64
+			if client != nil {
+				clientAppID = client.GetApplicationId()
+			}
+			playingGameIDs := make(map[uint64]bool)
+			if client != nil {
+				for _, rel := range client.GetRelationshipsByGroup(discordsdk.RelationshipGroupTypeOnlinePlayingGame) {
+					if u, ok := rel.User(); ok {
+						playingGameIDs[u.Id()] = true
+					}
+				}
+			}
+
 			newFriends := make([]discordFriend, 0, len(userHandles))
 			for _, user := range userHandles {
 				name := strings.TrimSpace(user.DisplayName())
@@ -887,16 +911,27 @@ func (l *Launcher) showDiscordFriendsDialog() {
 				} else {
 					avatarURL = fmt.Sprintf("https://cdn.discordapp.com/embed/avatars/%d.png", (user.Id()>>22)%6)
 				}
+				isPlayingModOfUs := playingGameIDs[user.Id()]
+				if !isPlayingModOfUs {
+					if act, ok := user.GameActivity(); ok {
+						if appID, hasAppID := act.ApplicationId(); hasAppID {
+							if (clientAppID != 0 && appID == clientAppID) || appID == discord.ApplicationID {
+								isPlayingModOfUs = true
+							}
+						}
+					}
+				}
 				newFriends = append(newFriends, discordFriend{
-					id:        user.Id(),
-					name:      name,
-					avatarURL: avatarURL,
-					status:    user.Status(),
+					id:             user.Id(),
+					name:           name,
+					avatarURL:      avatarURL,
+					status:         user.Status(),
+					playingModOfUs: isPlayingModOfUs,
 				})
 			}
 			sort.Slice(newFriends, func(i, j int) bool {
-				pI := discordStatusPriority(newFriends[i].status)
-				pJ := discordStatusPriority(newFriends[j].status)
+				pI := discordStatusPriority(newFriends[i].status, newFriends[i].playingModOfUs)
+				pJ := discordStatusPriority(newFriends[j].status, newFriends[j].playingModOfUs)
 				if pI != pJ {
 					return pI < pJ
 				}

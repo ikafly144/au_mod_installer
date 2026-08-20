@@ -7,6 +7,8 @@ import (
 	discord "github.com/ikafly144/discord_social_sdk"
 )
 
+const ApplicationID uint64 = 1472154358291501171
+
 func NewDiscordService(client *discord.Client) *DiscordService {
 	ds := &DiscordService{
 		client:                       client,
