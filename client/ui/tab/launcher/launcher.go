@@ -31,6 +31,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/gen2brain/beeep"
 	"github.com/google/uuid"
 	discordsdk "github.com/ikafly144/discord_social_sdk"
 
@@ -239,6 +240,14 @@ func (l *Launcher) handleActivityInvite(invite *discordsdk.ActivityInvite) {
 			}
 		}
 
+		go func() {
+			_ = beeep.Notify(
+				lang.LocalizeKey("notification.join_request.title", "Join Request Received"),
+				lang.LocalizeKey("notification.join_request.message", "{{.Name}} has requested to join your game.", map[string]any{"Name": senderName}),
+				"",
+			)
+		}()
+
 		fyne.Do(func() {
 			if l.state.ShowWindow != nil {
 				l.state.ShowWindow()
@@ -276,6 +285,14 @@ func (l *Launcher) handleActivityInvite(invite *discordsdk.ActivityInvite) {
 		})
 
 	case discordsdk.ActivityActionTypesJoin:
+		go func() {
+			_ = beeep.Notify(
+				lang.LocalizeKey("notification.invite.title", "Game Invite Received"),
+				lang.LocalizeKey("notification.invite.message", "Received game invite."),
+				"",
+			)
+		}()
+
 		client := l.state.Core.DiscordService.Client()
 		if client != nil {
 			client.AcceptActivityInvite(invite, func(result *discordsdk.ClientResult, secret string) {
@@ -1390,10 +1407,24 @@ func (l *Launcher) checkSharedURI() {
 func (l *Launcher) handleJoinGameURI(sharedURI string) {
 	joinURI, err := l.state.Core.ParseJoinGameURI(sharedURI)
 	if err != nil {
+		go func() {
+			_ = beeep.Alert(
+				lang.LocalizeKey("notification.game_launch_failed.title", "Launch Failed"),
+				lang.LocalizeKey("notification.game_launch_failed.message", "Failed to launch game: {{.Error}}", map[string]any{"Error": err.Error()}),
+				"",
+			)
+		}()
 		dialog.ShowError(err, l.state.Window)
 		return
 	}
 	if joinURI.Error != "" {
+		go func() {
+			_ = beeep.Alert(
+				lang.LocalizeKey("notification.game_launch_failed.title", "Launch Failed"),
+				lang.LocalizeKey("notification.game_launch_failed.message", "Failed to launch game: {{.Error}}", map[string]any{"Error": joinURI.Error}),
+				"",
+			)
+		}()
 		l.state.ShowErrorDialog(errors.New(joinURI.Error))
 		return
 	}
@@ -1413,6 +1444,13 @@ func (l *Launcher) handleGameLink(joinURI *core.JoinGameLink) {
 		shared, iconPNG, joinInfo, err := l.state.Core.HandleJoinGameDownload(joinURI.SessionID, joinURI.ServerBase)
 		fyne.Do(func() {
 			if err != nil {
+				go func() {
+					_ = beeep.Alert(
+						lang.LocalizeKey("notification.game_launch_failed.title", "Launch Failed"),
+						lang.LocalizeKey("notification.game_launch_failed.message", "Failed to launch game: {{.Error}}", map[string]any{"Error": err.Error()}),
+						"",
+					)
+				}()
 				dialog.ShowError(err, l.state.Window)
 				return
 			}
@@ -1433,6 +1471,13 @@ func (l *Launcher) handleGameLink(joinURI *core.JoinGameLink) {
 								"GameVersion": gameVersion,
 							},
 						)
+						go func() {
+							_ = beeep.Alert(
+								lang.LocalizeKey("notification.game_launch_failed.title", "Launch Failed"),
+								lang.LocalizeKey("notification.game_launch_failed.message", "Failed to launch game: {{.Error}}", map[string]any{"Error": errMsg}),
+								"",
+							)
+						}()
 						l.state.ShowErrorDialog(errors.New(errMsg))
 						return
 					}
@@ -1444,12 +1489,26 @@ func (l *Launcher) handleGameLink(joinURI *core.JoinGameLink) {
 				if errCh := l.state.Core.SendLobbyJoinByPID(runningPID, *joinInfo); errCh != nil {
 					go func() {
 						if err := <-errCh; err != nil {
+							go func() {
+								_ = beeep.Alert(
+									lang.LocalizeKey("notification.game_launch_failed.title", "Launch Failed"),
+									lang.LocalizeKey("notification.game_launch_failed.message", "Failed to launch game: {{.Error}}", map[string]any{"Error": err.Error()}),
+									"",
+								)
+							}()
 							fyne.Do(func() {
 								dialog.ShowError(errors.New(lang.LocalizeKey("launcher.error.failed_to_send_join_request", "Failed to send join request to game process: {{.Error}}", map[string]any{"Error": err.Error()})), l.state.Window)
 							})
 						}
 					}()
 				}
+				go func() {
+					_ = beeep.Notify(
+						lang.LocalizeKey("notification.game_launch_success.title", "Game Launched"),
+						lang.LocalizeKey("launcher.join_link.join_sent", "Sent room join request to running game."),
+						"",
+					)
+				}()
 				l.state.ShowInfoDialog(
 					lang.LocalizeKey("common.success", "Success"),
 					lang.LocalizeKey("launcher.join_link.join_sent", "Sent room join request to running game."),
@@ -1457,6 +1516,13 @@ func (l *Launcher) handleGameLink(joinURI *core.JoinGameLink) {
 				return
 			}
 			if err := l.importProfileWithJoinInfo(shared, iconPNG, joinInfo); err != nil {
+				go func() {
+					_ = beeep.Alert(
+						lang.LocalizeKey("notification.game_launch_failed.title", "Launch Failed"),
+						lang.LocalizeKey("notification.game_launch_failed.message", "Failed to launch game: {{.Error}}", map[string]any{"Error": err.Error()}),
+						"",
+					)
+				}()
 				dialog.ShowError(err, l.state.Window)
 				return
 			}
@@ -2082,6 +2148,13 @@ func (l *Launcher) runLaunch() {
 			})
 			if launchErr != nil {
 				l.state.SetError(launchErr)
+				go func() {
+					_ = beeep.Alert(
+						lang.LocalizeKey("notification.game_launch_failed.title", "Launch Failed"),
+						lang.LocalizeKey("notification.game_launch_failed.message", "Failed to launch game: {{.Error}}", map[string]any{"Error": launchErr.Error()}),
+						"",
+					)
+				}()
 			}
 		}()
 

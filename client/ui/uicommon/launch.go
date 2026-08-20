@@ -8,6 +8,7 @@ import (
 
 	"fyne.io/fyne/v2/lang"
 
+	"github.com/gen2brain/beeep"
 	"github.com/google/uuid"
 
 	"github.com/ikafly144/au_mod_installer/client/core"
@@ -69,6 +70,7 @@ func (s *State) Launch(path string, directJoinEnabled bool) {
 
 	startedAt := time.Now()
 	joinInfo := s.TakePendingJoinInfo()
+	isJoinLaunch := joinInfo != nil
 	if joinInfo != nil && joinInfo.GameVersion != "" {
 		gameVersion, err := aumgr.GetVersion(path)
 		if err == nil && gameVersion != "" && joinInfo.GameVersion != gameVersion {
@@ -81,6 +83,13 @@ func (s *State) Launch(path string, directJoinEnabled bool) {
 				},
 			)
 			s.ShowErrorDialog(errors.New(errMsg))
+			go func() {
+				_ = beeep.Alert(
+					lang.LocalizeKey("notification.game_launch_failed.title", "Launch Failed"),
+					lang.LocalizeKey("notification.game_launch_failed.message", "Failed to launch game: {{.Error}}", map[string]any{"Error": errMsg}),
+					"",
+				)
+			}()
 			_ = s.CanLaunch.Set(true)
 			_ = s.CanInstall.Set(true)
 			return
@@ -94,10 +103,28 @@ func (s *State) Launch(path string, directJoinEnabled bool) {
 		s.Core.SetRunningPlayStartedAt(startedAt)
 		s.Core.OnGameStartedInternal(activeProfileID, pid)
 		launchSucceeded = true
+		if isJoinLaunch {
+			go func() {
+				_ = beeep.Notify(
+					lang.LocalizeKey("notification.game_launch_success.title", "Game Launched"),
+					lang.LocalizeKey("notification.game_launch_success.message", "Among Us has launched."),
+					"",
+				)
+			}()
+		}
 		return nil
 	}); err != nil {
 		s.ShowErrorDialog(errors.New(lang.LocalizeKey("launch.error.launch_failed", "Failed to launch Among Us: ") + err.Error()))
 		slog.Warn("Failed to launch Among Us", "error", err)
+		if isJoinLaunch {
+			go func() {
+				_ = beeep.Alert(
+					lang.LocalizeKey("notification.game_launch_failed.title", "Launch Failed"),
+					lang.LocalizeKey("notification.game_launch_failed.message", "Failed to launch Among Us: {{.Error}}", map[string]any{"Error": err.Error()}),
+					"",
+				)
+			}()
+		}
 	}
 
 	if launchSucceeded {
