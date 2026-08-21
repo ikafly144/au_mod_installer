@@ -80,3 +80,27 @@ func TestIdleActivityToggle(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, "Idle", state)
 }
+
+func TestSentJoinRequestTracking(t *testing.T) {
+	client := discord.NewClient()
+	service := NewDiscordService(client)
+
+	userID := uint64(123456789)
+
+	// Initially, no sent join request
+	assert.False(t, service.ConsumeSentJoinRequest(userID))
+
+	// Record sent join request
+	service.RecordSentJoinRequest(userID)
+
+	// First consume should succeed and remove it
+	assert.True(t, service.ConsumeSentJoinRequest(userID))
+
+	// Second consume should fail because it was already consumed
+	assert.False(t, service.ConsumeSentJoinRequest(userID))
+
+	// Record and then explicitly remove
+	service.RecordSentJoinRequest(userID)
+	service.RemoveSentJoinRequest(userID)
+	assert.False(t, service.ConsumeSentJoinRequest(userID))
+}

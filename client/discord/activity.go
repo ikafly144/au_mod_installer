@@ -3,6 +3,7 @@ package discord
 import (
 	"fmt"
 	"log/slog"
+	"time"
 
 	"fyne.io/fyne/v2/lang"
 	discord "github.com/ikafly144/discord_social_sdk"
@@ -125,9 +126,42 @@ func (s *DiscordService) SendInvite(userId uint64, inviteUrl string) {
 	})
 }
 
+const joinRequestTTL = 10 * time.Minute
+
+func (s *DiscordService) RecordSentJoinRequest(userId uint64) {
+	s.sentJoinRequestsMu.Lock()
+	defer s.sentJoinRequestsMu.Unlock()
+	if s.sentJoinRequests == nil {
+		s.sentJoinRequests = make(map[uint64]time.Time)
+	}
+	s.sentJoinRequests[userId] = time.Now()
+}
+
+func (s *DiscordService) RemoveSentJoinRequest(userId uint64) {
+	s.sentJoinRequestsMu.Lock()
+	defer s.sentJoinRequestsMu.Unlock()
+	delete(s.sentJoinRequests, userId)
+}
+
+func (s *DiscordService) ConsumeSentJoinRequest(userId uint64) bool {
+	s.sentJoinRequestsMu.Lock()
+	defer s.sentJoinRequestsMu.Unlock()
+	if s.sentJoinRequests == nil {
+		return false
+	}
+	t, ok := s.sentJoinRequests[userId]
+	if !ok {
+		return false
+	}
+	delete(s.sentJoinRequests, userId)
+	return time.Since(t) <= joinRequestTTL
+}
+
 func (s *DiscordService) SendActivityJoinRequest(userId uint64, callback func(error)) {
+	s.RecordSentJoinRequest(userId)
 	s.client.SendActivityJoinRequest(userId, func(result *discord.ClientResult) {
 		if !result.Successful() {
+			s.RemoveSentJoinRequest(userId)
 			slog.Warn("Failed to send Discord activity join request", "error", result.ErrorCode(), "userId", userId)
 			if callback != nil {
 				callback(fmt.Errorf("failed with error code: %d", result.ErrorCode()))

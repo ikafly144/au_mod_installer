@@ -216,6 +216,25 @@ func (l *Launcher) HandleJoinLink(s string) {
 	l.handleGameLink(gameLink)
 }
 
+func (l *Launcher) getDiscordUserName(userID uint64) string {
+	senderName := fmt.Sprintf("User %d", userID)
+	if l.state.Core.DiscordService.IsLoggedIn() {
+		if friends, err := l.state.Core.DiscordService.GetFriends(); err == nil {
+			for _, u := range friends {
+				if u.Id() == userID {
+					if name := strings.TrimSpace(u.DisplayName()); name != "" {
+						senderName = name
+					} else if name := strings.TrimSpace(u.Username()); name != "" {
+						senderName = name
+					}
+					break
+				}
+			}
+		}
+	}
+	return senderName
+}
+
 func (l *Launcher) handleActivityInvite(invite *discordsdk.ActivityInvite) {
 	if invite == nil {
 		return
@@ -226,21 +245,7 @@ func (l *Launcher) handleActivityInvite(invite *discordsdk.ActivityInvite) {
 	switch clonedInvite.Type() {
 	case discordsdk.ActivityActionTypesJoinRequest:
 		senderID := clonedInvite.SenderId()
-		senderName := fmt.Sprintf("User %d", senderID)
-		if l.state.Core.DiscordService.IsLoggedIn() {
-			if friends, err := l.state.Core.DiscordService.GetFriends(); err == nil {
-				for _, u := range friends {
-					if u.Id() == senderID {
-						if name := strings.TrimSpace(u.DisplayName()); name != "" {
-							senderName = name
-						} else if name := strings.TrimSpace(u.Username()); name != "" {
-							senderName = name
-						}
-						break
-					}
-				}
-			}
-		}
+		senderName := l.getDiscordUserName(senderID)
 
 		uicommon.Notify(
 			lang.LocalizeKey("notification.join_request.title", "Join Request Received"),
@@ -285,22 +290,71 @@ func (l *Launcher) handleActivityInvite(invite *discordsdk.ActivityInvite) {
 		})
 
 	case discordsdk.ActivityActionTypesJoin:
+		senderID := clonedInvite.SenderId()
+		senderName := l.getDiscordUserName(senderID)
+
+		if l.state.Core.DiscordService.ConsumeSentJoinRequest(senderID) {
+			uicommon.Notify(
+				lang.LocalizeKey("notification.invite.title", "Game Invite Received"),
+				lang.LocalizeKey("notification.invite.message", "Received game invite."),
+			)
+
+			client := l.state.Core.DiscordService.Client()
+			if client != nil {
+				client.AcceptActivityInvite(&clonedInvite, func(result *discordsdk.ClientResult, secret string) {
+					defer clonedInvite.Drop()
+					if result.Successful() && secret != "" {
+						l.HandleJoinLink(secret)
+					}
+				})
+			} else {
+				clonedInvite.Drop()
+			}
+			return
+		}
+
 		uicommon.Notify(
 			lang.LocalizeKey("notification.invite.title", "Game Invite Received"),
-			lang.LocalizeKey("notification.invite.message", "Received game invite."),
+			lang.LocalizeKey("notification.invite.message_from_user", "{{.Name}} has invited you to join their game.", map[string]any{"Name": senderName}),
 		)
 
-		client := l.state.Core.DiscordService.Client()
-		if client != nil {
-			client.AcceptActivityInvite(&clonedInvite, func(result *discordsdk.ClientResult, secret string) {
-				defer clonedInvite.Drop()
-				if result.Successful() && secret != "" {
-					l.HandleJoinLink(secret)
-				}
-			})
-		} else {
-			clonedInvite.Drop()
-		}
+		fyne.Do(func() {
+			if l.state.ShowWindow != nil {
+				l.state.ShowWindow()
+			} else if l.state.Window != nil {
+				l.state.Window.Show()
+				l.state.Window.RequestFocus()
+			}
+
+			title := lang.LocalizeKey("launcher.discord_friends.invite_received_title", "Game Invite Received")
+			msg := lang.LocalizeKey(
+				"launcher.discord_friends.invite_received_message",
+				"{{.Name}} has invited you to join their game. Join?",
+				map[string]any{"Name": senderName},
+			)
+
+			d := dialog.NewConfirm(
+				title,
+				msg,
+				func(accept bool) {
+					defer clonedInvite.Drop()
+					if accept {
+						client := l.state.Core.DiscordService.Client()
+						if client != nil {
+							client.AcceptActivityInvite(&clonedInvite, func(result *discordsdk.ClientResult, secret string) {
+								if result.Successful() && secret != "" {
+									l.HandleJoinLink(secret)
+								}
+							})
+						}
+					}
+				},
+				l.state.Window,
+			)
+			d.SetDismissText(lang.LocalizeKey("launcher.discord_friends.invite_reject", "Decline"))
+			d.SetConfirmText(lang.LocalizeKey("launcher.discord_friends.invite_accept", "Join"))
+			d.Show()
+		})
 	default:
 		clonedInvite.Drop()
 	}

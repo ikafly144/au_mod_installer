@@ -3,6 +3,7 @@ package discord
 import (
 	"log/slog"
 	"sync"
+	"time"
 
 	discord "github.com/ikafly144/discord_social_sdk"
 )
@@ -14,6 +15,7 @@ func NewDiscordService(client *discord.Client) *DiscordService {
 		client:                       client,
 		relationShipChangedCallbacks: make(map[int]func([]discord.UserHandle)),
 		activityInviteCallbacks:      make(map[int]func(*discord.ActivityInvite)),
+		sentJoinRequests:             make(map[uint64]time.Time),
 	}
 	ds.resetReady()
 	client.SetRelationshipGroupsUpdatedCallback(func(userId uint64) {
@@ -70,6 +72,9 @@ type DiscordService struct {
 	activityInviteCallbacks      map[int]func(*discord.ActivityInvite)
 	nextActivityInviteCallbackID int
 	activityInviteMu             sync.Mutex
+
+	sentJoinRequestsMu sync.Mutex
+	sentJoinRequests   map[uint64]time.Time
 }
 
 func (s *DiscordService) AddActivityInviteCallback(callback func(*discord.ActivityInvite)) int {
