@@ -912,7 +912,7 @@ func (l *Launcher) showDiscordFriendsDialog() {
 				)
 				return
 			}
-			l.state.Core.DiscordService.SendInvite(friend.id)
+			l.state.Core.DiscordService.SendInvite(friend.id, l.state.Core.GetSharedRoom().URL)
 		}
 		actionButtons = append(actionButtons, inviteButton)
 

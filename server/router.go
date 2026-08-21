@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
+	"embed"
 	"errors"
 	"fmt"
-	"html"
+	"html/template"
 	"io"
 	"log/slog"
 	"net/http"
@@ -337,41 +339,35 @@ func buildJoinGameDeepLink(serverBase, sessionID, errorMessage string) string {
 	return "mod-of-us://join_game/v1/" + url.PathEscape(sessionID) + "?" + values.Encode()
 }
 
+//go:embed templates/join_game.tmpl
+var joinGameTemplateFS embed.FS
+
+var joinGameTemplate = template.Must(template.ParseFS(joinGameTemplateFS, "templates/join_game.tmpl"))
+
+const launcherReleaseURL = "https://github.com/ikafly144/au_mod_installer/releases/latest"
+
+type joinGameData struct {
+	Status     string
+	Message    string
+	DeepLink   template.URL
+	ReleaseURL template.URL
+}
+
 func joinGameHTML(message, deepLink string, success bool) string {
 	status := "参加リンクを開いています..."
 	if !success {
 		status = "参加リンクを開けませんでした。"
 	}
-	messageHTML := ""
-	if message != "" {
-		messageHTML = `<p class="error">` + html.EscapeString(message) + `</p>`
+	data := joinGameData{
+		Status:     status,
+		Message:    message,
+		DeepLink:   template.URL(deepLink),
+		ReleaseURL: template.URL(launcherReleaseURL),
 	}
-	return `<!doctype html>
-<html lang="ja">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Mod of Us 参加リンク</title>
-<style>
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#111;color:#eee;padding:24px;line-height:1.5}
-.card{max-width:560px;margin:0 auto;background:#1b1b1b;border:1px solid #2f2f2f;border-radius:10px;padding:20px}
-.error{color:#ff8b8b}
-a.btn{display:inline-block;padding:10px 14px;background:#2d7ef7;color:#fff;text-decoration:none;border-radius:8px}
-</style>
-</head>
-<body>
-<div class="card">
-<h1>Mod of Us 参加リンク</h1>
-<p>` + html.EscapeString(status) + `</p>
-` + messageHTML + `
-<p><a class="btn" href="` + html.EscapeString(deepLink) + `">ランチャーで開く</a></p>
-<p>自動で開かない場合は上のボタンを押してください。</p>
-</div>
-<script>
-(()=>{const link="` + deepLink + `";
-try{window.location.href=link;}catch(e){}
-})();
-</script>
-</body>
-</html>`
+	var buf bytes.Buffer
+	if err := joinGameTemplate.Execute(&buf, data); err != nil {
+		slog.Error("failed to execute join game template", "error", err)
+		return ""
+	}
+	return buf.String()
 }

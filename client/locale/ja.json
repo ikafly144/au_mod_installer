@@ -275,7 +275,7 @@
     "launcher.join_link.placeholder": "現在部屋は共有されていません",
     "launcher.party.visibility.private": "非公開",
     "launcher.party.visibility.public": "公開",
-    "discord.invite_message": "{{.Name}}のゲームに参加しませんか？",
+    "discord.invite_message": "Mod of Usで{{.Name}}のゲームに参加しませんか？\n\n{{.Link}}",
     "launcher.discord_friends.title": "Discordフレンド",
     "launcher.discord_friends.search_placeholder": "名前で検索...",
     "launcher.discord_friends.button": "フレンドリスト",

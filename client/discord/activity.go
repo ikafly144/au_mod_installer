@@ -103,7 +103,7 @@ func (s *DiscordService) CurrentActivity() (*discord.Activity, bool) {
 	return s.currentActivity, s.currentActivity != nil
 }
 
-func (s *DiscordService) SendInvite(userId uint64) {
+func (s *DiscordService) SendInvite(userId uint64, inviteUrl string) {
 	s.activityMu.Lock()
 	activity := s.currentActivity
 	s.activityMu.Unlock()
@@ -112,7 +112,11 @@ func (s *DiscordService) SendInvite(userId uint64) {
 		slog.Warn("Cannot send invite, no current activity")
 		return
 	}
-	s.client.SendActivityInvite(userId, lang.LocalizeKey("discord.invite_message", "Join me in {{.Name}}!", map[string]any{"Name": activity.Name()}), func(result *discord.ClientResult) {
+	s.client.SendActivityInvite(userId, lang.LocalizeKey("discord.invite_message", "Join me in {{.Name}}!\n\n{{.Link}}",
+		map[string]any{
+			"Name": activity.Name(),
+			"Link": inviteUrl,
+		}), func(result *discord.ClientResult) {
 		if !result.Successful() {
 			slog.Warn("Failed to send Discord invite", "error", result.ErrorCode())
 		} else {
