@@ -268,8 +268,8 @@ func (l *Launcher) HandleJoinLink(s string) {
 	sessionID := uri.Query().Get("session_id")
 	if sessionID == "" {
 		path := strings.TrimPrefix(uri.Path, "/")
-		if strings.HasPrefix(path, "v1/") {
-			sessionID = strings.TrimPrefix(path, "v1/")
+		if after, ok := strings.CutPrefix(path, "v1/"); ok {
+			sessionID = after
 		}
 	}
 	gameLink := &core.JoinGameLink{
