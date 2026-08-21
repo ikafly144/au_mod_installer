@@ -562,7 +562,7 @@ func (a *App) ImportSharedProfile(shared *profile.SharedProfile, iconPNG []byte)
 type JoinGameLink struct {
 	SessionID  string
 	ServerBase string
-	Error      string
+	ErrorType  string
 }
 
 func (a *App) ParseJoinGameURI(uri string) (*JoinGameLink, error) {
@@ -590,6 +590,6 @@ func (a *App) ParseJoinGameURI(uri string) (*JoinGameLink, error) {
 	return &JoinGameLink{
 		SessionID:  sessionID,
 		ServerBase: serverBase,
-		Error:      strings.TrimSpace(values.Get("error")),
+		ErrorType:  strings.TrimSpace(values.Get("error_type")),
 	}, nil
 }

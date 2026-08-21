@@ -97,11 +97,35 @@ func TestJoinGameHTML(t *testing.T) {
 	})
 
 	t.Run("failure with error message", func(t *testing.T) {
-		html := joinGameHTML("エラーが発生しました & <script>", "mod-of-us://join_game/v1/test-session?server=http%3A%2F%2Flocalhost%3A8080&error=%E3%82%A8%E3%83%A9%E3%83%BC", false)
+		html := joinGameHTML("エラーが発生しました & <script>", "mod-of-us://join_game/v1/test-session?error_type=invalid_session&server=http%3A%2F%2Flocalhost%3A8080", false)
 		assert.Contains(t, html, "参加リンクを開けませんでした。")
 		assert.Contains(t, html, `<p class="error">エラーが発生しました &amp; &lt;script&gt;</p>`)
+		assert.Contains(t, html, `href="mod-of-us://join_game/v1/test-session?error_type=invalid_session&amp;server=http%3A%2F%2Flocalhost%3A8080"`)
 		assert.Contains(t, html, launcherReleaseURL)
 	})
+}
+
+func TestBuildJoinGameDeepLink(t *testing.T) {
+	assert.Equal(
+		t,
+		"mod-of-us://join_game/v1/test-session?server=http%3A%2F%2Flocalhost%3A8080",
+		buildJoinGameDeepLink("http://localhost:8080", "test-session", ""),
+	)
+	assert.Equal(
+		t,
+		"mod-of-us://join_game/v1/test-session?error_type=invalid_session&server=http%3A%2F%2Flocalhost%3A8080",
+		buildJoinGameDeepLink("http://localhost:8080", "test-session", restcommon.JoinGameErrorInvalidSession),
+	)
+	assert.Equal(
+		t,
+		"mod-of-us://join_game/v1/test-session?error_type=session_not_found&server=http%3A%2F%2Flocalhost%3A8080",
+		buildJoinGameDeepLink("http://localhost:8080", "test-session", restcommon.JoinGameErrorSessionNotFound),
+	)
+	assert.Equal(
+		t,
+		"mod-of-us://join_game/v1/test-session?error_type=session_expired&server=http%3A%2F%2Flocalhost%3A8080",
+		buildJoinGameDeepLink("http://localhost:8080", "test-session", restcommon.JoinGameErrorSessionExpired),
+	)
 }
 
 func TestRouter_JoinGame_HTML(t *testing.T) {
@@ -135,6 +159,7 @@ func TestRouter_JoinGame_HTML(t *testing.T) {
 		assert.Equal(t, http.StatusOK, joinRec.Code)
 		assert.Equal(t, "text/html; charset=utf-8", joinRec.Header().Get("Content-Type"))
 		assert.Contains(t, joinRec.Body.String(), "参加リンクを開いています...")
+		assert.Contains(t, joinRec.Body.String(), "mod-of-us://join_game/v1/"+rs.SessionID+"?server=")
 	})
 
 	t.Run("non-existent session returns 404 HTML", func(t *testing.T) {
@@ -146,5 +171,6 @@ func TestRouter_JoinGame_HTML(t *testing.T) {
 		assert.Equal(t, "text/html; charset=utf-8", joinRec.Header().Get("Content-Type"))
 		assert.Contains(t, joinRec.Body.String(), "この参加リンクは見つかりません。")
 		assert.Contains(t, joinRec.Body.String(), "参加リンクを開けませんでした。")
+		assert.Contains(t, joinRec.Body.String(), "error_type=session_not_found")
 	})
 }

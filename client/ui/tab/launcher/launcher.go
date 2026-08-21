@@ -40,6 +40,7 @@ import (
 	"github.com/ikafly144/au_mod_installer/client/core"
 	"github.com/ikafly144/au_mod_installer/client/discord"
 	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
+	"github.com/ikafly144/au_mod_installer/common/rest"
 	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 	"github.com/ikafly144/au_mod_installer/pkg/profile"
@@ -1590,6 +1591,19 @@ func (l *Launcher) checkSharedURI() {
 
 }
 
+func (l *Launcher) joinGameErrorMessage(errorType string) string {
+	switch errorType {
+	case rest.JoinGameErrorSessionExpired:
+		return lang.LocalizeKey("launcher.join_link.error.session_expired", "The join link has expired.")
+	case rest.JoinGameErrorSessionNotFound:
+		return lang.LocalizeKey("launcher.join_link.error.session_not_found", "The join link was not found.")
+	case rest.JoinGameErrorInvalidSession:
+		return lang.LocalizeKey("launcher.join_link.error.invalid_session", "The join link is invalid.")
+	default:
+		return lang.LocalizeKey("launcher.join_link.error.invalid_session", "The join link is invalid.")
+	}
+}
+
 func (l *Launcher) handleJoinGameURI(sharedURI string) {
 	joinURI, err := l.state.Core.ParseJoinGameURI(sharedURI)
 	if err != nil {
@@ -1600,12 +1614,13 @@ func (l *Launcher) handleJoinGameURI(sharedURI string) {
 		dialog.ShowError(err, l.state.Window)
 		return
 	}
-	if joinURI.Error != "" {
+	if joinURI.ErrorType != "" {
+		errMsg := l.joinGameErrorMessage(joinURI.ErrorType)
 		uicommon.Alert(
 			lang.LocalizeKey("notification.game_launch_failed.title", "Launch Failed"),
-			lang.LocalizeKey("notification.game_launch_failed.message", "Failed to launch game: {{.Error}}", map[string]any{"Error": joinURI.Error}),
+			lang.LocalizeKey("notification.game_launch_failed.message", "Failed to launch game: {{.Error}}", map[string]any{"Error": errMsg}),
 		)
-		l.state.ShowErrorDialog(errors.New(joinURI.Error))
+		l.state.ShowErrorDialog(errors.New(errMsg))
 		return
 	}
 	l.handleGameLink(joinURI)

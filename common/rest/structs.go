@@ -2,6 +2,12 @@ package rest
 
 import "time"
 
+const (
+	JoinGameErrorInvalidSession  = "invalid_session"
+	JoinGameErrorSessionNotFound = "session_not_found"
+	JoinGameErrorSessionExpired  = "session_expired"
+)
+
 type HealthStatus struct {
 	Status string `json:"status"`
 }

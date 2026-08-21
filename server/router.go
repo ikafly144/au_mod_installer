@@ -267,13 +267,16 @@ func router(srv *service.ModService, versionProvider service.VersionInfoProvider
 		_, err := srv.GetJoinGameMeta(sessionID)
 		if err != nil {
 			message := "この参加リンクは無効です。時間切れの可能性があります。"
+			errorType := rest.JoinGameErrorInvalidSession
 			switch err {
 			case service.ErrShareGameExpired:
 				message = "この参加リンクは有効期限切れです。"
+				errorType = rest.JoinGameErrorSessionExpired
 			case service.ErrShareGameNotFound:
 				message = "この参加リンクは見つかりません。"
+				errorType = rest.JoinGameErrorSessionNotFound
 			}
-			deepLink := buildJoinGameDeepLink(serverBase, sessionID, message)
+			deepLink := buildJoinGameDeepLink(serverBase, sessionID, errorType)
 			ctx.Header("Content-Type", "text/html; charset=utf-8")
 			ctx.String(http.StatusNotFound, joinGameHTML(message, deepLink, false))
 			return
@@ -330,11 +333,11 @@ func absoluteURL(ctx *gin.Context, path string) string {
 	return fmt.Sprintf("%s://%s%s", scheme, host, path)
 }
 
-func buildJoinGameDeepLink(serverBase, sessionID, errorMessage string) string {
+func buildJoinGameDeepLink(serverBase, sessionID, errorType string) string {
 	values := make(url.Values)
 	values.Set("server", serverBase)
-	if errorMessage != "" {
-		values.Set("error", errorMessage)
+	if errorType != "" {
+		values.Set("error_type", errorType)
 	}
 	return "mod-of-us://join_game/v1/" + url.PathEscape(sessionID) + "?" + values.Encode()
 }
