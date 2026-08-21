@@ -76,6 +76,10 @@ type Launcher struct {
 	sortMode          string
 	sortDescending    bool
 
+	joinMu              sync.Mutex
+	inFlightJoinSession string
+	recentJoinSessions  map[string]time.Time
+
 	modThumbMu             sync.Mutex
 	modThumbnailImageCache map[string]image.Image
 	modThumbnailFetched    map[string]bool
@@ -163,6 +167,7 @@ func NewLauncherTab(s *uicommon.State) *Launcher {
 		sortMode:               sortMode,
 		sortDescending:         sortDescending,
 		isGridView:             viewMode == viewModeGrid,
+		recentJoinSessions:     map[string]time.Time{},
 		modThumbnailImageCache: map[string]image.Image{},
 		modThumbnailFetched:    map[string]bool{},
 		modThumbnailLoading:    map[string]bool{},
@@ -195,7 +200,54 @@ func NewLauncherTab(s *uicommon.State) *Launcher {
 	return &l
 }
 
+const recentJoinTTL = 5 * time.Second
+
+func (l *Launcher) tryStartJoinSession(sessionID string) bool {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return false
+	}
+	l.joinMu.Lock()
+	defer l.joinMu.Unlock()
+
+	if l.inFlightJoinSession != "" {
+		slog.Warn("Join session is already in flight", "inFlight", l.inFlightJoinSession, "requested", sessionID)
+		return false
+	}
+
+	if l.recentJoinSessions == nil {
+		l.recentJoinSessions = make(map[string]time.Time)
+	}
+	now := time.Now()
+	for k, t := range l.recentJoinSessions {
+		if now.Sub(t) > recentJoinTTL {
+			delete(l.recentJoinSessions, k)
+		}
+	}
+	if t, ok := l.recentJoinSessions[sessionID]; ok && now.Sub(t) < recentJoinTTL {
+		slog.Warn("Join session was recently processed, skipping duplicate", "sessionID", sessionID)
+		return false
+	}
+
+	l.inFlightJoinSession = sessionID
+	l.recentJoinSessions[sessionID] = now
+	return true
+}
+
+func (l *Launcher) finishJoinSession(sessionID string) {
+	sessionID = strings.TrimSpace(sessionID)
+	l.joinMu.Lock()
+	defer l.joinMu.Unlock()
+	if l.inFlightJoinSession == sessionID {
+		l.inFlightJoinSession = ""
+	}
+}
+
 func (l *Launcher) HandleJoinLink(s string) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return
+	}
 	fyne.Do(func() {
 		if l.state.ShowWindow != nil {
 			l.state.ShowWindow()
@@ -204,13 +256,24 @@ func (l *Launcher) HandleJoinLink(s string) {
 			l.state.Window.RequestFocus()
 		}
 	})
+	if strings.HasPrefix(s, "mod-of-us://") {
+		l.handleJoinGameURI(s)
+		return
+	}
 	uri, err := url.Parse(s)
 	if err != nil {
 		slog.Error("Failed to parse join URI", "error", err, "uri", s)
 		return
 	}
+	sessionID := uri.Query().Get("session_id")
+	if sessionID == "" {
+		path := strings.TrimPrefix(uri.Path, "/")
+		if strings.HasPrefix(path, "v1/") {
+			sessionID = strings.TrimPrefix(path, "v1/")
+		}
+	}
 	gameLink := &core.JoinGameLink{
-		SessionID:  uri.Query().Get("session_id"),
+		SessionID:  sessionID,
 		ServerBase: l.state.Rest.ServerBaseURL(),
 	}
 	l.handleGameLink(gameLink)
@@ -218,18 +281,11 @@ func (l *Launcher) HandleJoinLink(s string) {
 
 func (l *Launcher) getDiscordUserName(userID uint64) string {
 	senderName := fmt.Sprintf("User %d", userID)
-	if l.state.Core.DiscordService.IsLoggedIn() {
-		if friends, err := l.state.Core.DiscordService.GetFriends(); err == nil {
-			for _, u := range friends {
-				if u.Id() == userID {
-					if name := strings.TrimSpace(u.DisplayName()); name != "" {
-						senderName = name
-					} else if name := strings.TrimSpace(u.Username()); name != "" {
-						senderName = name
-					}
-					break
-				}
-			}
+	if u, ok := l.state.Core.DiscordService.Client().GetUser(userID); ok {
+		if name := strings.TrimSpace(u.DisplayName()); name != "" {
+			senderName = name
+		} else if name := strings.TrimSpace(u.Username()); name != "" {
+			senderName = name
 		}
 	}
 	return senderName
@@ -1482,6 +1538,14 @@ func (l *Launcher) handleJoinGameURI(sharedURI string) {
 }
 
 func (l *Launcher) handleGameLink(joinURI *core.JoinGameLink) {
+	if joinURI == nil || strings.TrimSpace(joinURI.SessionID) == "" {
+		return
+	}
+
+	if !l.tryStartJoinSession(joinURI.SessionID) {
+		return
+	}
+
 	fyne.Do(func() {
 		if l.state.ShowWindow != nil {
 			l.state.ShowWindow()
@@ -1491,8 +1555,10 @@ func (l *Launcher) handleGameLink(joinURI *core.JoinGameLink) {
 		}
 	})
 	go func() {
+		defer l.finishJoinSession(joinURI.SessionID)
+
 		shared, iconPNG, joinInfo, err := l.state.Core.HandleJoinGameDownload(joinURI.SessionID, joinURI.ServerBase)
-		fyne.Do(func() {
+		fyne.DoAndWait(func() {
 			if err != nil {
 				uicommon.Alert(
 					lang.LocalizeKey("notification.game_launch_failed.title", "Launch Failed"),
