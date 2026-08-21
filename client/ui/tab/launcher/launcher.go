@@ -82,6 +82,8 @@ type Launcher struct {
 	joinMu              sync.Mutex
 	inFlightJoinSession string
 	recentJoinSessions  map[string]time.Time
+	lastDirectJoinKey   string
+	lastDirectJoinTime  time.Time
 
 	modThumbMu             sync.Mutex
 	modThumbnailImageCache map[string]image.Image
@@ -247,6 +249,23 @@ func (l *Launcher) finishJoinSession(sessionID string) {
 	}
 }
 
+const directJoinDebounceTTL = 5 * time.Second
+
+func (l *Launcher) trySendDirectJoin(pid int, joinInfo core.LaunchJoinInfo) bool {
+	joinKey := fmt.Sprintf("%d:%s:%s:%d", pid, joinInfo.LobbyCode, joinInfo.MatchMakerIp, joinInfo.MatchMakerPort)
+	l.joinMu.Lock()
+	defer l.joinMu.Unlock()
+
+	now := time.Now()
+	if l.lastDirectJoinKey == joinKey && now.Sub(l.lastDirectJoinTime) < directJoinDebounceTTL {
+		slog.Warn("Skipping duplicate direct join request to game process", "key", joinKey)
+		return false
+	}
+	l.lastDirectJoinKey = joinKey
+	l.lastDirectJoinTime = now
+	return true
+}
+
 func (l *Launcher) HandleJoinLink(s string) {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -274,7 +293,12 @@ func (l *Launcher) HandleJoinLink(s string) {
 		path := strings.TrimPrefix(uri.Path, "/")
 		if after, ok := strings.CutPrefix(path, "v1/"); ok {
 			sessionID = after
+		} else if !strings.Contains(path, "/") && path != "" {
+			sessionID = path
 		}
+	}
+	if sessionID == "" && s != "" && !strings.Contains(s, "/") && !strings.Contains(s, ":") && !strings.Contains(s, "?") {
+		sessionID = s
 	}
 	gameLink := &core.JoinGameLink{
 		SessionID:  sessionID,
@@ -1646,6 +1670,9 @@ func (l *Launcher) handleGameLink(joinURI *core.JoinGameLink) {
 
 			runningProfileID, runningPID := l.state.Core.CurrentRunningProfileAndPID()
 			if runningProfile, ok := l.state.Core.ProfileManager.Get(runningProfileID); ok && runningPID > 0 && runningProfileID == shared.ID && l.state.Core.HasDirectJoinFeature(runningProfile.Versions()) {
+				if !l.trySendDirectJoin(runningPID, *joinInfo) {
+					return
+				}
 				if errCh := l.state.Core.SendLobbyJoinByPID(runningPID, *joinInfo); errCh != nil {
 					go func() {
 						if err := <-errCh; err != nil {
