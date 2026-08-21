@@ -1684,7 +1684,7 @@ func (l *Launcher) handleGameLink(joinURI *core.JoinGameLink) {
 			}
 
 			runningProfileID, runningPID := l.state.Core.CurrentRunningProfileAndPID()
-			if runningProfile, ok := l.state.Core.ProfileManager.Get(runningProfileID); ok && runningPID > 0 && runningProfileID == shared.ID && l.state.Core.HasDirectJoinFeature(runningProfile.Versions()) {
+			if runningProfile, ok := l.state.Core.ProfileManager.Get(runningProfileID); ok && runningPID > 0 && runningProfile.MatchesShared(*shared) && l.state.Core.HasDirectJoinFeature(runningProfile.Versions()) {
 				if !l.trySendDirectJoin(runningPID, *joinInfo) {
 					return
 				}

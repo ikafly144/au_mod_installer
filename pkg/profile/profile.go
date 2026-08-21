@@ -72,6 +72,31 @@ func (p *Profile) MakeShared() SharedProfile {
 	return shared
 }
 
+// MatchesSharedModVersions checks if the profile's mod versions match the shared profile's mod versions.
+func (p *Profile) MatchesSharedModVersions(shared SharedProfile) bool {
+	if p == nil {
+		return false
+	}
+	if len(p.ModVersions) != len(shared.ModVersions) {
+		return false
+	}
+	for modID, versionID := range shared.ModVersions {
+		v, ok := p.ModVersions[modID]
+		if !ok || v.VersionID != versionID {
+			return false
+		}
+	}
+	return true
+}
+
+// MatchesShared checks if the profile ID and mod versions match the shared profile.
+func (p *Profile) MatchesShared(shared SharedProfile) bool {
+	if p == nil || p.ID != shared.ID {
+		return false
+	}
+	return p.MatchesSharedModVersions(shared)
+}
+
 func (p *Profile) PlayDuration() time.Duration {
 	return time.Duration(p.PlayDurationNS)
 }

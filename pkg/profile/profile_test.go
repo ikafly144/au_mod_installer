@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ikafly144/au_mod_installer/common/rest/model"
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 )
 
@@ -99,4 +100,82 @@ func TestProfileManager_IconFileCRUD(t *testing.T) {
 	loaded, err = manager.LoadIconPNG(id)
 	require.NoError(t, err)
 	assert.Nil(t, loaded)
+}
+
+func TestProfile_MatchesShared(t *testing.T) {
+	id := uuid.New()
+	p := &Profile{
+		ID: id,
+		ModVersions: map[string]modmgr.ModVersion{
+			"mod-a": {ModVersionDetails: model.ModVersionDetails{ModID: "mod-a", VersionID: "1.0.0"}},
+			"mod-b": {ModVersionDetails: model.ModVersionDetails{ModID: "mod-b", VersionID: "2.0.0"}},
+		},
+	}
+
+	t.Run("matching shared profile", func(t *testing.T) {
+		shared := SharedProfile{
+			ID: id,
+			ModVersions: map[string]string{
+				"mod-a": "1.0.0",
+				"mod-b": "2.0.0",
+			},
+		}
+		assert.True(t, p.MatchesShared(shared))
+		assert.True(t, p.MatchesSharedModVersions(shared))
+	})
+
+	t.Run("different profile ID", func(t *testing.T) {
+		shared := SharedProfile{
+			ID: uuid.New(),
+			ModVersions: map[string]string{
+				"mod-a": "1.0.0",
+				"mod-b": "2.0.0",
+			},
+		}
+		assert.False(t, p.MatchesShared(shared))
+		assert.True(t, p.MatchesSharedModVersions(shared))
+	})
+
+	t.Run("different version for existing mod", func(t *testing.T) {
+		shared := SharedProfile{
+			ID: id,
+			ModVersions: map[string]string{
+				"mod-a": "1.0.0",
+				"mod-b": "2.1.0",
+			},
+		}
+		assert.False(t, p.MatchesShared(shared))
+		assert.False(t, p.MatchesSharedModVersions(shared))
+	})
+
+	t.Run("missing a mod in shared", func(t *testing.T) {
+		shared := SharedProfile{
+			ID: id,
+			ModVersions: map[string]string{
+				"mod-a": "1.0.0",
+			},
+		}
+		assert.False(t, p.MatchesShared(shared))
+		assert.False(t, p.MatchesSharedModVersions(shared))
+	})
+
+	t.Run("extra mod in shared", func(t *testing.T) {
+		shared := SharedProfile{
+			ID: id,
+			ModVersions: map[string]string{
+				"mod-a": "1.0.0",
+				"mod-b": "2.0.0",
+				"mod-c": "3.0.0",
+			},
+		}
+		assert.False(t, p.MatchesShared(shared))
+		assert.False(t, p.MatchesSharedModVersions(shared))
+	})
+
+	t.Run("both empty mods", func(t *testing.T) {
+		emptyP := &Profile{ID: id}
+		shared := SharedProfile{ID: id}
+		assert.True(t, emptyP.MatchesShared(shared))
+		assert.True(t, emptyP.MatchesSharedModVersions(shared))
+	})
 }
