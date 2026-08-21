@@ -284,6 +284,7 @@
     "launcher.discord_friends.invite_unavailable_title": "招待できません",
     "launcher.discord_friends.invite_unavailable_message": "部屋を共有しているときのみ招待できます。",
     "launcher.discord_friends.join": "参加",
+    "launcher.discord_friends.in_same_session": "参加中",
     "launcher.discord_friends.join_request_sent_title": "参加リクエスト送信",
     "launcher.discord_friends.join_request_sent_message": "{{.Name}} に参加リクエストを送信しました。",
     "launcher.discord_friends.join_request_failed_title": "参加リクエスト失敗",

@@ -4,6 +4,8 @@ package launcher
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"image"
@@ -16,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -106,6 +109,7 @@ type discordFriend struct {
 	status         discordsdk.StatusType
 	playingModOfUs bool
 	canJoin        bool
+	inSameSession  bool
 }
 
 var _ uicommon.Tab = (*Launcher)(nil)
@@ -858,24 +862,27 @@ func discordStatusColor(status discordsdk.StatusType, isPlayingModOfUs bool) col
 	}
 }
 
-func discordStatusPriority(status discordsdk.StatusType, isPlayingModOfUs bool, canJoin bool) int {
+func discordStatusPriority(status discordsdk.StatusType, isPlayingModOfUs bool, canJoin bool, inSameSession bool) int {
 	if isPlayingModOfUs {
-		if canJoin {
+		if inSameSession {
 			return 0
 		}
-		return 1
+		if canJoin {
+			return 1
+		}
+		return 2
 	}
 	switch status {
 	case discordsdk.StatusTypeOnline:
-		return 2
-	case discordsdk.StatusTypeIdle, discordsdk.StatusTypeStreaming:
 		return 3
-	case discordsdk.StatusTypeDnd:
+	case discordsdk.StatusTypeIdle, discordsdk.StatusTypeStreaming:
 		return 4
-	case discordsdk.StatusTypeOffline, discordsdk.StatusTypeInvisible:
+	case discordsdk.StatusTypeDnd:
 		return 5
-	default:
+	case discordsdk.StatusTypeOffline, discordsdk.StatusTypeInvisible:
 		return 6
+	default:
+		return 7
 	}
 }
 
@@ -985,7 +992,15 @@ func (l *Launcher) showDiscordFriendsDialog() {
 
 		var actionButtons []fyne.CanvasObject
 
-		if friend.canJoin {
+		if friend.inSameSession {
+			inSameSessionButton := widget.NewButtonWithIcon(
+				lang.LocalizeKey("launcher.discord_friends.in_same_session", "In Same Room"),
+				theme.ConfirmIcon(),
+				nil,
+			)
+			inSameSessionButton.Disable()
+			actionButtons = append(actionButtons, inSameSessionButton)
+		} else if friend.canJoin {
 			joinButton := widget.NewButtonWithIcon(lang.LocalizeKey("launcher.discord_friends.join", "Join"), theme.LoginIcon(), nil)
 			joinButton.Importance = widget.HighImportance
 			friendID := friend.id
@@ -1009,7 +1024,7 @@ func (l *Launcher) showDiscordFriendsDialog() {
 
 		inviteButton := widget.NewButtonWithIcon(lang.LocalizeKey("launcher.discord_friends.invite", "Invite"), theme.MailSendIcon(), nil)
 		inviteButton.Importance = widget.LowImportance
-		if l.canSendDiscordInvite() {
+		if l.canSendDiscordInvite() && !friend.inSameSession {
 			inviteButton.Enable()
 		} else {
 			inviteButton.Disable()
@@ -1122,6 +1137,15 @@ func (l *Launcher) showDiscordFriendsDialog() {
 				clientAppID = client.GetApplicationId()
 			}
 
+			myLobby := l.state.Core.GetLobbyInfo()
+			var myLobbyHash string
+			if myLobby != nil && myLobby.IsConnected && myLobby.LobbyCode != "" {
+				hashBytes := sha256.Sum256([]byte(myLobby.MatchMakerIp + ":" + strconv.Itoa(myLobby.MatchMakerPort) + "@" + myLobby.LobbyCode))
+				myLobbyHash = hex.EncodeToString(hashBytes[:])
+			}
+			mySharedRoom := l.state.Core.GetSharedRoom()
+			myShareURL := strings.TrimSpace(mySharedRoom.URL)
+
 			newFriends := make([]discordFriend, 0, len(userHandles))
 			for _, user := range userHandles {
 				name := strings.TrimSpace(user.DisplayName())
@@ -1144,15 +1168,40 @@ func (l *Launcher) showDiscordFriendsDialog() {
 				}
 				isPlayingModOfUs := false
 				canJoin := false
+				inSameSession := false
 				if act, ok := user.GameActivity(); ok {
 					if appID, hasAppID := act.ApplicationId(); hasAppID {
 						if appID == discord.ApplicationID || (clientAppID != 0 && appID == clientAppID) {
 							isPlayingModOfUs = true
-							if secrets, hasSec := act.Secrets(); hasSec && strings.TrimSpace(secrets.Join()) != "" {
-								canJoin = true
-							} else if party, hasParty := act.Party(); hasParty && strings.TrimSpace(party.Id()) != "" {
-								if party.MaxSize() <= 0 || party.CurrentSize() < party.MaxSize() {
+
+							var friendLobbyHash string
+							var friendPartyID string
+							if party, hasParty := act.Party(); hasParty {
+								friendPartyID = strings.TrimSpace(party.Id())
+								if friendPartyID != "" {
+									parts := strings.Split(friendPartyID, "/")
+									friendLobbyHash = parts[len(parts)-1]
+								}
+							}
+
+							var friendJoinSecret string
+							if secrets, hasSec := act.Secrets(); hasSec {
+								friendJoinSecret = strings.TrimSpace(secrets.Join())
+							}
+
+							if myLobbyHash != "" && friendLobbyHash != "" && strings.EqualFold(myLobbyHash, friendLobbyHash) {
+								inSameSession = true
+							} else if myShareURL != "" && friendJoinSecret != "" && myShareURL == friendJoinSecret {
+								inSameSession = true
+							}
+
+							if !inSameSession {
+								if friendJoinSecret != "" {
 									canJoin = true
+								} else if party, hasParty := act.Party(); hasParty && friendPartyID != "" {
+									if party.MaxSize() <= 0 || party.CurrentSize() < party.MaxSize() {
+										canJoin = true
+									}
 								}
 							}
 						}
@@ -1165,11 +1214,12 @@ func (l *Launcher) showDiscordFriendsDialog() {
 					status:         user.Status(),
 					playingModOfUs: isPlayingModOfUs,
 					canJoin:        canJoin,
+					inSameSession:  inSameSession,
 				})
 			}
 			sort.Slice(newFriends, func(i, j int) bool {
-				pI := discordStatusPriority(newFriends[i].status, newFriends[i].playingModOfUs, newFriends[i].canJoin)
-				pJ := discordStatusPriority(newFriends[j].status, newFriends[j].playingModOfUs, newFriends[j].canJoin)
+				pI := discordStatusPriority(newFriends[i].status, newFriends[i].playingModOfUs, newFriends[i].canJoin, newFriends[i].inSameSession)
+				pJ := discordStatusPriority(newFriends[j].status, newFriends[j].playingModOfUs, newFriends[j].canJoin, newFriends[j].inSameSession)
 				if pI != pJ {
 					return pI < pJ
 				}
