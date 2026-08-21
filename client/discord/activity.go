@@ -3,6 +3,7 @@ package discord
 import (
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"fyne.io/fyne/v2/lang"
@@ -113,9 +114,22 @@ func (s *DiscordService) SendInvite(userId uint64, inviteUrl string) {
 		slog.Warn("Cannot send invite, no current activity")
 		return
 	}
-	s.client.SendActivityInvite(userId, lang.LocalizeKey("discord.invite_message", "Join me in {{.Name}}!\n\n{{.Link}}",
+
+	name := ""
+	if user, ok := s.UserInfo(); ok {
+		if dName := strings.TrimSpace(user.DisplayName()); dName != "" {
+			name = dName
+		} else if uName := strings.TrimSpace(user.Username()); uName != "" {
+			name = uName
+		}
+	}
+	if name == "" {
+		name = "Unknown"
+	}
+
+	s.client.SendActivityInvite(userId, lang.LocalizeKey("discord.invite_message", "Join {{.Name}} in Mod of Us!\n\n{{.Link}}",
 		map[string]any{
-			"Name": activity.Name(),
+			"Name": name,
 			"Link": inviteUrl,
 		}), func(result *discord.ClientResult) {
 		if !result.Successful() {
