@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -29,6 +30,7 @@ import (
 	"github.com/ikafly144/au_mod_installer/client/rest"
 	commonrest "github.com/ikafly144/au_mod_installer/common/rest"
 	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
+	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 	"github.com/ikafly144/au_mod_installer/pkg/profile"
 	"github.com/ikafly144/au_mod_installer/pkg/progress"
 )
@@ -283,6 +285,158 @@ func (a *App) updateRichPresence() {
 			slog.Warn("Failed to update Discord activity", "error", d.ErrorCode())
 		}
 	})
+}
+
+func ComputeProfileHash(prof profile.Profile) string {
+	keys := make([]string, 0, len(prof.ModVersions))
+	for modID := range prof.ModVersions {
+		keys = append(keys, modID)
+	}
+	slices.Sort(keys)
+	builder := strings.Builder{}
+	for _, modID := range keys {
+		builder.WriteString(modID)
+		builder.WriteString(":")
+		builder.WriteString(prof.ModVersions[modID].VersionID)
+		builder.WriteString(";")
+	}
+	sum := sha256.Sum256([]byte(builder.String()))
+	return hex.EncodeToString(sum[:8])
+}
+
+func (a *App) CheckProfileCompatibility(profileID uuid.UUID, lobbyMeta map[string]string) bool {
+	if lobbyMeta == nil {
+		return true
+	}
+	expectedHash := lobbyMeta["profile_hash"]
+	if expectedHash == "" {
+		return true
+	}
+	prof, ok := a.ProfileManager.Get(profileID)
+	if !ok {
+		return false
+	}
+	return ComputeProfileHash(prof) == expectedHash
+}
+
+func (a *App) SyncGameDiscordLobby(info *IPCLobbyInfo) {
+	if a.DiscordService == nil || !a.DiscordService.IsLoggedIn() {
+		return
+	}
+
+	a.runningProfileMu.Lock()
+	profileID := a.runningProfileID
+	a.runningProfileMu.Unlock()
+
+	if profileID == uuid.Nil || info == nil || !info.IsConnected || strings.TrimSpace(info.LobbyCode) == "" {
+		return
+	}
+
+	prof, ok := a.ProfileManager.Get(profileID)
+	if !ok {
+		return
+	}
+
+	isHost := info.IsHost != nil && *info.IsHost
+	gameVersion := ""
+	profileDir := filepath.Join(a.ConfigDir, "profiles", profileID.String())
+	if meta, err := modmgr.GetProfileMetadata(profileDir); err == nil && meta != nil {
+		gameVersion = meta.GameVersion
+	}
+	if gameVersion == "" {
+		if gamePath, err := a.DetectGamePath(); err == nil && gamePath != "" {
+			if v, err := aumgr.GetVersion(gamePath); err == nil {
+				gameVersion = v
+			}
+		}
+	}
+
+	room := commonrest.RoomInfo{
+		LobbyCode:      info.LobbyCode,
+		ServerIP:       info.ServerIP,
+		ServerPort:     uint16(info.ServerPort),
+		MatchMakerIp:   info.MatchMakerIp,
+		MatchMakerPort: uint16(info.MatchMakerPort),
+		GameVersion:    gameVersion,
+	}
+
+	secret := RoomKeyForCache(room, profileID)
+	secretHash := hex.EncodeToString(new(sha256.Sum256([]byte(secret)))[:])
+
+	if active, ok := a.DiscordService.GetActiveLobby(); ok && active.Secret == secretHash {
+		return
+	}
+
+	var hostUserID uint64
+	if user, ok := a.DiscordService.UserInfo(); ok {
+		hostUserID = user.Id()
+	}
+
+	lobbyMeta := map[string]string{
+		"profile_id":   profileID.String(),
+		"profile_name": prof.Name,
+		"profile_hash": ComputeProfileHash(prof),
+		"game_version": gameVersion,
+		"room_code":    info.LobbyCode,
+		"server_ip":    info.ServerIP,
+		"server_port":  strconv.Itoa(info.ServerPort),
+		"host_user_id": strconv.FormatUint(hostUserID, 10),
+		"created_at":   strconv.FormatInt(time.Now().Unix(), 10),
+	}
+
+	memberMeta := map[string]string{
+		"ready":          "true",
+		"is_host":        strconv.FormatBool(isHost),
+		"client_version": a.Version,
+		"profile_hash":   ComputeProfileHash(prof),
+	}
+
+	a.DiscordService.CreateOrJoinLobby(secretHash, lobbyMeta, memberMeta, func(err error, lobbyID uint64) {
+		if err != nil {
+			slog.Warn("Failed to sync game Discord lobby", "error", err, "secret", secretHash)
+		} else {
+			slog.Info("Synced game with Discord lobby", "lobbyID", lobbyID)
+		}
+	})
+}
+
+func (a *App) CreateManualLobby(profileID uuid.UUID, callback func(err error, lobbyID uint64)) {
+	if a.DiscordService == nil || !a.DiscordService.IsLoggedIn() {
+		if callback != nil {
+			callback(discord.ErrNotLoggedIn, 0)
+		}
+		return
+	}
+	prof, ok := a.ProfileManager.Get(profileID)
+	if !ok {
+		if callback != nil {
+			callback(fmt.Errorf("profile not found"), 0)
+		}
+		return
+	}
+
+	randomSecret := "manual-" + uuid.New().String()
+	var hostUserID uint64
+	if user, ok := a.DiscordService.UserInfo(); ok {
+		hostUserID = user.Id()
+	}
+
+	lobbyMeta := map[string]string{
+		"profile_id":   profileID.String(),
+		"profile_name": prof.Name,
+		"profile_hash": ComputeProfileHash(prof),
+		"host_user_id": strconv.FormatUint(hostUserID, 10),
+		"created_at":   strconv.FormatInt(time.Now().Unix(), 10),
+	}
+
+	memberMeta := map[string]string{
+		"ready":          "true",
+		"is_host":        "true",
+		"client_version": a.Version,
+		"profile_hash":   ComputeProfileHash(prof),
+	}
+
+	a.DiscordService.CreateOrJoinLobby(randomSecret, lobbyMeta, memberMeta, callback)
 }
 
 func New(version string, restClient rest.Client, activityService *discord.DiscordService) (*App, error) {

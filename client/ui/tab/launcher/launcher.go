@@ -102,6 +102,29 @@ type Launcher struct {
 
 	canLaunchListener binding.DataListener
 
+	// Lobby drawer components
+	lobbyDrawerContainer       *fyne.Container
+	lobbyDrawerPanel           *fyne.Container
+	lobbyDrawerExpanded        bool
+	lobbyToggleDrawerButton    *widget.Button
+	lobbyHeaderTitle           *widget.Label
+	lobbyHeaderSubtitle        *widget.Label
+	lobbyActionBox             *fyne.Container
+	lobbyCreateButton          *widget.Button
+	lobbyLeaveButton           *widget.Button
+	lobbyInviteButton          *widget.Button
+	lobbyMemberListContainer   *fyne.Container
+	lobbyVoiceBar              *fyne.Container
+	lobbyVoiceJoinButton       *widget.Button
+	lobbyVoiceLeaveButton      *widget.Button
+	lobbyVoiceMuteButton       *widget.Button
+	lobbyVoiceDeafenButton     *widget.Button
+	lobbyVoiceStatusLabel      *widget.Label
+	lobbyChatMessagesContainer *fyne.Container
+	lobbyChatScroll            *container.Scroll
+	lobbyChatEntry             *widget.Entry
+	lobbyChatSendButton        *widget.Button
+
 	content *fyne.Container
 }
 
@@ -515,6 +538,7 @@ func (l *Launcher) init() {
 		})
 	}
 	l.setupRoomLinkUI()
+	l.setupLobbyDrawerUI()
 	bind := binding.NewString()
 	bind.AddListener(binding.NewDataListener(func() {
 		l.copyRoomLinkButton.SetText(lang.LocalizeKey("launcher.join_link.copy", "Copy Link"))
@@ -2273,7 +2297,7 @@ func (l *Launcher) Tab() (*container.TabItem, error) {
 		header,
 		footer,
 		nil,
-		nil,
+		l.lobbyDrawerContainer,
 		l.profileViews,
 	)
 	return container.NewTabItem(lang.LocalizeKey("launcher.tab_name", "Launcher"), l.content), nil
