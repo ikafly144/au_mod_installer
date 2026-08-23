@@ -171,11 +171,31 @@ func (m *shareLobbyManager) updateRoom(sessionID, hostKey string, room *restcomm
 	}
 	s.ExpiresAt = now.Add(shareLobbyTTL)
 
+	if s.DiscordLobbyID != 0 && m.discordClient != nil {
+		discordMeta := map[string]string{
+			"session_id": sessionID,
+		}
+		if s.Room != nil {
+			discordMeta["lobby_code"] = s.Room.LobbyCode
+			discordMeta["server_ip"] = s.Room.ServerIP
+			discordMeta["server_port"] = fmt.Sprint(s.Room.ServerPort)
+			discordMeta["game_version"] = s.Room.GameVersion
+		}
+		dID := s.DiscordLobbyID
+		client := m.discordClient
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = client.UpdateLobbyMetadata(ctx, dID, discordMeta)
+		}()
+	}
+
 	return &restcommon.ShareLobbyResponse{
-		URL:       "/join_lobby?session_id=" + sessionID,
-		SessionID: sessionID,
-		HostKey:   hostKey,
-		ExpiresAt: s.ExpiresAt,
+		URL:            "/join_lobby?session_id=" + sessionID,
+		SessionID:      sessionID,
+		HostKey:        hostKey,
+		DiscordLobbyID: s.DiscordLobbyID,
+		ExpiresAt:      s.ExpiresAt,
 	}, nil
 }
 
@@ -231,6 +251,29 @@ func (m *shareLobbyManager) addMember(sessionID string, userID uint64) error {
 		return m.discordClient.AddMember(ctx, s.DiscordLobbyID, userID, map[string]string{
 			"is_host": "false",
 		})
+	}
+	return nil
+}
+
+func (m *shareLobbyManager) removeMember(sessionID string, userID uint64) error {
+	now := time.Now()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.cleanupLocked(now)
+
+	s, ok := m.sessions[sessionID]
+	if !ok {
+		return ErrShareLobbyNotFound
+	}
+	if now.After(s.ExpiresAt) {
+		m.deleteSessionLocked(sessionID)
+		return ErrShareLobbyExpired
+	}
+
+	if s.DiscordLobbyID != 0 && m.discordClient != nil && userID != 0 {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		return m.discordClient.RemoveMember(ctx, s.DiscordLobbyID, userID)
 	}
 	return nil
 }

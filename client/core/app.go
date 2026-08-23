@@ -430,63 +430,16 @@ func (a *App) SyncGameDiscordLobby(info *IPCLobbyInfo) {
 		return
 	}
 
-	prof, ok := a.ProfileManager.Get(profileID)
-	if !ok {
-		return
-	}
-
-	isHost := info.IsHost != nil && *info.IsHost
-	gameVersion := ""
-	profileDir := filepath.Join(a.ConfigDir, "profiles", profileID.String())
-	if meta, err := modmgr.GetProfileMetadata(profileDir); err == nil && meta != nil {
-		gameVersion = meta.GameVersion
-	}
-	if gameVersion == "" {
-		if gamePath, err := a.DetectGamePath(); err == nil && gamePath != "" {
-			if v, err := aumgr.GetVersion(gamePath); err == nil {
-				gameVersion = v
-			}
-		}
-	}
-
-	// If already in an active Discord lobby, just update room metadata
+	// If already in an active Discord lobby, just update room metadata on server
 	if _, ok := a.DiscordService.GetActiveLobby(); ok {
-		a.UpdateCurrentLobbyRoom(info)
+		_ = a.UpdateCurrentLobbyRoom(info)
 		return
 	}
 
-	var hostUserID uint64
-	if user, ok := a.DiscordService.UserInfo(); ok {
-		hostUserID = user.Id()
+	_, err := a.ShareCurrentLobby(profileID)
+	if err != nil {
+		slog.Warn("Failed to create server-managed lobby for in-game session", "error", err)
 	}
-
-	stableSecret := "lobby-" + uuid.New().String()
-	lobbyMeta := map[string]string{
-		"profile_id":   profileID.String(),
-		"profile_name": prof.Name,
-		"profile_hash": ComputeProfileHash(prof),
-		"game_version": gameVersion,
-		"room_code":    info.LobbyCode,
-		"server_ip":    info.ServerIP,
-		"server_port":  strconv.Itoa(info.ServerPort),
-		"host_user_id": strconv.FormatUint(hostUserID, 10),
-		"created_at":   strconv.FormatInt(time.Now().Unix(), 10),
-	}
-
-	memberMeta := map[string]string{
-		"is_host":        strconv.FormatBool(isHost),
-		"client_version": a.Version,
-		"profile_hash":   ComputeProfileHash(prof),
-	}
-
-	a.DiscordService.CreateOrJoinLobby(stableSecret, lobbyMeta, memberMeta, func(err error, lobbyID uint64) {
-		if err != nil {
-			slog.Warn("Failed to create game Discord lobby", "error", err, "secret", stableSecret)
-		} else {
-			slog.Info("Created game Discord lobby", "lobbyID", lobbyID)
-			a.UpdateCurrentLobbyRoom(info)
-		}
-	})
 }
 
 func (a *App) CreateManualLobby(profileID uuid.UUID, callback func(err error, lobbyID uint64)) {
@@ -496,35 +449,22 @@ func (a *App) CreateManualLobby(profileID uuid.UUID, callback func(err error, lo
 		}
 		return
 	}
-	prof, ok := a.ProfileManager.Get(profileID)
-	if !ok {
+	_, err := a.ShareCurrentLobby(profileID)
+	if err != nil {
 		if callback != nil {
-			callback(fmt.Errorf("profile not found"), 0)
+			callback(err, 0)
 		}
 		return
 	}
-
-	randomSecret := "lobby-" + uuid.New().String()
-	var hostUserID uint64
-	if user, ok := a.DiscordService.UserInfo(); ok {
-		hostUserID = user.Id()
+	if callback != nil {
+		var dID uint64
+		if a.DiscordService != nil {
+			if active, ok := a.DiscordService.GetActiveLobby(); ok {
+				dID = active.ID
+			}
+		}
+		callback(nil, dID)
 	}
-
-	lobbyMeta := map[string]string{
-		"profile_id":   profileID.String(),
-		"profile_name": prof.Name,
-		"profile_hash": ComputeProfileHash(prof),
-		"host_user_id": strconv.FormatUint(hostUserID, 10),
-		"created_at":   strconv.FormatInt(time.Now().Unix(), 10),
-	}
-
-	memberMeta := map[string]string{
-		"is_host":        "true",
-		"client_version": a.Version,
-		"profile_hash":   ComputeProfileHash(prof),
-	}
-
-	a.DiscordService.CreateOrJoinLobby(randomSecret, lobbyMeta, memberMeta, callback)
 }
 
 func New(version string, restClient rest.Client, activityService *discord.DiscordService) (*App, error) {
@@ -891,6 +831,10 @@ func (a *App) ShareCurrentLobby(profileID uuid.UUID) (*SharedLobbyLink, error) {
 	rs, err := a.Rest.ShareLobby(aupack, lobbySecret, hostDiscordUserID, roomPtr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to share lobby: %w", err)
+	}
+
+	if rs.DiscordLobbyID != 0 && a.DiscordService != nil {
+		a.DiscordService.SetActiveLobbyID(rs.DiscordLobbyID)
 	}
 
 	link := SharedLobbyLink{

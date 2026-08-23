@@ -22,6 +22,7 @@ var (
 	EndpointHeartbeatLobby      = NewEndpoint("POST", "/share_lobby/heartbeat")
 	EndpointDeleteLobby         = NewEndpoint("DELETE", "/share_lobby/:session_id")
 	EndpointAddLobbyMember      = NewEndpoint("POST", "/share_lobby/:session_id/members")
+	EndpointRemoveLobbyMember   = NewEndpoint("DELETE", "/share_lobby/:session_id/members/:user_id")
 	EndpointJoinLobby           = NewEndpoint("GET", "/join_lobby")
 	EndpointGetVersionInfo      = NewEndpoint("GET", "/version_info")
 )

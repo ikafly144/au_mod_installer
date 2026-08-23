@@ -26,4 +26,5 @@ type Client interface {
 	DeleteSharedLobby(sessionID, hostKey string) error
 	GetJoinLobbyDownload(sessionID string) (*rest.JoinLobbyDownloadResponse, error)
 	AddLobbyMember(sessionID string, discordUserID uint64) error
+	RemoveLobbyMember(sessionID string, discordUserID uint64) error
 }

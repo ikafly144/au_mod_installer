@@ -96,3 +96,7 @@ func (c *OfflineClient) GetJoinLobbyDownload(sessionID string) (*rest.JoinLobbyD
 func (c *OfflineClient) AddLobbyMember(sessionID string, discordUserID uint64) error {
 	return errors.New("offline mode: add lobby member not available")
 }
+
+func (c *OfflineClient) RemoveLobbyMember(sessionID string, discordUserID uint64) error {
+	return errors.New("offline mode: remove lobby member not available")
+}

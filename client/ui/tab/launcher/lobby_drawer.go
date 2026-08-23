@@ -686,15 +686,30 @@ func (l *Launcher) handleCreateManualLobby() {
 }
 
 func (l *Launcher) handleLeaveLobby() {
-	if l.state == nil || l.state.Core == nil || l.state.Core.DiscordService == nil {
+	if l.state == nil || l.state.Core == nil {
 		return
 	}
+	shared := l.state.Core.GetSharedLobby()
+	if shared.SessionID != "" {
+		go func(sess, hostKey string) {
+			if hostKey != "" {
+				_ = l.state.Core.Rest.DeleteSharedLobby(sess, hostKey)
+			} else if l.state.Core.DiscordService != nil {
+				if user, ok := l.state.Core.DiscordService.UserInfo(); ok && user != nil {
+					_ = l.state.Core.Rest.RemoveLobbyMember(sess, user.Id())
+				}
+			}
+		}(shared.SessionID, shared.HostKey)
+	}
 	l.state.Core.InvalidateCachedLobbyShareAsync()
-	l.state.Core.DiscordService.LeaveLobby(func(err error) {
-		if err != nil {
-			slog.Warn("Failed to leave lobby", "error", err)
-		}
-	})
+	if l.state.Core.DiscordService != nil {
+		l.state.Core.DiscordService.LeaveLobby(func(err error) {
+			if err != nil {
+				slog.Warn("Failed to leave lobby", "error", err)
+			}
+		})
+	}
+	l.refreshLobbyShareUI()
 }
 
 func (l *Launcher) handleJoinVoice() {

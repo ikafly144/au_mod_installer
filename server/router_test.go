@@ -267,12 +267,22 @@ type mockDiscordLobbyClient struct {
 	createdHostUserID uint64
 	addedLobbyID      uint64
 	addedUserID       uint64
+	removedLobbyID    uint64
+	removedUserID     uint64
 	deletedLobbyID    uint64
+	updatedLobbyID    uint64
+	updatedMeta       map[string]string
 }
 
 func (m *mockDiscordLobbyClient) CreateLobby(ctx context.Context, hostUserID uint64, metadata map[string]string) (uint64, error) {
 	m.createdHostUserID = hostUserID
 	return 1234567890, nil
+}
+
+func (m *mockDiscordLobbyClient) UpdateLobbyMetadata(ctx context.Context, lobbyID uint64, metadata map[string]string) error {
+	m.updatedLobbyID = lobbyID
+	m.updatedMeta = metadata
+	return nil
 }
 
 func (m *mockDiscordLobbyClient) AddMember(ctx context.Context, lobbyID uint64, userID uint64, metadata map[string]string) error {
@@ -282,6 +292,8 @@ func (m *mockDiscordLobbyClient) AddMember(ctx context.Context, lobbyID uint64, 
 }
 
 func (m *mockDiscordLobbyClient) RemoveMember(ctx context.Context, lobbyID uint64, userID uint64) error {
+	m.removedLobbyID = lobbyID
+	m.removedUserID = userID
 	return nil
 }
 
@@ -326,4 +338,12 @@ func TestRouter_ShareLobby_WithDiscordLobbyIntegration(t *testing.T) {
 	require.Equal(t, http.StatusOK, memberRec.Code)
 	assert.Equal(t, uint64(1234567890), mockDiscord.addedLobbyID)
 	assert.Equal(t, uint64(555555555), mockDiscord.addedUserID)
+
+	// 3. Remove guest member
+	delMemberReq := httptest.NewRequest(http.MethodDelete, "/share_lobby/"+shareRs.SessionID+"/members/555555555", nil)
+	delMemberRec := httptest.NewRecorder()
+	handler.ServeHTTP(delMemberRec, delMemberReq)
+	require.Equal(t, http.StatusOK, delMemberRec.Code)
+	assert.Equal(t, uint64(1234567890), mockDiscord.removedLobbyID)
+	assert.Equal(t, uint64(555555555), mockDiscord.removedUserID)
 }
