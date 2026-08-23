@@ -396,6 +396,5 @@
     "launcher.lobby.select_channel": "テキストチャンネルを選択:",
     "launcher.lobby.link_button": "連携する",
     "launcher.lobby.link_success_title": "連携完了",
-    "launcher.lobby.link_success_message": "Discordチャンネルとロビーの連携が完了しました！",
-    "launcher.lobby.cant_link_lobby_message": "Discord Social SDKの仕様により、クライアント側でシークレット（P2P/招待リンク）を用いて作成されたロビーではチャンネル連携（CanLinkLobby権限）が利用できません（DiscordバックエンドAPI経由で作成された永続ロビーのみ対象となります）。"
+    "launcher.lobby.link_success_message": "Discordチャンネルとロビーの連携が完了しました！"
 }
