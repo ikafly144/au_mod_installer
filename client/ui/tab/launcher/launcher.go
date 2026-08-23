@@ -325,8 +325,16 @@ func (l *Launcher) HandleJoinLink(s string) {
 		l.handleJoinLobbyURI(s)
 		return
 	}
-	if strings.HasPrefix(s, "mod-of-us://") {
+	if strings.HasPrefix(s, "mod-of-us://join_game/") {
 		l.handleJoinGameURI(s)
+		return
+	}
+	if strings.HasPrefix(s, "mod-of-us://") {
+		if strings.Contains(s, "join_lobby") {
+			l.handleJoinLobbyURI(s)
+		} else {
+			l.handleJoinGameURI(s)
+		}
 		return
 	}
 	uri, err := url.Parse(s)
@@ -337,7 +345,15 @@ func (l *Launcher) HandleJoinLink(s string) {
 	sessionID := uri.Query().Get("session_id")
 	if sessionID == "" {
 		path := strings.TrimPrefix(uri.Path, "/")
-		if after, ok := strings.CutPrefix(path, "v1/"); ok {
+		if after, ok := strings.CutPrefix(path, "join_lobby/v1/"); ok {
+			sessionID = after
+		} else if after, ok := strings.CutPrefix(path, "join_game/v1/"); ok {
+			sessionID = after
+		} else if after, ok := strings.CutPrefix(path, "v1/"); ok {
+			sessionID = after
+		} else if after, ok := strings.CutPrefix(path, "join_lobby/"); ok {
+			sessionID = after
+		} else if after, ok := strings.CutPrefix(path, "join_game/"); ok {
 			sessionID = after
 		} else if !strings.Contains(path, "/") && path != "" {
 			sessionID = path
@@ -348,9 +364,15 @@ func (l *Launcher) HandleJoinLink(s string) {
 	}
 	serverBase := l.state.Rest.ServerBaseURL()
 	if uri.Scheme != "" && uri.Host != "" {
-		serverBase = uri.Scheme + "://" + uri.Host
+		base := uri.Scheme + "://" + uri.Host
+		if idx := strings.Index(uri.Path, "/join_lobby"); idx > 0 {
+			base += uri.Path[:idx]
+		} else if idx := strings.Index(uri.Path, "/join_game"); idx > 0 {
+			base += uri.Path[:idx]
+		}
+		serverBase = base
 	}
-	if strings.Contains(uri.Path, "join_lobby") {
+	if strings.Contains(s, "join_lobby") || strings.HasPrefix(sessionID, "lobby-") || strings.Contains(s, "lobby") {
 		lobbyLink := &core.JoinLobbyLink{
 			SessionID:  sessionID,
 			ServerBase: serverBase,
@@ -358,11 +380,19 @@ func (l *Launcher) HandleJoinLink(s string) {
 		l.handleLobbyLink(lobbyLink)
 		return
 	}
-	gameLink := &core.JoinGameLink{
+	if strings.Contains(s, "join_game") {
+		gameLink := &core.JoinGameLink{
+			SessionID:  sessionID,
+			ServerBase: serverBase,
+		}
+		l.handleGameLink(gameLink)
+		return
+	}
+	lobbyLink := &core.JoinLobbyLink{
 		SessionID:  sessionID,
 		ServerBase: serverBase,
 	}
-	l.handleGameLink(gameLink)
+	l.handleLobbyLink(lobbyLink)
 }
 
 func (l *Launcher) getDiscordUserName(userID uint64) string {
@@ -1726,6 +1756,14 @@ func (l *Launcher) handleLobbyLink(joinURI *core.JoinLobbyLink) {
 		defer l.finishJoinSession(joinURI.SessionID)
 
 		shared, iconPNG, lobbySecret, joinInfo, err := l.state.Core.HandleJoinLobbyDownload(joinURI.SessionID, joinURI.ServerBase)
+		if err != nil {
+			if gShared, gIcon, gJoinInfo, gErr := l.state.Core.HandleJoinGameDownload(joinURI.SessionID, joinURI.ServerBase); gErr == nil {
+				shared = gShared
+				iconPNG = gIcon
+				joinInfo = gJoinInfo
+				err = nil
+			}
+		}
 		fyne.DoAndWait(func() {
 			if err != nil {
 				uicommon.Alert(
@@ -1867,6 +1905,23 @@ func (l *Launcher) handleGameLink(joinURI *core.JoinGameLink) {
 		defer l.finishJoinSession(joinURI.SessionID)
 
 		shared, iconPNG, joinInfo, err := l.state.Core.HandleJoinGameDownload(joinURI.SessionID, joinURI.ServerBase)
+		var lobbySecret string
+		if err != nil {
+			if lShared, lIcon, lSecret, lJoinInfo, lErr := l.state.Core.HandleJoinLobbyDownload(joinURI.SessionID, joinURI.ServerBase); lErr == nil {
+				shared = lShared
+				iconPNG = lIcon
+				lobbySecret = lSecret
+				joinInfo = lJoinInfo
+				err = nil
+				if lobbySecret != "" && l.state.Core.DiscordService != nil && l.state.Core.DiscordService.IsLoggedIn() {
+					memberMeta := map[string]string{
+						"is_host":        "false",
+						"client_version": l.state.Core.Version,
+					}
+					l.state.Core.DiscordService.CreateOrJoinLobby(lobbySecret, nil, memberMeta, nil)
+				}
+			}
+		}
 		fyne.DoAndWait(func() {
 			if err != nil {
 				uicommon.Alert(

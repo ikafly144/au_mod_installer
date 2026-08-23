@@ -213,6 +213,15 @@ func TestRouter_ShareLobby_Lifecycle(t *testing.T) {
 	require.NotNil(t, dlRs.Room)
 	assert.Equal(t, "LOBBY1", dlRs.Room.LobbyCode)
 
+	// Verify resolving by LobbySecret directly works without 404
+	dlReqBySecret := httptest.NewRequest(http.MethodGet, "/join_lobby?session_id=secret-discord-123&download=1", nil)
+	dlRecBySecret := httptest.NewRecorder()
+	handler.ServeHTTP(dlRecBySecret, dlReqBySecret)
+	require.Equal(t, http.StatusOK, dlRecBySecret.Code)
+	var dlRsSecret restcommon.JoinLobbyDownloadResponse
+	require.NoError(t, json.Unmarshal(dlRecBySecret.Body.Bytes(), &dlRsSecret))
+	assert.Equal(t, shareRs.SessionID, dlRsSecret.SessionID)
+
 	// 3. Update room dynamically without changing session ID / Lobby URL
 	updateBody := &bytes.Buffer{}
 	upWriter := multipart.NewWriter(updateBody)
