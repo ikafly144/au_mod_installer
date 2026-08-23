@@ -372,19 +372,19 @@ func (l *Launcher) HandleJoinLink(s string) {
 		}
 		serverBase = base
 	}
-	if strings.Contains(s, "join_lobby") || strings.Contains(s, "lobby") {
-		lobbyLink := &core.JoinLobbyLink{
+	if strings.Contains(s, "join_game") {
+		gameLink := &core.JoinGameLink{
 			SessionID:  sessionID,
 			ServerBase: serverBase,
 		}
-		l.handleLobbyLink(lobbyLink)
+		l.handleGameLink(gameLink)
 		return
 	}
-	gameLink := &core.JoinGameLink{
+	lobbyLink := &core.JoinLobbyLink{
 		SessionID:  sessionID,
 		ServerBase: serverBase,
 	}
-	l.handleGameLink(gameLink)
+	l.handleLobbyLink(lobbyLink)
 }
 
 func (l *Launcher) getDiscordUserName(userID uint64) string {

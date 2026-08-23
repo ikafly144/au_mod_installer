@@ -917,10 +917,6 @@ func (a *App) ShareCurrentLobby(profileID uuid.UUID) (*SharedLobbyLink, error) {
 		return nil, fmt.Errorf("failed to share lobby: %w", err)
 	}
 
-	if rs.DiscordLobbyID != 0 && a.DiscordService != nil {
-		a.DiscordService.SetActiveLobbyID(rs.DiscordLobbyID)
-	}
-
 	link := SharedLobbyLink{
 		URL:       rs.URL,
 		SessionID: rs.SessionID,
@@ -928,6 +924,30 @@ func (a *App) ShareCurrentLobby(profileID uuid.UUID) (*SharedLobbyLink, error) {
 		ExpiresAt: rs.ExpiresAt,
 	}
 	a.SetSharedLobby(link)
+
+	if a.DiscordService != nil && a.DiscordService.IsLoggedIn() {
+		memberMeta := map[string]string{
+			"is_host":        "true",
+			"client_version": a.Version,
+		}
+		lobbyMeta := map[string]string{
+			"session_id": rs.SessionID,
+		}
+		if roomPtr != nil {
+			lobbyMeta["lobby_code"] = roomPtr.LobbyCode
+			lobbyMeta["server_ip"] = roomPtr.ServerIP
+			lobbyMeta["server_port"] = fmt.Sprint(roomPtr.ServerPort)
+			lobbyMeta["game_version"] = roomPtr.GameVersion
+		}
+		a.DiscordService.CreateOrJoinLobby(rs.SessionID, lobbyMeta, memberMeta, func(joinErr error, lobbyID uint64) {
+			if joinErr != nil {
+				slog.Warn("Failed to create/join Discord lobby for host", "error", joinErr, "sessionID", rs.SessionID)
+			} else {
+				slog.Info("Host successfully joined Discord lobby", "lobbyID", lobbyID, "sessionID", rs.SessionID)
+			}
+		})
+	}
+
 	return &link, nil
 }
 
