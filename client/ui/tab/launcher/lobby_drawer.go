@@ -1,6 +1,7 @@
 package launcher
 
 import (
+	"errors"
 	"fmt"
 	"image/color"
 	"log/slog"
@@ -672,7 +673,7 @@ func (l *Launcher) handleCreateManualLobby() {
 		profileID = l.profiles[0].ID
 	}
 	if profileID == uuid.Nil {
-		l.state.ShowErrorDialog(fmt.Errorf("please select a profile first"))
+		l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("launcher.lobby.error_select_profile", "Please select a profile first.")))
 		return
 	}
 
@@ -783,7 +784,7 @@ func (l *Launcher) handleShareLobby() {
 		profileID = l.profiles[0].ID
 	}
 	if profileID == uuid.Nil {
-		l.state.ShowErrorDialog(fmt.Errorf("please select a profile first"))
+		l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("launcher.lobby.error_select_profile", "Please select a profile first.")))
 		return
 	}
 
@@ -795,7 +796,7 @@ func (l *Launcher) handleShareLobby() {
 		link, err := l.state.Core.ShareCurrentLobby(profileID)
 		if err != nil {
 			fyne.Do(func() {
-				l.state.ShowErrorDialog(fmt.Errorf("failed to share lobby: %w", err))
+				l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("launcher.lobby.error_share_failed", "Failed to share lobby: {{.Error}}", map[string]any{"Error": err.Error()})))
 			})
 			return
 		}
@@ -856,7 +857,7 @@ func (l *Launcher) showLinkChannelDialog() {
 		fyne.Do(func() {
 			loadingDialog.Hide()
 			if err != nil {
-				l.state.ShowErrorDialog(fmt.Errorf("failed to fetch servers: %w", err))
+				l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("launcher.lobby.error_fetch_servers_failed", "Failed to fetch Discord servers: {{.Error}}", map[string]any{"Error": err.Error()})))
 				return
 			}
 			if len(guilds) == 0 {
@@ -883,14 +884,15 @@ func (l *Launcher) showLinkChannelDialog() {
 				if !ok {
 					return
 				}
-				channelSelect.Options = []string{"Loading channels..."}
-				channelSelect.SetSelected("Loading channels...")
+				loadingText := lang.LocalizeKey("launcher.lobby.loading_channels", "Loading channels...")
+				channelSelect.Options = []string{loadingText}
+				channelSelect.SetSelected(loadingText)
 				channelSelect.Disable()
 
 				ds.GetGuildChannels(g.ID, func(chErr error, channels []discord.GuildChannelInfo) {
 					fyne.Do(func() {
 						if chErr != nil {
-							channelSelect.Options = []string{"Failed to load channels"}
+							channelSelect.Options = []string{lang.LocalizeKey("launcher.lobby.failed_load_channels", "Failed to load channels")}
 							channelSelect.Refresh()
 							return
 						}
@@ -903,8 +905,9 @@ func (l *Launcher) showLinkChannelDialog() {
 							}
 						}
 						if len(linkableNames) == 0 {
-							channelSelect.Options = []string{"No linkable text channels"}
-							channelSelect.SetSelected("No linkable text channels")
+							noChannelsText := lang.LocalizeKey("launcher.lobby.no_linkable_channels", "No linkable text channels")
+							channelSelect.Options = []string{noChannelsText}
+							channelSelect.SetSelected(noChannelsText)
 							channelSelect.Disable()
 						} else {
 							channelSelect.Options = linkableNames
@@ -947,7 +950,7 @@ func (l *Launcher) showLinkChannelDialog() {
 					ds.LinkChannelToLobby(selectedChID, func(linkErr error) {
 						fyne.Do(func() {
 							if linkErr != nil {
-								l.state.ShowErrorDialog(fmt.Errorf("failed to link channel: %w", linkErr))
+								l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("launcher.lobby.error_link_channel_failed", "Failed to link channel: {{.Error}}", map[string]any{"Error": linkErr.Error()})))
 							} else {
 								l.state.ShowInfoDialog(
 									lang.LocalizeKey("launcher.lobby.link_success_title", "Channel Linked"),
@@ -976,7 +979,7 @@ func (l *Launcher) handleUnlinkChannel() {
 	ds.UnlinkChannelFromLobby(func(err error) {
 		fyne.Do(func() {
 			if err != nil {
-				l.state.ShowErrorDialog(fmt.Errorf("failed to unlink channel: %w", err))
+				l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("launcher.lobby.error_unlink_channel_failed", "Failed to unlink channel: {{.Error}}", map[string]any{"Error": err.Error()})))
 			} else {
 				if info, ok := ds.GetActiveLobby(); ok {
 					l.refreshLobbyUI(info)

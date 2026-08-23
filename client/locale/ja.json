@@ -396,5 +396,19 @@
     "launcher.lobby.select_channel": "テキストチャンネルを選択:",
     "launcher.lobby.link_button": "連携する",
     "launcher.lobby.link_success_title": "連携完了",
-    "launcher.lobby.link_success_message": "Discordチャンネルとロビーの連携が完了しました！"
+    "launcher.lobby.link_success_message": "Discordチャンネルとロビーの連携が完了しました！",
+    "installation.error.open_explorer_failed": "ファイルエクスプローラーを開けませんでした: ",
+    "installation.error.get_version_failed": "ゲームのバージョン情報の取得に失敗しました",
+    "launcher.discord_friends.invite_sent_title": "招待送信完了",
+    "launcher.discord_friends.invite_sent_message": "{{.Name}} に招待を送信しました。",
+    "launcher.discord_friends.not_logged_in": "設定からDiscordにログインしてください。",
+    "launcher.discord_friends.no_friends": "フレンドが見つかりませんでした。",
+    "launcher.lobby.error_select_profile": "プロファイルを選択してください。",
+    "launcher.lobby.error_share_failed": "ロビーの共有に失敗しました: {{.Error}}",
+    "launcher.lobby.error_fetch_servers_failed": "Discordサーバー一覧の取得に失敗しました: {{.Error}}",
+    "launcher.lobby.error_link_channel_failed": "チャンネル連携に失敗しました: {{.Error}}",
+    "launcher.lobby.error_unlink_channel_failed": "チャンネル連携解除に失敗しました: {{.Error}}",
+    "launcher.lobby.loading_channels": "チャンネルを読み込み中...",
+    "launcher.lobby.failed_load_channels": "チャンネルの読み込みに失敗しました",
+    "launcher.lobby.no_linkable_channels": "連携可能なテキストチャンネルがありません"
 }
