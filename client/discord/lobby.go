@@ -244,6 +244,16 @@ func (s *DiscordService) LeaveLobby(callback func(error)) {
 	})
 }
 
+func (s *DiscordService) SetActiveLobbyID(lobbyID uint64) *LobbyInfo {
+	s.lobbyMu.Lock()
+	s.activeLobbyID = lobbyID
+	s.lobbyMu.Unlock()
+
+	info := s.refreshActiveLobbyInfo(lobbyID)
+	s.notifyLobbyUpdated(info)
+	return info
+}
+
 func (s *DiscordService) GetActiveLobby() (*LobbyInfo, bool) {
 	s.lobbyMu.RLock()
 	defer s.lobbyMu.RUnlock()

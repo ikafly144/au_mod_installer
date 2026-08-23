@@ -12,6 +12,7 @@ import (
 
 type DiscordLobbyClient interface {
 	CreateLobby(ctx context.Context, hostUserID uint64, metadata map[string]string) (uint64, error)
+	UpdateLobbyMetadata(ctx context.Context, lobbyID uint64, metadata map[string]string) error
 	AddMember(ctx context.Context, lobbyID uint64, userID uint64, metadata map[string]string) error
 	RemoveMember(ctx context.Context, lobbyID uint64, userID uint64) error
 	DeleteLobby(ctx context.Context, lobbyID uint64) error
@@ -103,6 +104,39 @@ func (c *discordLobbyHTTPClient) CreateLobby(ctx context.Context, hostUserID uin
 	var lobbyID uint64
 	_, _ = fmt.Sscanf(lobbyResp.ID, "%d", &lobbyID)
 	return lobbyID, nil
+}
+
+func (c *discordLobbyHTTPClient) UpdateLobbyMetadata(ctx context.Context, lobbyID uint64, metadata map[string]string) error {
+	if lobbyID == 0 {
+		return nil
+	}
+	payload := map[string]any{
+		"metadata": metadata,
+	}
+	bodyBytes, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	url := fmt.Sprintf("%s/lobbies/%d", c.apiBase, lobbyID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, url, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bot "+c.botToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("discord update lobby metadata returned status %d: %s", resp.StatusCode, string(respBody))
+	}
+	return nil
 }
 
 func (c *discordLobbyHTTPClient) AddMember(ctx context.Context, lobbyID uint64, userID uint64, metadata map[string]string) error {

@@ -545,6 +545,34 @@ func router(srv *service.ModService, versionProvider service.VersionInfoProvider
 		ctx.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
+	api.DELETE(rest.EndpointRemoveLobbyMember.Route, func(ctx *gin.Context) {
+		sessionID := strings.TrimSpace(ctx.Param("session_id"))
+		userIDStr := strings.TrimSpace(ctx.Param("user_id"))
+		if sessionID == "" || userIDStr == "" {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "session_id and user_id are required"})
+			return
+		}
+		userID, err := strconv.ParseUint(userIDStr, 10, 64)
+		if err != nil || userID == 0 {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid user_id"})
+			return
+		}
+
+		if err := srv.RemoveLobbyMember(sessionID, userID); err != nil {
+			switch err {
+			case service.ErrShareLobbyNotFound:
+				ctx.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+			case service.ErrShareLobbyExpired:
+				ctx.JSON(http.StatusGone, gin.H{"error": "session expired"})
+			default:
+				slog.ErrorContext(ctx, "Failed to remove member from lobby", "error", err, "session_id", sessionID, "user_id", userID)
+				ctx.JSON(http.StatusInternalServerError, gin.H{"error": "failed to remove member from lobby"})
+			}
+			return
+		}
+		ctx.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
 	api.GET(rest.EndpointJoinLobby.Route, func(ctx *gin.Context) {
 		sessionID := strings.TrimSpace(ctx.Query("session_id"))
 		if sessionID == "" {

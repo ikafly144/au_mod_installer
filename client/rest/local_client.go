@@ -176,3 +176,7 @@ func (f *FileClient) GetJoinLobbyDownload(sessionID string) (*rest.JoinLobbyDown
 func (f *FileClient) AddLobbyMember(sessionID string, discordUserID uint64) error {
 	return fmt.Errorf("local mode: add lobby member not available")
 }
+
+func (f *FileClient) RemoveLobbyMember(sessionID string, discordUserID uint64) error {
+	return fmt.Errorf("local mode: remove lobby member not available")
+}

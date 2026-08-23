@@ -98,3 +98,7 @@ func (s *ModService) GetJoinLobbyMeta(sessionID string) (*sharedLobbySession, er
 func (s *ModService) AddLobbyMember(sessionID string, userID uint64) error {
 	return s.shareLobby.addMember(sessionID, userID)
 }
+
+func (s *ModService) RemoveLobbyMember(sessionID string, userID uint64) error {
+	return s.shareLobby.removeMember(sessionID, userID)
+}

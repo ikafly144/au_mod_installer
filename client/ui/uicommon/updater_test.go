@@ -112,6 +112,10 @@ func (m *mockRestClient) AddLobbyMember(sessionID string, discordUserID uint64) 
 	return nil
 }
 
+func (m *mockRestClient) RemoveLobbyMember(sessionID string, discordUserID uint64) error {
+	return nil
+}
+
 func TestCheckForUpdatesNoUpdate(t *testing.T) {
 	mock := &mockRestClient{
 		versionInfo: &restcommon.VersionInfo{

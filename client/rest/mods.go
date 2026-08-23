@@ -297,3 +297,7 @@ func (c *clientImpl) AddLobbyMember(sessionID string, discordUserID uint64) erro
 		Body:        bodyBytes,
 	}, nil, 1)
 }
+
+func (c *clientImpl) RemoveLobbyMember(sessionID string, discordUserID uint64) error {
+	return c.do(rest.EndpointRemoveLobbyMember.Compile(nil, sessionID, fmt.Sprint(discordUserID)), nil, nil, 1)
+}
