@@ -170,7 +170,11 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 				state.OnDroppedURIs(uris)
 			}
 		})
-		w.SetContent(tabs)
+		root := container.NewStack(
+			tabs,
+			l.LobbyDrawerOverlay(),
+		)
+		w.SetContent(root)
 		w.SetFixedSize(false)
 
 		for s, ok := state.Core.DiscordService.PopQueue(); ok; s, ok = state.Core.DiscordService.PopQueue() {

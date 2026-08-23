@@ -13,10 +13,14 @@ type ModService struct {
 }
 
 func NewModService(repo repository.ModRepository) *ModService {
+	return NewModServiceWithOptions(repo, nil)
+}
+
+func NewModServiceWithOptions(repo repository.ModRepository, discordClient DiscordLobbyClient) *ModService {
 	return &ModService{
 		repo:       repo,
 		shareGame:  newShareGameManager(),
-		shareLobby: newShareLobbyManager(),
+		shareLobby: newShareLobbyManagerWithOptions(discordClient),
 	}
 }
 
@@ -89,4 +93,8 @@ func (s *ModService) GetJoinLobbyDownload(sessionID string) (*restcommon.JoinLob
 
 func (s *ModService) GetJoinLobbyMeta(sessionID string) (*sharedLobbySession, error) {
 	return s.shareLobby.getSessionMeta(sessionID)
+}
+
+func (s *ModService) AddLobbyMember(sessionID string, userID uint64) error {
+	return s.shareLobby.addMember(sessionID, userID)
 }

@@ -880,7 +880,15 @@ func (a *App) ShareCurrentLobby(profileID uuid.UUID) (*SharedLobbyLink, error) {
 		roomPtr = &room
 	}
 
-	rs, err := a.Rest.ShareLobby(aupack, lobbySecret, roomPtr)
+	// Determine host discord user ID
+	var hostDiscordUserID uint64
+	if a.DiscordService != nil {
+		if user, ok := a.DiscordService.UserInfo(); ok && user != nil {
+			hostDiscordUserID = user.Id()
+		}
+	}
+
+	rs, err := a.Rest.ShareLobby(aupack, lobbySecret, hostDiscordUserID, roomPtr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to share lobby: %w", err)
 	}
@@ -1011,6 +1019,12 @@ func (a *App) HandleJoinLobbyDownload(sessionID string, serverBase string) (*pro
 	rs, err := client.GetJoinLobbyDownload(sessionID)
 	if err != nil {
 		return nil, nil, "", nil, err
+	}
+
+	if rs.DiscordLobbyID != 0 && a.DiscordService != nil {
+		if user, ok := a.DiscordService.UserInfo(); ok && user != nil {
+			_ = client.AddLobbyMember(sessionID, user.Id())
+		}
 	}
 
 	tmpFile, err := os.CreateTemp("", "mod-of-us-lobby-*.aupack")

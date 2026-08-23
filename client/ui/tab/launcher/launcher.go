@@ -103,7 +103,7 @@ type Launcher struct {
 	canLaunchListener binding.DataListener
 
 	// Lobby drawer components
-	lobbyDrawerContainer       *fyne.Container
+	lobbyDrawerOverlay         *fyne.Container
 	lobbyDrawerPanel           *fyne.Container
 	lobbyDrawerExpanded        bool
 	lobbyDrawerCurrentTab      string
@@ -2471,10 +2471,14 @@ func (l *Launcher) Tab() (*container.TabItem, error) {
 		header,
 		footer,
 		nil,
-		l.lobbyDrawerContainer,
+		nil,
 		l.profileViews,
 	)
 	return container.NewTabItem(lang.LocalizeKey("launcher.tab_name", "Launcher"), l.content), nil
+}
+
+func (l *Launcher) LobbyDrawerOverlay() fyne.CanvasObject {
+	return l.lobbyDrawerOverlay
 }
 
 func (l *Launcher) runLaunch() {

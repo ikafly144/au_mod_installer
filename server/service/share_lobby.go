@@ -1,10 +1,12 @@
 package service
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -25,18 +27,21 @@ var (
 )
 
 type sharedLobbySession struct {
-	SessionID   string
-	HostKey     string
-	IP          string
-	Aupack      []byte
-	LobbySecret string
-	Room        *restcommon.RoomInfo
-	CreatedAt   time.Time
-	ExpiresAt   time.Time
+	SessionID         string
+	HostKey           string
+	IP                string
+	Aupack            []byte
+	LobbySecret       string
+	DiscordLobbyID    uint64
+	HostDiscordUserID uint64
+	Room              *restcommon.RoomInfo
+	CreatedAt         time.Time
+	ExpiresAt         time.Time
 }
 
 type shareLobbyManager struct {
 	mu              sync.Mutex
+	discordClient   DiscordLobbyClient
 	sessions        map[string]*sharedLobbySession
 	sessionByIP     map[string]string
 	rateByIP        map[string]*ipRateState
@@ -44,7 +49,12 @@ type shareLobbyManager struct {
 }
 
 func newShareLobbyManager() *shareLobbyManager {
+	return newShareLobbyManagerWithOptions(nil)
+}
+
+func newShareLobbyManagerWithOptions(discordClient DiscordLobbyClient) *shareLobbyManager {
 	return &shareLobbyManager{
+		discordClient:   discordClient,
 		sessions:        make(map[string]*sharedLobbySession),
 		sessionByIP:     make(map[string]string),
 		rateByIP:        make(map[string]*ipRateState),
@@ -69,10 +79,11 @@ func (m *shareLobbyManager) create(ip string, req restcommon.ShareLobbyRequest) 
 			cached.Room = &r
 		}
 		return &restcommon.ShareLobbyResponse{
-			URL:       "/join_lobby?session_id=" + cached.SessionID,
-			SessionID: cached.SessionID,
-			HostKey:   cached.HostKey,
-			ExpiresAt: cached.ExpiresAt,
+			URL:            "/join_lobby?session_id=" + cached.SessionID,
+			SessionID:      cached.SessionID,
+			HostKey:        cached.HostKey,
+			DiscordLobbyID: cached.DiscordLobbyID,
+			ExpiresAt:      cached.ExpiresAt,
 		}, nil
 	}
 
@@ -95,25 +106,42 @@ func (m *shareLobbyManager) create(ip string, req restcommon.ShareLobbyRequest) 
 		roomCopy = &r
 	}
 
+	var discordLobbyID uint64
+	if m.discordClient != nil && req.HostDiscordUserID != 0 {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		dID, err := m.discordClient.CreateLobby(ctx, req.HostDiscordUserID, map[string]string{
+			"session_id": sessionID,
+		})
+		cancel()
+		if err != nil {
+			slog.Warn("Failed to create server-side Discord lobby; falling back to client secret lobby", "error", err)
+		} else {
+			discordLobbyID = dID
+		}
+	}
+
 	s := &sharedLobbySession{
-		SessionID:   sessionID,
-		HostKey:     hostKey,
-		IP:          ip,
-		Aupack:      append([]byte(nil), req.Aupack...),
-		LobbySecret: req.LobbySecret,
-		Room:        roomCopy,
-		CreatedAt:   now,
-		ExpiresAt:   now.Add(shareLobbyTTL),
+		SessionID:         sessionID,
+		HostKey:           hostKey,
+		IP:                ip,
+		Aupack:            append([]byte(nil), req.Aupack...),
+		LobbySecret:       req.LobbySecret,
+		DiscordLobbyID:    discordLobbyID,
+		HostDiscordUserID: req.HostDiscordUserID,
+		Room:              roomCopy,
+		CreatedAt:         now,
+		ExpiresAt:         now.Add(shareLobbyTTL),
 	}
 	m.sessions[sessionID] = s
 	m.sessionByIP[ip] = sessionID
 	m.dedupeByIPLobby[lobbyKey] = s
 
 	return &restcommon.ShareLobbyResponse{
-		URL:       "/join_lobby?session_id=" + sessionID,
-		SessionID: sessionID,
-		HostKey:   hostKey,
-		ExpiresAt: s.ExpiresAt,
+		URL:            "/join_lobby?session_id=" + sessionID,
+		SessionID:      sessionID,
+		HostKey:        hostKey,
+		DiscordLobbyID: discordLobbyID,
+		ExpiresAt:      s.ExpiresAt,
 	}, nil
 }
 
@@ -173,12 +201,38 @@ func (m *shareLobbyManager) getDownload(sessionID string) (*restcommon.JoinLobby
 	}
 
 	return &restcommon.JoinLobbyDownloadResponse{
-		SessionID:   sessionID,
-		Aupack:      append([]byte(nil), s.Aupack...),
-		LobbySecret: s.LobbySecret,
-		Room:        roomCopy,
-		ExpiresAt:   s.ExpiresAt,
+		SessionID:      sessionID,
+		Aupack:         append([]byte(nil), s.Aupack...),
+		LobbySecret:    s.LobbySecret,
+		DiscordLobbyID: s.DiscordLobbyID,
+		Room:           roomCopy,
+		ExpiresAt:      s.ExpiresAt,
 	}, nil
+}
+
+func (m *shareLobbyManager) addMember(sessionID string, userID uint64) error {
+	now := time.Now()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.cleanupLocked(now)
+
+	s, ok := m.sessions[sessionID]
+	if !ok {
+		return ErrShareLobbyNotFound
+	}
+	if now.After(s.ExpiresAt) {
+		m.deleteSessionLocked(sessionID)
+		return ErrShareLobbyExpired
+	}
+
+	if s.DiscordLobbyID != 0 && m.discordClient != nil && userID != 0 {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		return m.discordClient.AddMember(ctx, s.DiscordLobbyID, userID, map[string]string{
+			"is_host": "false",
+		})
+	}
+	return nil
 }
 
 func (m *shareLobbyManager) getSessionMeta(sessionID string) (*sharedLobbySession, error) {
@@ -234,10 +288,11 @@ func (m *shareLobbyManager) updateExpiration(sessionID, hostKey string) (*restco
 	s.ExpiresAt = now.Add(shareLobbyTTL)
 
 	return &restcommon.ShareLobbyResponse{
-		URL:       "/join_lobby?session_id=" + sessionID,
-		SessionID: sessionID,
-		HostKey:   hostKey,
-		ExpiresAt: s.ExpiresAt,
+		URL:            "/join_lobby?session_id=" + sessionID,
+		SessionID:      sessionID,
+		HostKey:        hostKey,
+		DiscordLobbyID: s.DiscordLobbyID,
+		ExpiresAt:      s.ExpiresAt,
 	}, nil
 }
 
@@ -269,6 +324,15 @@ func (m *shareLobbyManager) deleteSessionLocked(sessionID string) {
 	s, ok := m.sessions[sessionID]
 	if !ok {
 		return
+	}
+	if s.DiscordLobbyID != 0 && m.discordClient != nil {
+		dID := s.DiscordLobbyID
+		client := m.discordClient
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = client.DeleteLobby(ctx, dID)
+		}()
 	}
 	delete(m.sessions, sessionID)
 	if current, ok := m.sessionByIP[s.IP]; ok && current == sessionID {

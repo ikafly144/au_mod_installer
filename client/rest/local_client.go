@@ -153,7 +153,7 @@ func (f *FileClient) GetJoinGameDownload(sessionID string) (*rest.JoinGameDownlo
 	return nil, fmt.Errorf("local mode: join game download not available")
 }
 
-func (f *FileClient) ShareLobby(aupack []byte, lobbySecret string, room *rest.RoomInfo) (*rest.ShareLobbyResponse, error) {
+func (f *FileClient) ShareLobby(aupack []byte, lobbySecret string, hostDiscordUserID uint64, room *rest.RoomInfo) (*rest.ShareLobbyResponse, error) {
 	return nil, fmt.Errorf("local mode: share lobby not available")
 }
 
@@ -171,4 +171,8 @@ func (f *FileClient) DeleteSharedLobby(sessionID, hostKey string) error {
 
 func (f *FileClient) GetJoinLobbyDownload(sessionID string) (*rest.JoinLobbyDownloadResponse, error) {
 	return nil, fmt.Errorf("local mode: join lobby download not available")
+}
+
+func (f *FileClient) AddLobbyMember(sessionID string, discordUserID uint64) error {
+	return fmt.Errorf("local mode: add lobby member not available")
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ikafly144/au_mod_installer/client/discord"
+	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
 	discordsdk "github.com/ikafly144/discord_social_sdk"
 )
 
@@ -277,6 +278,8 @@ func (l *Launcher) setupLobbyDrawerUI() {
 	// Background and sizing
 	drawerBackground := canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground))
 	drawerBackground.CornerRadius = theme.InputRadiusSize()
+	drawerBackground.StrokeColor = theme.Color(theme.ColorNameButton)
+	drawerBackground.StrokeWidth = 1
 	drawerSizer := canvas.NewRectangle(color.Transparent)
 	drawerSizer.SetMinSize(fyne.NewSize(lobbyDrawerWidth, 0))
 
@@ -291,23 +294,34 @@ func (l *Launcher) setupLobbyDrawerUI() {
 		),
 	))
 
-	l.lobbyDrawerPanel = container.NewStack(
+	rawDrawerPanel := container.NewStack(
 		drawerSizer,
 		drawerBackground,
 		drawerContent,
 	)
 
+	l.lobbyDrawerPanel = container.NewStack(
+		uicommon.NewEventCatcherContainer(rawDrawerPanel),
+	)
+
 	l.lobbyToggleDrawerButton = widget.NewButtonWithIcon(
 		lang.LocalizeKey("launcher.lobby.toggle_button", "Lobby"),
-		theme.NavigateNextIcon(),
+		theme.MailAttachmentIcon(),
 		func() {
 			l.setLobbyDrawerExpanded(!l.lobbyDrawerExpanded)
 		},
 	)
 	l.lobbyToggleDrawerButton.Importance = widget.LowImportance
 
-	l.lobbyDrawerContainer = container.NewHBox(
-		l.lobbyToggleDrawerButton,
+	topBar := container.NewBorder(
+		nil, nil, nil,
+		container.NewPadded(l.lobbyToggleDrawerButton),
+	)
+
+	l.lobbyDrawerOverlay = container.NewBorder(
+		topBar,
+		nil,
+		nil,
 		l.lobbyDrawerPanel,
 	)
 
@@ -376,7 +390,7 @@ func (l *Launcher) setLobbyDrawerExpanded(expanded bool) {
 	}
 	if expanded {
 		l.lobbyDrawerPanel.Show()
-		l.lobbyToggleDrawerButton.SetIcon(theme.NavigateBackIcon())
+		l.lobbyToggleDrawerButton.SetIcon(theme.CancelIcon())
 		if l.lobbyDrawerCurrentTab == "friends" {
 			l.refreshDrawerFriendsList(l.drawerFriendsSearchEntry.Text)
 		} else if l.lobbyChatScroll != nil {
@@ -384,7 +398,7 @@ func (l *Launcher) setLobbyDrawerExpanded(expanded bool) {
 		}
 	} else {
 		l.lobbyDrawerPanel.Hide()
-		l.lobbyToggleDrawerButton.SetIcon(theme.NavigateNextIcon())
+		l.lobbyToggleDrawerButton.SetIcon(theme.MailAttachmentIcon())
 	}
 }
 
@@ -812,6 +826,14 @@ func (l *Launcher) showLinkChannelDialog() {
 	ds := l.state.Core.DiscordService
 	if !ds.IsLoggedIn() {
 		l.openDrawerTab("friends")
+		return
+	}
+
+	if !ds.CanCurrentUserLinkLobby() {
+		l.state.ShowInfoDialog(
+			lang.LocalizeKey("launcher.lobby.link_channel_title", "Link Discord Channel"),
+			lang.LocalizeKey("launcher.lobby.cant_link_lobby_message", "Channel linking requires a persistent lobby created via Discord Backend API with CanLinkLobby permission. Client-side secret lobbies are not eligible for channel linking."),
+		)
 		return
 	}
 
