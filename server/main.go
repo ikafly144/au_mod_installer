@@ -53,7 +53,12 @@ func realMain(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
-	modSrv := service.NewModService(gormrepo.NewGormRepository(db))
+	var discordClient service.DiscordLobbyClient
+	if discordBotToken := os.Getenv("DISCORD_BOT_TOKEN"); discordBotToken != "" {
+		discordClient = service.NewDiscordLobbyClient(discordBotToken, &http.Client{Timeout: 10 * time.Second})
+		slog.InfoContext(ctx, "Discord Lobby integration enabled with Bot token")
+	}
+	modSrv := service.NewModServiceWithOptions(gormrepo.NewGormRepository(db), discordClient)
 	versionInfoTTL := time.Duration(0)
 	if rawTTL := os.Getenv("VERSION_INFO_TTL"); rawTTL != "" {
 		parsedTTL, err := time.ParseDuration(rawTTL)

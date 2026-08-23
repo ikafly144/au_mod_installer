@@ -67,6 +67,7 @@ type LobbyMember struct {
 	IsVoiceConnected bool              `json:"is_voice_connected"`
 	IsMuted          bool              `json:"is_muted"`
 	IsDeafened       bool              `json:"is_deafened"`
+	CanLinkLobby     bool              `json:"can_link_lobby"`
 }
 
 type LobbyMessage struct {
@@ -411,6 +412,7 @@ func (s *DiscordService) refreshActiveLobbyInfo(lobbyID uint64) *LobbyInfo {
 			IsHost:           strings.EqualFold(mMeta["is_host"], "true"),
 			IsSpeaking:       speakingMap[mID],
 			IsVoiceConnected: voiceParticipants[mID],
+			CanLinkLobby:     m.CanLinkLobby(),
 		}
 		if user, ok := m.User(); ok {
 			if dName := strings.TrimSpace(user.DisplayName()); dName != "" {
@@ -871,4 +873,23 @@ func (s *DiscordService) GetLinkedChannel() (*LinkedChannelInfo, bool) {
 		return nil, false
 	}
 	return s.activeLobbyInfo.LinkedChannel, true
+}
+
+func (s *DiscordService) CanCurrentUserLinkLobby() bool {
+	s.lobbyMu.RLock()
+	defer s.lobbyMu.RUnlock()
+	if s.activeLobbyInfo == nil {
+		return false
+	}
+	user, ok := s.UserInfo()
+	if !ok || user == nil {
+		return false
+	}
+	myID := user.Id()
+	for _, m := range s.activeLobbyInfo.Members {
+		if m.UserID == myID {
+			return m.CanLinkLobby
+		}
+	}
+	return false
 }

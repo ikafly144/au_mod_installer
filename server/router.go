@@ -333,10 +333,18 @@ func router(srv *service.ModService, versionProvider service.VersionInfoProvider
 			}
 		}
 
+		hostDiscordUserID := uint64(0)
+		if hostDiscordUserIDStr := strings.TrimSpace(ctx.PostForm("host_discord_user_id")); hostDiscordUserIDStr != "" {
+			if parsed, err := strconv.ParseUint(hostDiscordUserIDStr, 10, 64); err == nil {
+				hostDiscordUserID = parsed
+			}
+		}
+
 		req := rest.ShareLobbyRequest{
-			Aupack:      aupack,
-			LobbySecret: lobbySecret,
-			Room:        room,
+			Aupack:            aupack,
+			LobbySecret:       lobbySecret,
+			HostDiscordUserID: hostDiscordUserID,
+			Room:              room,
 		}
 
 		ip := clientIP(ctx)
@@ -493,6 +501,44 @@ func router(srv *service.ModService, versionProvider service.VersionInfoProvider
 			default:
 				slog.ErrorContext(ctx, "Failed to delete shared lobby", "error", err, "session_id", sessionID)
 				ctx.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete shared lobby"})
+			}
+			return
+		}
+		ctx.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
+	api.POST(rest.EndpointAddLobbyMember.Route, func(ctx *gin.Context) {
+		sessionID := strings.TrimSpace(ctx.Param("session_id"))
+		if sessionID == "" {
+			sessionID = strings.TrimSpace(ctx.Query("session_id"))
+		}
+		if sessionID == "" {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "session_id is required"})
+			return
+		}
+
+		var req rest.JoinLobbyMemberRequest
+		if err := ctx.ShouldBindJSON(&req); err != nil {
+			if uidStr := strings.TrimSpace(ctx.PostForm("discord_user_id")); uidStr != "" {
+				if parsed, err := strconv.ParseUint(uidStr, 10, 64); err == nil {
+					req.DiscordUserID = parsed
+				}
+			}
+		}
+		if req.DiscordUserID == 0 {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "discord_user_id is required"})
+			return
+		}
+
+		if err := srv.AddLobbyMember(sessionID, req.DiscordUserID); err != nil {
+			switch err {
+			case service.ErrShareLobbyNotFound:
+				ctx.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+			case service.ErrShareLobbyExpired:
+				ctx.JSON(http.StatusGone, gin.H{"error": "session expired"})
+			default:
+				slog.ErrorContext(ctx, "Failed to add member to lobby", "error", err, "session_id", sessionID)
+				ctx.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add member to lobby"})
 			}
 			return
 		}

@@ -54,16 +54,18 @@ type JoinGameDownloadResponse struct {
 }
 
 type ShareLobbyRequest struct {
-	Aupack      []byte    `json:"aupack"`
-	LobbySecret string    `json:"lobby_secret"`
-	Room        *RoomInfo `json:"room,omitempty"`
+	Aupack            []byte    `json:"aupack"`
+	LobbySecret       string    `json:"lobby_secret"`
+	HostDiscordUserID uint64    `json:"host_discord_user_id,omitempty"`
+	Room              *RoomInfo `json:"room,omitempty"`
 }
 
 type ShareLobbyResponse struct {
-	URL       string    `json:"url"`
-	SessionID string    `json:"session_id"`
-	HostKey   string    `json:"host_key"`
-	ExpiresAt time.Time `json:"expires_at"`
+	URL            string    `json:"url"`
+	SessionID      string    `json:"session_id"`
+	HostKey        string    `json:"host_key"`
+	DiscordLobbyID uint64    `json:"discord_lobby_id,omitempty"`
+	ExpiresAt      time.Time `json:"expires_at"`
 }
 
 type UpdateLobbyRoomRequest struct {
@@ -76,10 +78,15 @@ type HeartbeatLobbyRequest struct {
 	HostKey   string `json:"host_key"`
 }
 
+type JoinLobbyMemberRequest struct {
+	DiscordUserID uint64 `json:"discord_user_id"`
+}
+
 type JoinLobbyDownloadResponse struct {
-	SessionID   string    `json:"session_id"`
-	Aupack      []byte    `json:"aupack"`
-	LobbySecret string    `json:"lobby_secret"`
-	Room        *RoomInfo `json:"room,omitempty"`
-	ExpiresAt   time.Time `json:"expires_at"`
+	SessionID      string    `json:"session_id"`
+	Aupack         []byte    `json:"aupack"`
+	LobbySecret    string    `json:"lobby_secret"`
+	DiscordLobbyID uint64    `json:"discord_lobby_id,omitempty"`
+	Room           *RoomInfo `json:"room,omitempty"`
+	ExpiresAt      time.Time `json:"expires_at"`
 }

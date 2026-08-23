@@ -2,6 +2,7 @@ package rest
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"mime/multipart"
 	"net/url"
@@ -153,7 +154,7 @@ func (c *clientImpl) GetJoinGameDownload(sessionID string) (*rest.JoinGameDownlo
 	return &rs, nil
 }
 
-func (c *clientImpl) ShareLobby(aupack []byte, lobbySecret string, room *rest.RoomInfo) (*rest.ShareLobbyResponse, error) {
+func (c *clientImpl) ShareLobby(aupack []byte, lobbySecret string, hostDiscordUserID uint64, room *rest.RoomInfo) (*rest.ShareLobbyResponse, error) {
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 	part, err := writer.CreateFormFile("aupack", "profile.aupack")
@@ -165,6 +166,11 @@ func (c *clientImpl) ShareLobby(aupack []byte, lobbySecret string, room *rest.Ro
 	}
 	if err := writer.WriteField("lobby_secret", lobbySecret); err != nil {
 		return nil, err
+	}
+	if hostDiscordUserID != 0 {
+		if err := writer.WriteField("host_discord_user_id", fmt.Sprint(hostDiscordUserID)); err != nil {
+			return nil, err
+		}
 	}
 	if room != nil {
 		if err := writer.WriteField("lobby_code", room.LobbyCode); err != nil {
@@ -276,4 +282,18 @@ func (c *clientImpl) GetJoinLobbyDownload(sessionID string) (*rest.JoinLobbyDown
 		return nil, err
 	}
 	return &rs, nil
+}
+
+func (c *clientImpl) AddLobbyMember(sessionID string, discordUserID uint64) error {
+	body := rest.JoinLobbyMemberRequest{
+		DiscordUserID: discordUserID,
+	}
+	bodyBytes, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+	return c.do(rest.EndpointAddLobbyMember.Compile(nil, sessionID), encodedRequestBody{
+		ContentType: "application/json",
+		Body:        bodyBytes,
+	}, nil, 1)
 }
