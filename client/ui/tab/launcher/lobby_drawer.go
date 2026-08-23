@@ -17,15 +17,47 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ikafly144/au_mod_installer/client/discord"
+	discordsdk "github.com/ikafly144/discord_social_sdk"
 )
 
 const (
-	lobbyDrawerWidth     = float32(340)
+	lobbyDrawerWidth     = float32(360)
 	lobbyAvatarSize      = 28
 	maxRenderChatHistory = 100
 )
 
 func (l *Launcher) setupLobbyDrawerUI() {
+	l.lobbyDrawerCurrentTab = "lobby"
+
+	// 1. Tab buttons in top header
+	l.lobbyTabButton = widget.NewButtonWithIcon(
+		lang.LocalizeKey("launcher.lobby.tab_lobby", "Lobby"),
+		theme.MailAttachmentIcon(),
+		func() { l.switchLobbyDrawerTab("lobby") },
+	)
+	l.lobbyTabButton.Importance = widget.MediumImportance
+
+	l.friendsTabButton = widget.NewButtonWithIcon(
+		lang.LocalizeKey("launcher.lobby.tab_friends", "Friends"),
+		theme.AccountIcon(),
+		func() { l.switchLobbyDrawerTab("friends") },
+	)
+	l.friendsTabButton.Importance = widget.LowImportance
+
+	l.lobbyDrawerCloseButton = widget.NewButtonWithIcon(
+		"",
+		theme.CancelIcon(),
+		func() { l.setLobbyDrawerExpanded(false) },
+	)
+	l.lobbyDrawerCloseButton.Importance = widget.LowImportance
+
+	tabHeader := container.NewBorder(
+		nil, nil,
+		container.NewHBox(l.lobbyTabButton, l.friendsTabButton),
+		l.lobbyDrawerCloseButton,
+	)
+
+	// 2. Lobby Tab Components
 	l.lobbyHeaderTitle = widget.NewLabelWithStyle(
 		lang.LocalizeKey("launcher.lobby.title", "Discord Lobby"),
 		fyne.TextAlignLeading,
@@ -52,9 +84,9 @@ func (l *Launcher) setupLobbyDrawerUI() {
 	l.lobbyLeaveButton.Hide()
 
 	l.lobbyInviteButton = widget.NewButtonWithIcon(
-		lang.LocalizeKey("launcher.lobby.invite", "Invite"),
+		lang.LocalizeKey("launcher.lobby.invite", "Invite Friends"),
 		theme.MailComposeIcon(),
-		l.showDiscordFriendsDialog,
+		func() { l.switchLobbyDrawerTab("friends") },
 	)
 	l.lobbyInviteButton.Importance = widget.LowImportance
 	l.lobbyInviteButton.Hide()
@@ -64,6 +96,56 @@ func (l *Launcher) setupLobbyDrawerUI() {
 		l.lobbyInviteButton,
 		l.lobbyLeaveButton,
 	)
+
+	// Lobby URL Share Section
+	l.lobbyShareButton = widget.NewButtonWithIcon(
+		lang.LocalizeKey("launcher.lobby.share_url", "Share Lobby URL"),
+		theme.ContentCopyIcon(),
+		l.handleShareLobby,
+	)
+	l.lobbyShareButton.Importance = widget.MediumImportance
+
+	l.lobbyShareURLEntry = widget.NewEntry()
+	l.lobbyShareURLEntry.Wrapping = fyne.TextTruncate
+	l.lobbyShareURLEntry.Disable()
+
+	l.lobbyShareCopyButton = widget.NewButtonWithIcon(
+		lang.LocalizeKey("launcher.lobby.copy_url", "Copy"),
+		theme.ContentCopyIcon(),
+		l.handleCopyLobbyURL,
+	)
+	l.lobbyShareCopyButton.Importance = widget.LowImportance
+
+	l.lobbyShareStopButton = widget.NewButtonWithIcon(
+		lang.LocalizeKey("launcher.lobby.stop_share", "Stop"),
+		theme.CancelIcon(),
+		l.handleStopSharingLobby,
+	)
+	l.lobbyShareStopButton.Importance = widget.LowImportance
+
+	l.lobbyShareCard = container.NewVBox(
+		l.lobbyShareButton,
+	)
+
+	// Connected Channel Section
+	l.lobbyChannelButton = widget.NewButtonWithIcon(
+		lang.LocalizeKey("launcher.lobby.link_channel", "Link Discord Channel"),
+		theme.MediaRecordIcon(),
+		l.showLinkChannelDialog,
+	)
+	l.lobbyChannelButton.Importance = widget.LowImportance
+
+	l.lobbyChannelNameLabel = widget.NewLabel("")
+	l.lobbyChannelNameLabel.Wrapping = fyne.TextTruncate
+
+	l.lobbyChannelUnlinkButton = widget.NewButtonWithIcon(
+		lang.LocalizeKey("launcher.lobby.unlink_channel", "Unlink"),
+		theme.CancelIcon(),
+		l.handleUnlinkChannel,
+	)
+	l.lobbyChannelUnlinkButton.Importance = widget.LowImportance
+
+	l.lobbyChannelCard = container.NewVBox()
 
 	l.lobbyMemberListContainer = container.NewVBox()
 
@@ -119,7 +201,7 @@ func (l *Launcher) setupLobbyDrawerUI() {
 	// Chat Section
 	l.lobbyChatMessagesContainer = container.NewVBox()
 	l.lobbyChatScroll = container.NewVScroll(l.lobbyChatMessagesContainer)
-	l.lobbyChatScroll.SetMinSize(fyne.NewSize(lobbyDrawerWidth-30, 160))
+	l.lobbyChatScroll.SetMinSize(fyne.NewSize(lobbyDrawerWidth-30, 140))
 
 	l.lobbyChatEntry = widget.NewEntry()
 	l.lobbyChatEntry.SetPlaceHolder(lang.LocalizeKey("launcher.lobby.chat_placeholder", "Type a message..."))
@@ -144,16 +226,13 @@ func (l *Launcher) setupLobbyDrawerUI() {
 		l.lobbyChatScroll,
 	)
 
-	// Background and sizing
-	drawerBackground := canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground))
-	drawerBackground.CornerRadius = theme.InputRadiusSize()
-	drawerSizer := canvas.NewRectangle(color.Transparent)
-	drawerSizer.SetMinSize(fyne.NewSize(lobbyDrawerWidth, 0))
-
-	drawerContent := container.NewPadded(container.NewBorder(
+	l.lobbyTabContent = container.NewBorder(
 		container.NewVBox(
 			container.NewBorder(nil, nil, l.lobbyHeaderTitle, l.lobbyActionBox),
 			l.lobbyHeaderSubtitle,
+			widget.NewSeparator(),
+			l.lobbyShareCard,
+			l.lobbyChannelCard,
 			widget.NewSeparator(),
 		),
 		container.NewVBox(
@@ -167,6 +246,49 @@ func (l *Launcher) setupLobbyDrawerUI() {
 			widget.NewSeparator(),
 			chatSection,
 		)),
+	)
+
+	// 3. Friends Tab Components
+	l.drawerFriendsSearchEntry = widget.NewEntry()
+	l.drawerFriendsSearchEntry.SetPlaceHolder(lang.LocalizeKey("launcher.discord_friends.search_placeholder", "Search friends..."))
+	l.drawerFriendsSearchEntry.OnChanged = func(query string) {
+		l.refreshDrawerFriendsList(query)
+	}
+
+	l.drawerFriendsLoading = widget.NewProgressBarInfinite()
+	l.drawerFriendsLoading.Hide()
+
+	l.drawerFriendsListContainer = container.NewVBox()
+	friendsScroll := container.NewVScroll(l.drawerFriendsListContainer)
+
+	l.friendsTabContent = container.NewBorder(
+		container.NewVBox(
+			l.drawerFriendsSearchEntry,
+			l.drawerFriendsLoading,
+			widget.NewSeparator(),
+		),
+		nil,
+		nil,
+		nil,
+		friendsScroll,
+	)
+	l.friendsTabContent.Hide()
+
+	// Background and sizing
+	drawerBackground := canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground))
+	drawerBackground.CornerRadius = theme.InputRadiusSize()
+	drawerSizer := canvas.NewRectangle(color.Transparent)
+	drawerSizer.SetMinSize(fyne.NewSize(lobbyDrawerWidth, 0))
+
+	drawerContent := container.NewPadded(container.NewBorder(
+		tabHeader,
+		nil,
+		nil,
+		nil,
+		container.NewStack(
+			l.lobbyTabContent,
+			l.friendsTabContent,
+		),
 	))
 
 	l.lobbyDrawerPanel = container.NewStack(
@@ -219,6 +341,34 @@ func (l *Launcher) setupLobbyDrawerUI() {
 	}
 }
 
+func (l *Launcher) switchLobbyDrawerTab(tab string) {
+	l.lobbyDrawerCurrentTab = tab
+	if tab == "friends" {
+		l.lobbyTabButton.Importance = widget.LowImportance
+		l.friendsTabButton.Importance = widget.MediumImportance
+		l.lobbyTabContent.Hide()
+		l.friendsTabContent.Show()
+		l.refreshDrawerFriendsList(l.drawerFriendsSearchEntry.Text)
+	} else {
+		l.lobbyTabButton.Importance = widget.MediumImportance
+		l.friendsTabButton.Importance = widget.LowImportance
+		l.friendsTabContent.Hide()
+		l.lobbyTabContent.Show()
+		if l.state != nil && l.state.Core != nil && l.state.Core.DiscordService != nil {
+			if info, ok := l.state.Core.DiscordService.GetActiveLobby(); ok {
+				l.refreshLobbyUI(info)
+			}
+		}
+	}
+	l.lobbyTabButton.Refresh()
+	l.friendsTabButton.Refresh()
+}
+
+func (l *Launcher) openDrawerTab(tab string) {
+	l.setLobbyDrawerExpanded(true)
+	l.switchLobbyDrawerTab(tab)
+}
+
 func (l *Launcher) setLobbyDrawerExpanded(expanded bool) {
 	l.lobbyDrawerExpanded = expanded
 	if l.lobbyDrawerPanel == nil || l.lobbyToggleDrawerButton == nil {
@@ -227,7 +377,9 @@ func (l *Launcher) setLobbyDrawerExpanded(expanded bool) {
 	if expanded {
 		l.lobbyDrawerPanel.Show()
 		l.lobbyToggleDrawerButton.SetIcon(theme.NavigateBackIcon())
-		if l.lobbyChatScroll != nil {
+		if l.lobbyDrawerCurrentTab == "friends" {
+			l.refreshDrawerFriendsList(l.drawerFriendsSearchEntry.Text)
+		} else if l.lobbyChatScroll != nil {
 			l.lobbyChatScroll.ScrollToBottom()
 		}
 	} else {
@@ -245,6 +397,8 @@ func (l *Launcher) refreshLobbyUI(info *discord.LobbyInfo) {
 		l.lobbyMemberListContainer.Objects = nil
 		l.lobbyMemberListContainer.Refresh()
 		l.refreshVoiceUI(discord.CallStatusDisconnected)
+		l.refreshLobbyShareUI()
+		l.refreshConnectedChannelUI(nil, false)
 		return
 	}
 
@@ -268,6 +422,23 @@ func (l *Launcher) refreshLobbyUI(info *discord.LobbyInfo) {
 	}
 	l.lobbyHeaderSubtitle.SetText(strings.Join(subtitleParts, " | "))
 
+	// Check if current user is host
+	isHost := false
+	if l.state != nil && l.state.Core != nil && l.state.Core.DiscordService != nil {
+		if u, ok := l.state.Core.DiscordService.UserInfo(); ok {
+			for _, m := range info.Members {
+				if m.UserID == u.Id() && m.IsHost {
+					isHost = true
+					break
+				}
+			}
+		}
+	}
+
+	// Refresh Share UI & Channel UI
+	l.refreshLobbyShareUI()
+	l.refreshConnectedChannelUI(info.LinkedChannel, isHost)
+
 	// Build member items
 	l.lobbyMemberListContainer.Objects = nil
 	memberCountLabel := widget.NewLabelWithStyle(
@@ -290,6 +461,48 @@ func (l *Launcher) refreshLobbyUI(info *discord.LobbyInfo) {
 	}
 }
 
+func (l *Launcher) refreshLobbyShareUI() {
+	if l.state == nil || l.state.Core == nil {
+		return
+	}
+	shared := l.state.Core.GetSharedLobby()
+	l.lobbyShareCard.Objects = nil
+
+	if shared.SessionID != "" && shared.URL != "" {
+		l.lobbyShareURLEntry.SetText(shared.URL)
+		l.lobbyShareCard.Add(container.NewBorder(
+			nil, nil,
+			widget.NewLabelWithStyle(lang.LocalizeKey("launcher.lobby.shared_url_title", "Lobby Link:"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+			container.NewHBox(l.lobbyShareCopyButton, l.lobbyShareStopButton),
+			l.lobbyShareURLEntry,
+		))
+	} else {
+		l.lobbyShareCard.Add(l.lobbyShareButton)
+	}
+	l.lobbyShareCard.Refresh()
+}
+
+func (l *Launcher) refreshConnectedChannelUI(linked *discord.LinkedChannelInfo, isHost bool) {
+	l.lobbyChannelCard.Objects = nil
+	if linked != nil && linked.ID != 0 {
+		name := linked.Name
+		l.lobbyChannelNameLabel.SetText("🔗 " + name)
+		var right fyne.CanvasObject = nil
+		if isHost {
+			right = l.lobbyChannelUnlinkButton
+		}
+		l.lobbyChannelCard.Add(container.NewBorder(
+			nil, nil,
+			widget.NewLabelWithStyle(lang.LocalizeKey("launcher.lobby.channel_title", "Linked Channel:"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+			right,
+			l.lobbyChannelNameLabel,
+		))
+	} else if isHost {
+		l.lobbyChannelCard.Add(l.lobbyChannelButton)
+	}
+	l.lobbyChannelCard.Refresh()
+}
+
 func (l *Launcher) buildMemberCard(member discord.LobbyMember, lobbyMeta map[string]string) fyne.CanvasObject {
 	avatar := canvas.NewImageFromResource(theme.AccountIcon())
 	avatar.SetMinSize(fyne.NewSquareSize(lobbyAvatarSize))
@@ -306,11 +519,6 @@ func (l *Launcher) buildMemberCard(member discord.LobbyMember, lobbyMeta map[str
 	if member.IsHost {
 		hostBadge := widget.NewLabel("👑 " + lang.LocalizeKey("launcher.lobby.host", "Host"))
 		badges.Add(hostBadge)
-	}
-
-	if member.IsReady {
-		readyBadge := widget.NewLabel("✓ " + lang.LocalizeKey("launcher.lobby.ready", "Ready"))
-		badges.Add(readyBadge)
 	}
 
 	if member.IsSpeaking {
@@ -441,7 +649,7 @@ func (l *Launcher) handleCreateManualLobby() {
 		return
 	}
 	if !l.state.Core.DiscordService.IsLoggedIn() {
-		l.showDiscordFriendsDialog()
+		l.openDrawerTab("friends")
 		return
 	}
 
@@ -467,6 +675,7 @@ func (l *Launcher) handleLeaveLobby() {
 	if l.state == nil || l.state.Core == nil || l.state.Core.DiscordService == nil {
 		return
 	}
+	l.state.Core.InvalidateCachedLobbyShareAsync()
 	l.state.Core.DiscordService.LeaveLobby(func(err error) {
 		if err != nil {
 			slog.Warn("Failed to leave lobby", "error", err)
@@ -534,4 +743,345 @@ func (l *Launcher) handleSendChatMessage() {
 			slog.Warn("Failed to send lobby message", "error", err)
 		}
 	})
+}
+
+func (l *Launcher) handleShareLobby() {
+	if l.state == nil || l.state.Core == nil {
+		return
+	}
+	profileID := l.selectedProfileID
+	if profileID == uuid.Nil && len(l.profiles) > 0 {
+		profileID = l.profiles[0].ID
+	}
+	if profileID == uuid.Nil {
+		l.state.ShowErrorDialog(fmt.Errorf("please select a profile first"))
+		return
+	}
+
+	l.lobbyShareButton.Disable()
+	go func() {
+		defer fyne.Do(func() {
+			l.lobbyShareButton.Enable()
+		})
+		link, err := l.state.Core.ShareCurrentLobby(profileID)
+		if err != nil {
+			fyne.Do(func() {
+				l.state.ShowErrorDialog(fmt.Errorf("failed to share lobby: %w", err))
+			})
+			return
+		}
+		fyne.Do(func() {
+			if l.state.Window != nil {
+				l.state.Window.Clipboard().SetContent(link.URL)
+			}
+			l.refreshLobbyShareUI()
+			l.state.ShowInfoDialog(
+				lang.LocalizeKey("launcher.lobby.share_success_title", "Lobby URL Copied"),
+				lang.LocalizeKey("launcher.lobby.share_success_message", "Lobby URL has been created and copied to clipboard!"),
+			)
+		})
+	}()
+}
+
+func (l *Launcher) handleCopyLobbyURL() {
+	if l.state == nil || l.state.Core == nil {
+		return
+	}
+	shared := l.state.Core.GetSharedLobby()
+	if shared.URL != "" && l.state.Window != nil {
+		l.state.Window.Clipboard().SetContent(shared.URL)
+		l.state.ShowInfoDialog(
+			lang.LocalizeKey("launcher.lobby.copied_title", "Copied"),
+			lang.LocalizeKey("launcher.lobby.copied_message", "Lobby URL copied to clipboard!"),
+		)
+	}
+}
+
+func (l *Launcher) handleStopSharingLobby() {
+	if l.state == nil || l.state.Core == nil {
+		return
+	}
+	l.state.Core.InvalidateCachedLobbyShareAsync()
+	l.refreshLobbyShareUI()
+}
+
+func (l *Launcher) showLinkChannelDialog() {
+	if l.state == nil || l.state.Core == nil || l.state.Core.DiscordService == nil {
+		return
+	}
+	ds := l.state.Core.DiscordService
+	if !ds.IsLoggedIn() {
+		l.openDrawerTab("friends")
+		return
+	}
+
+	loadingDialog := dialog.NewCustom(
+		lang.LocalizeKey("launcher.lobby.loading_guilds", "Loading Discord Servers..."),
+		lang.LocalizeKey("common.cancel", "Cancel"),
+		widget.NewProgressBarInfinite(),
+		l.state.Window,
+	)
+	loadingDialog.Show()
+
+	ds.GetUserGuilds(func(err error, guilds []discord.GuildInfo) {
+		fyne.Do(func() {
+			loadingDialog.Hide()
+			if err != nil {
+				l.state.ShowErrorDialog(fmt.Errorf("failed to fetch servers: %w", err))
+				return
+			}
+			if len(guilds) == 0 {
+				l.state.ShowInfoDialog(
+					lang.LocalizeKey("launcher.lobby.no_guilds_title", "No Servers Found"),
+					lang.LocalizeKey("launcher.lobby.no_guilds_message", "No Discord servers available for linking."),
+				)
+				return
+			}
+
+			guildNames := make([]string, len(guilds))
+			guildMap := make(map[string]discord.GuildInfo)
+			for i, g := range guilds {
+				guildNames[i] = g.Name
+				guildMap[g.Name] = g
+			}
+
+			channelSelect := widget.NewSelect([]string{}, nil)
+			channelSelect.Disable()
+			var currentChannels []discord.GuildChannelInfo
+
+			guildSelect := widget.NewSelect(guildNames, func(selected string) {
+				g, ok := guildMap[selected]
+				if !ok {
+					return
+				}
+				channelSelect.Options = []string{"Loading channels..."}
+				channelSelect.SetSelected("Loading channels...")
+				channelSelect.Disable()
+
+				ds.GetGuildChannels(g.ID, func(chErr error, channels []discord.GuildChannelInfo) {
+					fyne.Do(func() {
+						if chErr != nil {
+							channelSelect.Options = []string{"Failed to load channels"}
+							channelSelect.Refresh()
+							return
+						}
+						currentChannels = nil
+						var linkableNames []string
+						for _, ch := range channels {
+							if ch.IsLinkable {
+								currentChannels = append(currentChannels, ch)
+								linkableNames = append(linkableNames, "# "+ch.Name)
+							}
+						}
+						if len(linkableNames) == 0 {
+							channelSelect.Options = []string{"No linkable text channels"}
+							channelSelect.SetSelected("No linkable text channels")
+							channelSelect.Disable()
+						} else {
+							channelSelect.Options = linkableNames
+							channelSelect.SetSelected(linkableNames[0])
+							channelSelect.Enable()
+						}
+						channelSelect.Refresh()
+					})
+				})
+			})
+
+			guildSelect.SetSelected(guildNames[0])
+
+			form := container.NewVBox(
+				widget.NewLabelWithStyle(lang.LocalizeKey("launcher.lobby.select_guild", "Select Discord Server:"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+				guildSelect,
+				widget.NewLabelWithStyle(lang.LocalizeKey("launcher.lobby.select_channel", "Select Text Channel:"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+				channelSelect,
+			)
+
+			d := dialog.NewCustomConfirm(
+				lang.LocalizeKey("launcher.lobby.link_channel_title", "Link Discord Channel"),
+				lang.LocalizeKey("launcher.lobby.link_button", "Link"),
+				lang.LocalizeKey("common.cancel", "Cancel"),
+				form,
+				func(confirm bool) {
+					if !confirm || channelSelect.Selected == "" {
+						return
+					}
+					var selectedChID uint64
+					for _, ch := range currentChannels {
+						if "# "+ch.Name == channelSelect.Selected {
+							selectedChID = ch.ID
+							break
+						}
+					}
+					if selectedChID == 0 {
+						return
+					}
+					ds.LinkChannelToLobby(selectedChID, func(linkErr error) {
+						fyne.Do(func() {
+							if linkErr != nil {
+								l.state.ShowErrorDialog(fmt.Errorf("failed to link channel: %w", linkErr))
+							} else {
+								l.state.ShowInfoDialog(
+									lang.LocalizeKey("launcher.lobby.link_success_title", "Channel Linked"),
+									lang.LocalizeKey("launcher.lobby.link_success_message", "Discord channel successfully linked to lobby!"),
+								)
+								if info, ok := ds.GetActiveLobby(); ok {
+									l.refreshLobbyUI(info)
+								}
+							}
+						})
+					})
+				},
+				l.state.Window,
+			)
+			d.Resize(fyne.NewSize(380, 220))
+			d.Show()
+		})
+	})
+}
+
+func (l *Launcher) handleUnlinkChannel() {
+	if l.state == nil || l.state.Core == nil || l.state.Core.DiscordService == nil {
+		return
+	}
+	ds := l.state.Core.DiscordService
+	ds.UnlinkChannelFromLobby(func(err error) {
+		fyne.Do(func() {
+			if err != nil {
+				l.state.ShowErrorDialog(fmt.Errorf("failed to unlink channel: %w", err))
+			} else {
+				if info, ok := ds.GetActiveLobby(); ok {
+					l.refreshLobbyUI(info)
+				}
+			}
+		})
+	})
+}
+
+// ---------------- Friend List in Drawer ----------------
+
+func (l *Launcher) refreshDrawerFriendsList(query string) {
+	if l.drawerFriendsListContainer == nil || l.state == nil || l.state.Core == nil || l.state.Core.DiscordService == nil {
+		return
+	}
+	ds := l.state.Core.DiscordService
+	if !ds.IsLoggedIn() {
+		l.drawerFriendsListContainer.Objects = []fyne.CanvasObject{
+			widget.NewLabel(lang.LocalizeKey("launcher.discord_friends.not_logged_in", "Please log in to Discord via Settings.")),
+		}
+		l.drawerFriendsListContainer.Refresh()
+		return
+	}
+
+	l.drawerFriendsLoading.Show()
+	go func() {
+		userHandles, err := ds.GetFriends()
+		if err != nil {
+			fyne.Do(func() {
+				l.drawerFriendsLoading.Hide()
+			})
+			return
+		}
+		var filtered []discordFriend
+		queryLower := strings.ToLower(strings.TrimSpace(query))
+
+		for _, u := range userHandles {
+			name := strings.TrimSpace(u.DisplayName())
+			if name == "" {
+				name = strings.TrimSpace(u.Username())
+			}
+			if queryLower != "" && !strings.Contains(strings.ToLower(name), queryLower) {
+				continue
+			}
+			avatarURL := u.AvatarUrl(discordsdk.UserHandleAvatarTypeGif, discordsdk.UserHandleAvatarTypePng)
+			status := u.Status()
+			df := discordFriend{
+				id:        u.Id(),
+				name:      name,
+				avatarURL: avatarURL,
+				status:    status,
+			}
+			filtered = append(filtered, df)
+		}
+
+		fyne.Do(func() {
+			l.drawerFriendsLoading.Hide()
+			l.drawerFriendsListContainer.Objects = nil
+
+			if len(filtered) == 0 {
+				l.drawerFriendsListContainer.Add(widget.NewLabel(lang.LocalizeKey("launcher.discord_friends.no_friends", "No friends found.")))
+				l.drawerFriendsListContainer.Refresh()
+				return
+			}
+
+			for _, f := range filtered {
+				card := l.buildDrawerFriendCard(f)
+				l.drawerFriendsListContainer.Add(card)
+			}
+			l.drawerFriendsListContainer.Refresh()
+		})
+	}()
+}
+
+func (l *Launcher) buildDrawerFriendCard(friend discordFriend) fyne.CanvasObject {
+	avatarSize := float32(32)
+	avatarBg := canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground))
+	avatarBg.CornerRadius = 6
+	avatarBg.SetMinSize(fyne.NewSquareSize(avatarSize))
+
+	avatar := canvas.NewImageFromImage(placeholderProfileIcon(int(avatarSize)))
+	avatar.CornerRadius = 6
+	avatar.SetMinSize(fyne.NewSquareSize(avatarSize))
+	avatar.FillMode = canvas.ImageFillContain
+
+	statusDot := canvas.NewCircle(discordStatusColor(friend.status, friend.playingModOfUs))
+	statusDot.StrokeColor = theme.Color(theme.ColorNameBackground)
+	statusDot.StrokeWidth = 1.5
+
+	avatarContainer := container.New(&discordFriendAvatarLayout{
+		statusSize: 10,
+		inset:      1,
+	}, avatarBg, avatar, statusDot)
+
+	l.refreshDiscordFriendAvatarCanvas(avatar, friend.id, int(avatarSize))
+	l.ensureDiscordFriendAvatarLoaded(friend.id, friend.avatarURL, func() {
+		l.refreshDiscordFriendAvatarCanvas(avatar, friend.id, int(avatarSize))
+	})
+
+	nameLabel := widget.NewLabelWithStyle(friend.name, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	nameLabel.Wrapping = fyne.TextTruncate
+
+	inviteBtn := widget.NewButtonWithIcon("", theme.MailSendIcon(), func() {
+		if l.state != nil && l.state.Core != nil && l.state.Core.DiscordService != nil {
+			shared := l.state.Core.GetSharedLobby()
+			url := shared.URL
+			if url == "" {
+				url = l.state.Core.GetSharedRoom().URL
+			}
+			if url != "" {
+				l.state.Core.DiscordService.SendInvite(friend.id, url)
+				l.state.ShowInfoDialog(
+					lang.LocalizeKey("launcher.discord_friends.invite_sent_title", "Invite Sent"),
+					lang.LocalizeKey("launcher.discord_friends.invite_sent_message", "Sent invite to {{.Name}}.", map[string]any{"Name": friend.name}),
+				)
+			} else {
+				l.state.ShowInfoDialog(
+					lang.LocalizeKey("launcher.discord_friends.invite_unavailable_title", "Invite Unavailable"),
+					lang.LocalizeKey("launcher.discord_friends.invite_unavailable_message", "Please share a lobby URL first."),
+				)
+			}
+		}
+	})
+	inviteBtn.Importance = widget.LowImportance
+
+	content := container.NewBorder(
+		nil, nil,
+		avatarContainer,
+		inviteBtn,
+		container.NewVBox(nameLabel),
+	)
+
+	cardBg := canvas.NewRectangle(theme.Color(theme.ColorNameBackground))
+	cardBg.CornerRadius = 4
+
+	return container.NewStack(cardBg, container.NewPadded(content))
 }

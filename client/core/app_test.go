@@ -64,3 +64,29 @@ func TestApp_ParseJoinGameURI(t *testing.T) {
 		assert.Contains(t, err.Error(), "invalid join game URI server")
 	})
 }
+
+func TestApp_ParseJoinLobbyURI(t *testing.T) {
+	app := &App{}
+
+	t.Run("valid join lobby URI without error_type", func(t *testing.T) {
+		link, err := app.ParseJoinLobbyURI("mod-of-us://join_lobby/v1/test-lobby-session?server=http%3A%2F%2Flocalhost%3A8080")
+		require.NoError(t, err)
+		assert.Equal(t, "test-lobby-session", link.SessionID)
+		assert.Equal(t, "http://localhost:8080", link.ServerBase)
+		assert.Empty(t, link.ErrorType)
+	})
+
+	t.Run("valid join lobby URI with error_type", func(t *testing.T) {
+		link, err := app.ParseJoinLobbyURI("mod-of-us://join_lobby/v1/test-lobby-session?error_type=invalid_session&server=http%3A%2F%2Flocalhost%3A8080")
+		require.NoError(t, err)
+		assert.Equal(t, "test-lobby-session", link.SessionID)
+		assert.Equal(t, "http://localhost:8080", link.ServerBase)
+		assert.Equal(t, "invalid_session", link.ErrorType)
+	})
+
+	t.Run("invalid host", func(t *testing.T) {
+		_, err := app.ParseJoinLobbyURI("mod-of-us://other_host/v1/test-lobby-session?server=http%3A%2F%2Flocalhost%3A8080")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid join lobby URI")
+	})
+}

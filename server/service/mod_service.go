@@ -7,14 +7,16 @@ import (
 )
 
 type ModService struct {
-	repo      repository.ModRepository
-	shareGame *shareGameManager
+	repo       repository.ModRepository
+	shareGame  *shareGameManager
+	shareLobby *shareLobbyManager
 }
 
 func NewModService(repo repository.ModRepository) *ModService {
 	return &ModService{
-		repo:      repo,
-		shareGame: newShareGameManager(),
+		repo:       repo,
+		shareGame:  newShareGameManager(),
+		shareLobby: newShareLobbyManager(),
 	}
 }
 
@@ -63,4 +65,28 @@ func (s *ModService) GetJoinGameMeta(sessionID string) (*restcommon.RoomInfo, er
 	}
 	room := session.Room
 	return &room, nil
+}
+
+func (s *ModService) CreateSharedLobby(ip string, req restcommon.ShareLobbyRequest) (*restcommon.ShareLobbyResponse, error) {
+	return s.shareLobby.create(ip, req)
+}
+
+func (s *ModService) UpdateSharedLobbyRoom(sessionID, hostKey string, room *restcommon.RoomInfo) (*restcommon.ShareLobbyResponse, error) {
+	return s.shareLobby.updateRoom(sessionID, hostKey, room)
+}
+
+func (s *ModService) DeleteSharedLobby(sessionID, hostKey string) error {
+	return s.shareLobby.delete(sessionID, hostKey)
+}
+
+func (s *ModService) UpdateSharedLobbyExpiration(sessionID, hostKey string) (*restcommon.ShareLobbyResponse, error) {
+	return s.shareLobby.updateExpiration(sessionID, hostKey)
+}
+
+func (s *ModService) GetJoinLobbyDownload(sessionID string) (*restcommon.JoinLobbyDownloadResponse, error) {
+	return s.shareLobby.getDownload(sessionID)
+}
+
+func (s *ModService) GetJoinLobbyMeta(sessionID string) (*sharedLobbySession, error) {
+	return s.shareLobby.getSessionMeta(sessionID)
 }

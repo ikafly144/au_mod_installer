@@ -40,6 +40,11 @@ func TestLobbyInfoStructure(t *testing.T) {
 		ID:         12345678,
 		Secret:     "secret-hash-123",
 		HostUserID: 99999,
+		LinkedChannel: &LinkedChannelInfo{
+			ID:      55555,
+			GuildID: 77777,
+			Name:    "lobby-voice",
+		},
 		Metadata: map[string]string{
 			"room_code": "XYZW",
 		},
@@ -48,13 +53,11 @@ func TestLobbyInfoStructure(t *testing.T) {
 				UserID:      99999,
 				DisplayName: "HostPlayer",
 				IsHost:      true,
-				IsReady:     true,
 			},
 			{
 				UserID:      88888,
 				DisplayName: "GuestPlayer",
 				IsHost:      false,
-				IsReady:     false,
 			},
 		},
 		CreatedAt: time.Now(),
@@ -63,6 +66,8 @@ func TestLobbyInfoStructure(t *testing.T) {
 	require.Equal(t, uint64(12345678), info.ID)
 	require.Equal(t, "secret-hash-123", info.Secret)
 	require.Equal(t, uint64(99999), info.HostUserID)
+	require.NotNil(t, info.LinkedChannel)
+	require.Equal(t, "lobby-voice", info.LinkedChannel.Name)
 	require.Len(t, info.Members, 2)
 	assert.True(t, info.Members[0].IsHost)
 	assert.False(t, info.Members[1].IsHost)

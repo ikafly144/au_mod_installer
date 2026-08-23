@@ -152,3 +152,128 @@ func (c *clientImpl) GetJoinGameDownload(sessionID string) (*rest.JoinGameDownlo
 	}
 	return &rs, nil
 }
+
+func (c *clientImpl) ShareLobby(aupack []byte, lobbySecret string, room *rest.RoomInfo) (*rest.ShareLobbyResponse, error) {
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, err := writer.CreateFormFile("aupack", "profile.aupack")
+	if err != nil {
+		return nil, err
+	}
+	if _, err := part.Write(aupack); err != nil {
+		return nil, err
+	}
+	if err := writer.WriteField("lobby_secret", lobbySecret); err != nil {
+		return nil, err
+	}
+	if room != nil {
+		if err := writer.WriteField("lobby_code", room.LobbyCode); err != nil {
+			return nil, err
+		}
+		if err := writer.WriteField("server_ip", room.ServerIP); err != nil {
+			return nil, err
+		}
+		if err := writer.WriteField("server_port", fmt.Sprint(room.ServerPort)); err != nil {
+			return nil, err
+		}
+		if err := writer.WriteField("match_maker_ip", room.MatchMakerIp); err != nil {
+			return nil, err
+		}
+		if err := writer.WriteField("match_maker_port", fmt.Sprint(room.MatchMakerPort)); err != nil {
+			return nil, err
+		}
+		if room.GameVersion != "" {
+			if err := writer.WriteField("game_version", room.GameVersion); err != nil {
+				return nil, err
+			}
+		}
+	}
+	if err := writer.Close(); err != nil {
+		return nil, err
+	}
+
+	var rs rest.ShareLobbyResponse
+	err = c.do(rest.EndpointShareLobby.Compile(nil), encodedRequestBody{
+		ContentType: writer.FormDataContentType(),
+		Body:        body.Bytes(),
+	}, &rs, 1)
+	if err != nil {
+		return nil, err
+	}
+	return &rs, nil
+}
+
+func (c *clientImpl) UpdateSharedLobbyRoom(sessionID, hostKey string, room *rest.RoomInfo) (*rest.ShareLobbyResponse, error) {
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	if err := writer.WriteField("host_key", hostKey); err != nil {
+		return nil, err
+	}
+	if room == nil {
+		if err := writer.WriteField("clear", "true"); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := writer.WriteField("lobby_code", room.LobbyCode); err != nil {
+			return nil, err
+		}
+		if err := writer.WriteField("server_ip", room.ServerIP); err != nil {
+			return nil, err
+		}
+		if err := writer.WriteField("server_port", fmt.Sprint(room.ServerPort)); err != nil {
+			return nil, err
+		}
+		if err := writer.WriteField("match_maker_ip", room.MatchMakerIp); err != nil {
+			return nil, err
+		}
+		if err := writer.WriteField("match_maker_port", fmt.Sprint(room.MatchMakerPort)); err != nil {
+			return nil, err
+		}
+		if room.GameVersion != "" {
+			if err := writer.WriteField("game_version", room.GameVersion); err != nil {
+				return nil, err
+			}
+		}
+	}
+	if err := writer.Close(); err != nil {
+		return nil, err
+	}
+
+	var rs rest.ShareLobbyResponse
+	err := c.do(rest.EndpointUpdateLobbyRoom.Compile(nil, sessionID), encodedRequestBody{
+		ContentType: writer.FormDataContentType(),
+		Body:        body.Bytes(),
+	}, &rs, 1)
+	if err != nil {
+		return nil, err
+	}
+	return &rs, nil
+}
+
+func (c *clientImpl) UpdateSharedLobbyExpiration(sessionID, hostKey string) (*rest.ShareLobbyResponse, error) {
+	values := make(url.Values)
+	values.Set("session_id", sessionID)
+	values.Set("host_key", hostKey)
+	var rs rest.ShareLobbyResponse
+	if err := c.do(rest.EndpointHeartbeatLobby.Compile(values), nil, &rs, 1); err != nil {
+		return nil, err
+	}
+	return &rs, nil
+}
+
+func (c *clientImpl) DeleteSharedLobby(sessionID, hostKey string) error {
+	values := make(url.Values)
+	values.Set("host_key", hostKey)
+	return c.do(rest.EndpointDeleteLobby.Compile(values, sessionID), nil, nil, 1)
+}
+
+func (c *clientImpl) GetJoinLobbyDownload(sessionID string) (*rest.JoinLobbyDownloadResponse, error) {
+	values := make(url.Values)
+	values.Set("session_id", sessionID)
+	values.Set("download", "1")
+	var rs rest.JoinLobbyDownloadResponse
+	if err := c.do(rest.EndpointJoinLobby.Compile(values), nil, &rs, 1); err != nil {
+		return nil, err
+	}
+	return &rs, nil
+}

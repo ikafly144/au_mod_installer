@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/url"
 	"os"
@@ -71,6 +72,11 @@ type App struct {
 	roomShareMu         sync.Mutex
 	roomShareGenerating bool
 	roomShareCache      SharedRoomLink
+
+	// Shared lobby state
+	lobbyShareMu         sync.Mutex
+	lobbyShareGenerating bool
+	lobbyShareCache      SharedLobbyLink
 }
 
 type SharedRoomLink struct {
@@ -80,6 +86,15 @@ type SharedRoomLink struct {
 	HostKey   string
 	ExpiresAt time.Time
 	InFlight  bool
+}
+
+type SharedLobbyLink struct {
+	LobbySecret string
+	URL         string
+	SessionID   string
+	HostKey     string
+	ExpiresAt   time.Time
+	InFlight    bool
 }
 
 func (a *App) GetSharedRoom() SharedRoomLink {
@@ -104,6 +119,89 @@ func (a *App) IsRoomShareGenerating() bool {
 	a.roomShareMu.Lock()
 	defer a.roomShareMu.Unlock()
 	return a.roomShareGenerating
+}
+
+func (a *App) GetSharedLobby() SharedLobbyLink {
+	a.lobbyShareMu.Lock()
+	defer a.lobbyShareMu.Unlock()
+	return a.lobbyShareCache
+}
+
+func (a *App) SetSharedLobby(link SharedLobbyLink) {
+	a.lobbyShareMu.Lock()
+	a.lobbyShareCache = link
+	a.lobbyShareMu.Unlock()
+}
+
+func (a *App) SetLobbyShareGenerating(generating bool) {
+	a.lobbyShareMu.Lock()
+	a.lobbyShareGenerating = generating
+	a.lobbyShareMu.Unlock()
+}
+
+func (a *App) IsLobbyShareGenerating() bool {
+	a.lobbyShareMu.Lock()
+	defer a.lobbyShareMu.Unlock()
+	return a.lobbyShareGenerating
+}
+
+func (a *App) InvalidateCachedLobbyShareAsync() {
+	a.lobbyShareMu.Lock()
+	cache := a.lobbyShareCache
+	a.lobbyShareCache = SharedLobbyLink{}
+	a.lobbyShareMu.Unlock()
+	if cache.SessionID == "" || cache.HostKey == "" {
+		return
+	}
+	go func() {
+		if err := a.Rest.DeleteSharedLobby(cache.SessionID, cache.HostKey); err != nil {
+			slog.Warn("Failed to invalidate shared lobby link", "error", err)
+		}
+	}()
+}
+
+func (a *App) HeartbeatLobbyShareAsync() {
+	a.lobbyShareMu.Lock()
+	if a.lobbyShareCache.InFlight || a.lobbyShareCache.SessionID == "" || a.lobbyShareCache.HostKey == "" {
+		a.lobbyShareMu.Unlock()
+		return
+	}
+	cache := a.lobbyShareCache
+	a.lobbyShareMu.Unlock()
+
+	// Only heartbeat if it expires within 30 minutes
+	if cache.ExpiresAt.After(time.Now().Add(30 * time.Minute)) {
+		return
+	}
+
+	a.lobbyShareMu.Lock()
+	if a.lobbyShareCache.SessionID != cache.SessionID || a.lobbyShareCache.InFlight {
+		a.lobbyShareMu.Unlock()
+		return
+	}
+	a.lobbyShareCache.InFlight = true
+	a.lobbyShareMu.Unlock()
+
+	go func() {
+		defer func() {
+			a.lobbyShareMu.Lock()
+			if a.lobbyShareCache.SessionID == cache.SessionID {
+				a.lobbyShareCache.InFlight = false
+			}
+			a.lobbyShareMu.Unlock()
+		}()
+
+		rs, err := a.Rest.UpdateSharedLobbyExpiration(cache.SessionID, cache.HostKey)
+		if err != nil {
+			slog.Warn("Failed to heartbeat shared lobby link", "error", err)
+			return
+		}
+		a.lobbyShareMu.Lock()
+		if a.lobbyShareCache.SessionID == cache.SessionID {
+			a.lobbyShareCache.ExpiresAt = rs.ExpiresAt
+		}
+		a.lobbyShareMu.Unlock()
+	}()
 }
 
 func (a *App) InvalidateCachedRoomShareAsync() {
@@ -351,19 +449,9 @@ func (a *App) SyncGameDiscordLobby(info *IPCLobbyInfo) {
 		}
 	}
 
-	room := commonrest.RoomInfo{
-		LobbyCode:      info.LobbyCode,
-		ServerIP:       info.ServerIP,
-		ServerPort:     uint16(info.ServerPort),
-		MatchMakerIp:   info.MatchMakerIp,
-		MatchMakerPort: uint16(info.MatchMakerPort),
-		GameVersion:    gameVersion,
-	}
-
-	secret := RoomKeyForCache(room, profileID)
-	secretHash := hex.EncodeToString(new(sha256.Sum256([]byte(secret)))[:])
-
-	if active, ok := a.DiscordService.GetActiveLobby(); ok && active.Secret == secretHash {
+	// If already in an active Discord lobby, just update room metadata
+	if _, ok := a.DiscordService.GetActiveLobby(); ok {
+		a.UpdateCurrentLobbyRoom(info)
 		return
 	}
 
@@ -372,6 +460,7 @@ func (a *App) SyncGameDiscordLobby(info *IPCLobbyInfo) {
 		hostUserID = user.Id()
 	}
 
+	stableSecret := "lobby-" + uuid.New().String()
 	lobbyMeta := map[string]string{
 		"profile_id":   profileID.String(),
 		"profile_name": prof.Name,
@@ -385,17 +474,17 @@ func (a *App) SyncGameDiscordLobby(info *IPCLobbyInfo) {
 	}
 
 	memberMeta := map[string]string{
-		"ready":          "true",
 		"is_host":        strconv.FormatBool(isHost),
 		"client_version": a.Version,
 		"profile_hash":   ComputeProfileHash(prof),
 	}
 
-	a.DiscordService.CreateOrJoinLobby(secretHash, lobbyMeta, memberMeta, func(err error, lobbyID uint64) {
+	a.DiscordService.CreateOrJoinLobby(stableSecret, lobbyMeta, memberMeta, func(err error, lobbyID uint64) {
 		if err != nil {
-			slog.Warn("Failed to sync game Discord lobby", "error", err, "secret", secretHash)
+			slog.Warn("Failed to create game Discord lobby", "error", err, "secret", stableSecret)
 		} else {
-			slog.Info("Synced game with Discord lobby", "lobbyID", lobbyID)
+			slog.Info("Created game Discord lobby", "lobbyID", lobbyID)
+			a.UpdateCurrentLobbyRoom(info)
 		}
 	})
 }
@@ -415,7 +504,7 @@ func (a *App) CreateManualLobby(profileID uuid.UUID, callback func(err error, lo
 		return
 	}
 
-	randomSecret := "manual-" + uuid.New().String()
+	randomSecret := "lobby-" + uuid.New().String()
 	var hostUserID uint64
 	if user, ok := a.DiscordService.UserInfo(); ok {
 		hostUserID = user.Id()
@@ -430,7 +519,6 @@ func (a *App) CreateManualLobby(profileID uuid.UUID, callback func(err error, lo
 	}
 
 	memberMeta := map[string]string{
-		"ready":          "true",
 		"is_host":        "true",
 		"client_version": a.Version,
 		"profile_hash":   ComputeProfileHash(prof),
@@ -746,4 +834,215 @@ func (a *App) ParseJoinGameURI(uri string) (*JoinGameLink, error) {
 		ServerBase: serverBase,
 		ErrorType:  strings.TrimSpace(values.Get("error_type")),
 	}, nil
+}
+
+func (a *App) ShareCurrentLobby(profileID uuid.UUID) (*SharedLobbyLink, error) {
+	a.lobbyShareMu.Lock()
+	if a.lobbyShareCache.SessionID != "" && a.lobbyShareCache.ExpiresAt.After(time.Now()) {
+		cached := a.lobbyShareCache
+		a.lobbyShareMu.Unlock()
+		return &cached, nil
+	}
+	a.lobbyShareMu.Unlock()
+
+	prof, ok := a.ProfileManager.Get(profileID)
+	if !ok {
+		return nil, fmt.Errorf("profile not found: %s", profileID)
+	}
+
+	var iconPNG []byte
+	if icon, err := a.ProfileManager.LoadIconPNG(profileID); err == nil {
+		iconPNG = icon
+	}
+
+	aupack, err := a.ExportProfileArchive(prof, iconPNG)
+	if err != nil {
+		return nil, fmt.Errorf("failed to export profile archive: %w", err)
+	}
+
+	// Determine lobby secret
+	lobbySecret := ""
+	if a.DiscordService != nil {
+		if active, ok := a.DiscordService.GetActiveLobby(); ok && active.Secret != "" {
+			lobbySecret = active.Secret
+		}
+	}
+	if lobbySecret == "" {
+		lobbySecret = "lobby-" + uuid.New().String()
+	}
+
+	// Current room if in-game
+	var roomPtr *commonrest.RoomInfo
+	a.runningProfileMu.Lock()
+	lobby := a.lobbyInfo
+	a.runningProfileMu.Unlock()
+	if room, ok := a.CurrentRoomInfo(lobby); ok {
+		roomPtr = &room
+	}
+
+	rs, err := a.Rest.ShareLobby(aupack, lobbySecret, roomPtr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to share lobby: %w", err)
+	}
+
+	link := SharedLobbyLink{
+		LobbySecret: lobbySecret,
+		URL:         rs.URL,
+		SessionID:   rs.SessionID,
+		HostKey:     rs.HostKey,
+		ExpiresAt:   rs.ExpiresAt,
+	}
+	a.SetSharedLobby(link)
+	return &link, nil
+}
+
+func (a *App) UpdateCurrentLobbyRoom(info *IPCLobbyInfo) error {
+	a.runningProfileMu.Lock()
+	profileID := a.runningProfileID
+	a.runningProfileMu.Unlock()
+
+	var roomPtr *commonrest.RoomInfo
+	if info != nil && info.IsConnected && strings.TrimSpace(info.LobbyCode) != "" {
+		gameVersion := ""
+		if profileID != uuid.Nil {
+			profileDir := filepath.Join(a.ConfigDir, "profiles", profileID.String())
+			if meta, err := modmgr.GetProfileMetadata(profileDir); err == nil && meta != nil {
+				gameVersion = meta.GameVersion
+			}
+		}
+		if gameVersion == "" {
+			if gamePath, err := a.DetectGamePath(); err == nil && gamePath != "" {
+				if v, err := aumgr.GetVersion(gamePath); err == nil {
+					gameVersion = v
+				}
+			}
+		}
+		roomPtr = &commonrest.RoomInfo{
+			LobbyCode:      info.LobbyCode,
+			ServerIP:       info.ServerIP,
+			ServerPort:     uint16(info.ServerPort),
+			MatchMakerIp:   info.MatchMakerIp,
+			MatchMakerPort: uint16(info.MatchMakerPort),
+			GameVersion:    gameVersion,
+		}
+	}
+
+	// 1. Update server shared lobby session if active
+	a.lobbyShareMu.Lock()
+	cache := a.lobbyShareCache
+	a.lobbyShareMu.Unlock()
+	if cache.SessionID != "" && cache.HostKey != "" {
+		go func() {
+			if rs, err := a.Rest.UpdateSharedLobbyRoom(cache.SessionID, cache.HostKey, roomPtr); err != nil {
+				slog.Warn("Failed to update shared lobby room on server", "error", err)
+			} else {
+				a.lobbyShareMu.Lock()
+				if a.lobbyShareCache.SessionID == cache.SessionID {
+					a.lobbyShareCache.ExpiresAt = rs.ExpiresAt
+				}
+				a.lobbyShareMu.Unlock()
+			}
+		}()
+	}
+
+	// 2. Update Discord Social SDK Lobby metadata if active
+	if a.DiscordService != nil && a.DiscordService.IsLoggedIn() {
+		if active, ok := a.DiscordService.GetActiveLobby(); ok {
+			meta := make(map[string]string)
+			maps.Copy(meta, active.Metadata)
+			if roomPtr != nil {
+				meta["room_code"] = roomPtr.LobbyCode
+				meta["server_ip"] = roomPtr.ServerIP
+				meta["server_port"] = strconv.Itoa(int(roomPtr.ServerPort))
+				meta["match_maker_ip"] = roomPtr.MatchMakerIp
+				meta["match_maker_port"] = strconv.Itoa(int(roomPtr.MatchMakerPort))
+				meta["game_version"] = roomPtr.GameVersion
+			} else {
+				delete(meta, "room_code")
+				delete(meta, "server_ip")
+				delete(meta, "server_port")
+				delete(meta, "match_maker_ip")
+				delete(meta, "match_maker_port")
+			}
+			a.DiscordService.UpdateLobbyMemberMetadata(meta, nil)
+		}
+	}
+
+	return nil
+}
+
+type JoinLobbyLink struct {
+	SessionID  string
+	ServerBase string
+	ErrorType  string
+}
+
+func (a *App) ParseJoinLobbyURI(uri string) (*JoinLobbyLink, error) {
+	slog.Info("parsing join lobby URI", "uri", uri)
+	parsed, err := url.Parse(uri)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse join lobby URI: %w", err)
+	}
+	if !strings.EqualFold(parsed.Scheme, "mod-of-us") || !strings.EqualFold(parsed.Host, "join_lobby") {
+		return nil, fmt.Errorf("invalid join lobby URI")
+	}
+	path := strings.TrimPrefix(parsed.Path, "/")
+	if !strings.HasPrefix(path, "v1/") {
+		return nil, fmt.Errorf("unsupported join lobby URI version")
+	}
+	sessionID := strings.TrimPrefix(path, "v1/")
+	values := parsed.Query()
+	serverBase := strings.TrimSpace(values.Get("server"))
+	if serverBase == "" {
+		return nil, fmt.Errorf("join lobby URI missing server")
+	}
+	if parsedServer, err := url.Parse(serverBase); err != nil || parsedServer.Scheme == "" || parsedServer.Host == "" {
+		return nil, fmt.Errorf("invalid join lobby URI server")
+	}
+	return &JoinLobbyLink{
+		SessionID:  sessionID,
+		ServerBase: serverBase,
+		ErrorType:  strings.TrimSpace(values.Get("error_type")),
+	}, nil
+}
+
+func (a *App) HandleJoinLobbyDownload(sessionID string, serverBase string) (*profile.SharedProfile, []byte, string, *LaunchJoinInfo, error) {
+	client := rest.NewClient(serverBase)
+	rs, err := client.GetJoinLobbyDownload(sessionID)
+	if err != nil {
+		return nil, nil, "", nil, err
+	}
+
+	tmpFile, err := os.CreateTemp("", "mod-of-us-lobby-*.aupack")
+	if err != nil {
+		return nil, nil, "", nil, err
+	}
+	defer os.Remove(tmpFile.Name())
+	if _, err := tmpFile.Write(rs.Aupack); err != nil {
+		_ = tmpFile.Close()
+		return nil, nil, "", nil, err
+	}
+	stat, err := tmpFile.Stat()
+	if err != nil {
+		_ = tmpFile.Close()
+		return nil, nil, "", nil, err
+	}
+	shared, iconPNG, err := a.HandleSharedProfileArchive(tmpFile, stat.Size())
+	_ = tmpFile.Close()
+	if err != nil {
+		return nil, nil, "", nil, err
+	}
+
+	var joinInfo *LaunchJoinInfo
+	if rs.Room != nil && rs.Room.LobbyCode != "" {
+		joinInfo = &LaunchJoinInfo{
+			LobbyCode:      rs.Room.LobbyCode,
+			ServerIP:       rs.Room.ServerIP,
+			ServerPort:     rs.Room.ServerPort,
+			MatchMakerIp:   rs.Room.MatchMakerIp,
+			MatchMakerPort: rs.Room.MatchMakerPort,
+			GameVersion:    rs.Room.GameVersion,
+		}
+	}
+	return shared, iconPNG, rs.LobbySecret, joinInfo, nil
 }

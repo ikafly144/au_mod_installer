@@ -152,3 +152,23 @@ func (f *FileClient) UpdateSharedGameExpiration(sessionID, hostKey string) (*res
 func (f *FileClient) GetJoinGameDownload(sessionID string) (*rest.JoinGameDownloadResponse, error) {
 	return nil, fmt.Errorf("local mode: join game download not available")
 }
+
+func (f *FileClient) ShareLobby(aupack []byte, lobbySecret string, room *rest.RoomInfo) (*rest.ShareLobbyResponse, error) {
+	return nil, fmt.Errorf("local mode: share lobby not available")
+}
+
+func (f *FileClient) UpdateSharedLobbyRoom(sessionID, hostKey string, room *rest.RoomInfo) (*rest.ShareLobbyResponse, error) {
+	return nil, fmt.Errorf("local mode: update shared lobby room not available")
+}
+
+func (f *FileClient) UpdateSharedLobbyExpiration(sessionID, hostKey string) (*rest.ShareLobbyResponse, error) {
+	return nil, fmt.Errorf("local mode: update shared lobby expiration not available")
+}
+
+func (f *FileClient) DeleteSharedLobby(sessionID, hostKey string) error {
+	return fmt.Errorf("local mode: delete shared lobby not available")
+}
+
+func (f *FileClient) GetJoinLobbyDownload(sessionID string) (*rest.JoinLobbyDownloadResponse, error) {
+	return nil, fmt.Errorf("local mode: join lobby download not available")
+}
