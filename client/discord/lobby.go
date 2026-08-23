@@ -155,7 +155,7 @@ func mapToProperties(m map[string]string) (discord.Properties, func()) {
 	return props, cleanup
 }
 
-func (s *DiscordService) CreateOrJoinLobby(secret string, lobbyMeta, memberMeta map[string]string, callback func(err error, lobbyID uint64)) {
+func (s *DiscordService) CreateOrJoinLobby(sessionID string, lobbyMeta, memberMeta map[string]string, callback func(err error, lobbyID uint64)) {
 	if !s.IsLoggedIn() {
 		if callback != nil {
 			callback(ErrNotLoggedIn, 0)
@@ -163,10 +163,10 @@ func (s *DiscordService) CreateOrJoinLobby(secret string, lobbyMeta, memberMeta 
 		return
 	}
 
-	secret = strings.TrimSpace(secret)
-	if secret == "" {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
 		if callback != nil {
-			callback(errors.New("lobby secret cannot be empty"), 0)
+			callback(errors.New("lobby session_id cannot be empty"), 0)
 		}
 		return
 	}
@@ -177,15 +177,15 @@ func (s *DiscordService) CreateOrJoinLobby(secret string, lobbyMeta, memberMeta 
 	defer cleanupMember()
 
 	s.lobbyMu.Lock()
-	s.activeLobbySecret = secret
+	s.activeLobbySessionID = sessionID
 	s.lobbyMu.Unlock()
 
-	s.client.CreateOrJoinLobbyWithMetadata(secret, lobbyProps, memberProps, func(result *discord.ClientResult, lobbyID uint64) {
+	s.client.CreateOrJoinLobbyWithMetadata(sessionID, lobbyProps, memberProps, func(result *discord.ClientResult, lobbyID uint64) {
 		if !result.Successful() {
-			slog.Warn("Failed to create or join Discord lobby", "error", result.ErrorCode(), "secret", secret)
+			slog.Warn("Failed to create or join Discord lobby", "error", result.ErrorCode(), "sessionID", sessionID)
 			s.lobbyMu.Lock()
-			if s.activeLobbySecret == secret {
-				s.activeLobbySecret = ""
+			if s.activeLobbySessionID == sessionID {
+				s.activeLobbySessionID = ""
 				s.activeLobbyID = 0
 				s.activeLobbyInfo = nil
 			}
@@ -196,7 +196,7 @@ func (s *DiscordService) CreateOrJoinLobby(secret string, lobbyMeta, memberMeta 
 			return
 		}
 
-		slog.Info("Successfully created/joined Discord lobby", "lobbyID", lobbyID, "secret", secret)
+		slog.Info("Successfully created/joined Discord lobby", "lobbyID", lobbyID, "sessionID", sessionID)
 		s.lobbyMu.Lock()
 		s.activeLobbyID = lobbyID
 		s.lobbyMu.Unlock()
@@ -213,7 +213,7 @@ func (s *DiscordService) LeaveLobby(callback func(error)) {
 	s.lobbyMu.Lock()
 	lobbyID := s.activeLobbyID
 	s.activeLobbyID = 0
-	s.activeLobbySecret = ""
+	s.activeLobbySessionID = ""
 	s.activeLobbyInfo = nil
 	s.lobbyMu.Unlock()
 
@@ -265,10 +265,10 @@ func (s *DiscordService) GetActiveLobby() (*LobbyInfo, bool) {
 
 func (s *DiscordService) UpdateLobbyMemberMetadata(meta map[string]string, callback func(error)) {
 	s.lobbyMu.RLock()
-	secret := s.activeLobbySecret
+	sessionID := s.activeLobbySessionID
 	s.lobbyMu.RUnlock()
 
-	if secret == "" {
+	if sessionID == "" {
 		if callback != nil {
 			callback(ErrNotConnectedToLobby)
 		}
@@ -278,7 +278,7 @@ func (s *DiscordService) UpdateLobbyMemberMetadata(meta map[string]string, callb
 	memberProps, cleanupMember := mapToProperties(meta)
 	defer cleanupMember()
 
-	s.client.CreateOrJoinLobbyWithMetadata(secret, discord.Properties{}, memberProps, func(result *discord.ClientResult, lobbyID uint64) {
+	s.client.CreateOrJoinLobbyWithMetadata(sessionID, discord.Properties{}, memberProps, func(result *discord.ClientResult, lobbyID uint64) {
 		if !result.Successful() {
 			slog.Warn("Failed to update lobby member metadata", "error", result.ErrorCode())
 			if callback != nil {
@@ -453,7 +453,7 @@ func (s *DiscordService) refreshActiveLobbyInfo(lobbyID uint64) *LobbyInfo {
 
 	info := &LobbyInfo{
 		ID:            lobbyID,
-		Secret:        s.activeLobbySecret,
+		Secret:        s.activeLobbySessionID,
 		HostUserID:    hostID,
 		LinkedChannel: linkedChan,
 		Metadata:      meta,

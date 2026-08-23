@@ -186,7 +186,6 @@ func TestRouter_ShareLobby_Lifecycle(t *testing.T) {
 	require.NoError(t, err)
 	_, err = part.Write([]byte("lobby-pack-data"))
 	require.NoError(t, err)
-	require.NoError(t, writer.WriteField("lobby_secret", "secret-discord-123"))
 	require.NoError(t, writer.WriteField("lobby_code", "LOBBY1"))
 	require.NoError(t, writer.Close())
 
@@ -209,18 +208,8 @@ func TestRouter_ShareLobby_Lifecycle(t *testing.T) {
 	require.Equal(t, http.StatusOK, dlRec.Code)
 	var dlRs restcommon.JoinLobbyDownloadResponse
 	require.NoError(t, json.Unmarshal(dlRec.Body.Bytes(), &dlRs))
-	assert.Equal(t, "secret-discord-123", dlRs.LobbySecret)
 	require.NotNil(t, dlRs.Room)
 	assert.Equal(t, "LOBBY1", dlRs.Room.LobbyCode)
-
-	// Verify resolving by LobbySecret directly works without 404
-	dlReqBySecret := httptest.NewRequest(http.MethodGet, "/join_lobby?session_id=secret-discord-123&download=1", nil)
-	dlRecBySecret := httptest.NewRecorder()
-	handler.ServeHTTP(dlRecBySecret, dlReqBySecret)
-	require.Equal(t, http.StatusOK, dlRecBySecret.Code)
-	var dlRsSecret restcommon.JoinLobbyDownloadResponse
-	require.NoError(t, json.Unmarshal(dlRecBySecret.Body.Bytes(), &dlRsSecret))
-	assert.Equal(t, shareRs.SessionID, dlRsSecret.SessionID)
 
 	// 3. Update room dynamically without changing session ID / Lobby URL
 	updateBody := &bytes.Buffer{}
@@ -323,7 +312,6 @@ func TestRouter_ShareLobby_WithDiscordLobbyIntegration(t *testing.T) {
 	require.NoError(t, err)
 	_, err = part.Write([]byte("lobby-pack-data"))
 	require.NoError(t, err)
-	require.NoError(t, writer.WriteField("lobby_secret", "secret-discord-123"))
 	require.NoError(t, writer.WriteField("host_discord_user_id", "987654321"))
 	require.NoError(t, writer.Close())
 

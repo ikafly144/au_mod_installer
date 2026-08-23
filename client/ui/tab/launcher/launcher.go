@@ -372,7 +372,7 @@ func (l *Launcher) HandleJoinLink(s string) {
 		}
 		serverBase = base
 	}
-	if strings.Contains(s, "join_lobby") || strings.HasPrefix(sessionID, "lobby-") || strings.Contains(s, "lobby") {
+	if strings.Contains(s, "join_lobby") || strings.Contains(s, "lobby") {
 		lobbyLink := &core.JoinLobbyLink{
 			SessionID:  sessionID,
 			ServerBase: serverBase,
@@ -380,19 +380,11 @@ func (l *Launcher) HandleJoinLink(s string) {
 		l.handleLobbyLink(lobbyLink)
 		return
 	}
-	if strings.Contains(s, "join_game") {
-		gameLink := &core.JoinGameLink{
-			SessionID:  sessionID,
-			ServerBase: serverBase,
-		}
-		l.handleGameLink(gameLink)
-		return
-	}
-	lobbyLink := &core.JoinLobbyLink{
+	gameLink := &core.JoinGameLink{
 		SessionID:  sessionID,
 		ServerBase: serverBase,
 	}
-	l.handleLobbyLink(lobbyLink)
+	l.handleGameLink(gameLink)
 }
 
 func (l *Launcher) getDiscordUserName(userID uint64) string {
@@ -1755,15 +1747,7 @@ func (l *Launcher) handleLobbyLink(joinURI *core.JoinLobbyLink) {
 	go func() {
 		defer l.finishJoinSession(joinURI.SessionID)
 
-		shared, iconPNG, lobbySecret, joinInfo, err := l.state.Core.HandleJoinLobbyDownload(joinURI.SessionID, joinURI.ServerBase)
-		if err != nil {
-			if gShared, gIcon, gJoinInfo, gErr := l.state.Core.HandleJoinGameDownload(joinURI.SessionID, joinURI.ServerBase); gErr == nil {
-				shared = gShared
-				iconPNG = gIcon
-				joinInfo = gJoinInfo
-				err = nil
-			}
-		}
+		shared, iconPNG, joinInfo, err := l.state.Core.HandleJoinLobbyDownload(joinURI.SessionID, joinURI.ServerBase)
 		fyne.DoAndWait(func() {
 			if err != nil {
 				uicommon.Alert(
@@ -1774,13 +1758,13 @@ func (l *Launcher) handleLobbyLink(joinURI *core.JoinLobbyLink) {
 				return
 			}
 
-			// Join Discord Social SDK Lobby
-			if lobbySecret != "" && l.state.Core.DiscordService != nil && l.state.Core.DiscordService.IsLoggedIn() {
+			// Join Discord Social SDK Lobby using SessionID as secret
+			if l.state.Core.DiscordService != nil && l.state.Core.DiscordService.IsLoggedIn() {
 				memberMeta := map[string]string{
 					"is_host":        "false",
 					"client_version": l.state.Core.Version,
 				}
-				l.state.Core.DiscordService.CreateOrJoinLobby(lobbySecret, nil, memberMeta, func(joinErr error, lobbyID uint64) {
+				l.state.Core.DiscordService.CreateOrJoinLobby(joinURI.SessionID, nil, memberMeta, func(joinErr error, lobbyID uint64) {
 					if joinErr != nil {
 						slog.Warn("Failed to join Discord lobby from link", "error", joinErr)
 					} else {
@@ -1905,23 +1889,6 @@ func (l *Launcher) handleGameLink(joinURI *core.JoinGameLink) {
 		defer l.finishJoinSession(joinURI.SessionID)
 
 		shared, iconPNG, joinInfo, err := l.state.Core.HandleJoinGameDownload(joinURI.SessionID, joinURI.ServerBase)
-		var lobbySecret string
-		if err != nil {
-			if lShared, lIcon, lSecret, lJoinInfo, lErr := l.state.Core.HandleJoinLobbyDownload(joinURI.SessionID, joinURI.ServerBase); lErr == nil {
-				shared = lShared
-				iconPNG = lIcon
-				lobbySecret = lSecret
-				joinInfo = lJoinInfo
-				err = nil
-				if lobbySecret != "" && l.state.Core.DiscordService != nil && l.state.Core.DiscordService.IsLoggedIn() {
-					memberMeta := map[string]string{
-						"is_host":        "false",
-						"client_version": l.state.Core.Version,
-					}
-					l.state.Core.DiscordService.CreateOrJoinLobby(lobbySecret, nil, memberMeta, nil)
-				}
-			}
-		}
 		fyne.DoAndWait(func() {
 			if err != nil {
 				uicommon.Alert(

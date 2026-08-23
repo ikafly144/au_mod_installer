@@ -88,7 +88,7 @@ func (m *mockRestClient) GetJoinGameDownload(sessionID string) (*restcommon.Join
 	return nil, nil
 }
 
-func (m *mockRestClient) ShareLobby(aupack []byte, lobbySecret string, hostDiscordUserID uint64, room *restcommon.RoomInfo) (*restcommon.ShareLobbyResponse, error) {
+func (m *mockRestClient) ShareLobby(aupack []byte, hostDiscordUserID uint64, room *restcommon.RoomInfo) (*restcommon.ShareLobbyResponse, error) {
 	return nil, nil
 }
 

@@ -88,12 +88,11 @@ type SharedRoomLink struct {
 }
 
 type SharedLobbyLink struct {
-	LobbySecret string
-	URL         string
-	SessionID   string
-	HostKey     string
-	ExpiresAt   time.Time
-	InFlight    bool
+	URL       string
+	SessionID string
+	HostKey   string
+	ExpiresAt time.Time
+	InFlight  bool
 }
 
 func (a *App) GetSharedRoom() SharedRoomLink {
@@ -896,17 +895,6 @@ func (a *App) ShareCurrentLobby(profileID uuid.UUID) (*SharedLobbyLink, error) {
 		return nil, fmt.Errorf("failed to export profile archive: %w", err)
 	}
 
-	// Determine lobby secret
-	lobbySecret := ""
-	if a.DiscordService != nil {
-		if active, ok := a.DiscordService.GetActiveLobby(); ok && active.Secret != "" {
-			lobbySecret = active.Secret
-		}
-	}
-	if lobbySecret == "" {
-		lobbySecret = "lobby-" + uuid.New().String()
-	}
-
 	// Current room if in-game
 	var roomPtr *commonrest.RoomInfo
 	a.runningProfileMu.Lock()
@@ -924,7 +912,7 @@ func (a *App) ShareCurrentLobby(profileID uuid.UUID) (*SharedLobbyLink, error) {
 		}
 	}
 
-	rs, err := a.Rest.ShareLobby(aupack, lobbySecret, hostDiscordUserID, roomPtr)
+	rs, err := a.Rest.ShareLobby(aupack, hostDiscordUserID, roomPtr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to share lobby: %w", err)
 	}
@@ -934,11 +922,10 @@ func (a *App) ShareCurrentLobby(profileID uuid.UUID) (*SharedLobbyLink, error) {
 	}
 
 	link := SharedLobbyLink{
-		LobbySecret: lobbySecret,
-		URL:         rs.URL,
-		SessionID:   rs.SessionID,
-		HostKey:     rs.HostKey,
-		ExpiresAt:   rs.ExpiresAt,
+		URL:       rs.URL,
+		SessionID: rs.SessionID,
+		HostKey:   rs.HostKey,
+		ExpiresAt: rs.ExpiresAt,
 	}
 	a.SetSharedLobby(link)
 	return &link, nil
@@ -1054,14 +1041,14 @@ func (a *App) ParseJoinLobbyURI(uri string) (*JoinLobbyLink, error) {
 	}, nil
 }
 
-func (a *App) HandleJoinLobbyDownload(sessionID string, serverBase string) (*profile.SharedProfile, []byte, string, *LaunchJoinInfo, error) {
+func (a *App) HandleJoinLobbyDownload(sessionID string, serverBase string) (*profile.SharedProfile, []byte, *LaunchJoinInfo, error) {
 	if strings.TrimSpace(serverBase) == "" && a.Rest != nil {
 		serverBase = a.Rest.ServerBaseURL()
 	}
 	client := rest.NewClient(serverBase)
 	rs, err := client.GetJoinLobbyDownload(sessionID)
 	if err != nil {
-		return nil, nil, "", nil, err
+		return nil, nil, nil, err
 	}
 
 	if rs.DiscordLobbyID != 0 && a.DiscordService != nil {
@@ -1072,22 +1059,22 @@ func (a *App) HandleJoinLobbyDownload(sessionID string, serverBase string) (*pro
 
 	tmpFile, err := os.CreateTemp("", "mod-of-us-lobby-*.aupack")
 	if err != nil {
-		return nil, nil, "", nil, err
+		return nil, nil, nil, err
 	}
 	defer os.Remove(tmpFile.Name())
 	if _, err := tmpFile.Write(rs.Aupack); err != nil {
 		_ = tmpFile.Close()
-		return nil, nil, "", nil, err
+		return nil, nil, nil, err
 	}
 	stat, err := tmpFile.Stat()
 	if err != nil {
 		_ = tmpFile.Close()
-		return nil, nil, "", nil, err
+		return nil, nil, nil, err
 	}
 	shared, iconPNG, err := a.HandleSharedProfileArchive(tmpFile, stat.Size())
 	_ = tmpFile.Close()
 	if err != nil {
-		return nil, nil, "", nil, err
+		return nil, nil, nil, err
 	}
 
 	var joinInfo *LaunchJoinInfo
@@ -1101,5 +1088,5 @@ func (a *App) HandleJoinLobbyDownload(sessionID string, serverBase string) (*pro
 			GameVersion:    rs.Room.GameVersion,
 		}
 	}
-	return shared, iconPNG, rs.LobbySecret, joinInfo, nil
+	return shared, iconPNG, joinInfo, nil
 }

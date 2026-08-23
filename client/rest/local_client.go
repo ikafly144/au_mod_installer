@@ -153,7 +153,7 @@ func (f *FileClient) GetJoinGameDownload(sessionID string) (*rest.JoinGameDownlo
 	return nil, fmt.Errorf("local mode: join game download not available")
 }
 
-func (f *FileClient) ShareLobby(aupack []byte, lobbySecret string, hostDiscordUserID uint64, room *rest.RoomInfo) (*rest.ShareLobbyResponse, error) {
+func (f *FileClient) ShareLobby(aupack []byte, hostDiscordUserID uint64, room *rest.RoomInfo) (*rest.ShareLobbyResponse, error) {
 	return nil, fmt.Errorf("local mode: share lobby not available")
 }
 

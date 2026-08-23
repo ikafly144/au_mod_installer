@@ -154,7 +154,7 @@ func (c *clientImpl) GetJoinGameDownload(sessionID string) (*rest.JoinGameDownlo
 	return &rs, nil
 }
 
-func (c *clientImpl) ShareLobby(aupack []byte, lobbySecret string, hostDiscordUserID uint64, room *rest.RoomInfo) (*rest.ShareLobbyResponse, error) {
+func (c *clientImpl) ShareLobby(aupack []byte, hostDiscordUserID uint64, room *rest.RoomInfo) (*rest.ShareLobbyResponse, error) {
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 	part, err := writer.CreateFormFile("aupack", "profile.aupack")
@@ -162,9 +162,6 @@ func (c *clientImpl) ShareLobby(aupack []byte, lobbySecret string, hostDiscordUs
 		return nil, err
 	}
 	if _, err := part.Write(aupack); err != nil {
-		return nil, err
-	}
-	if err := writer.WriteField("lobby_secret", lobbySecret); err != nil {
 		return nil, err
 	}
 	if hostDiscordUserID != 0 {

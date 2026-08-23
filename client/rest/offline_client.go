@@ -73,7 +73,7 @@ func (c *OfflineClient) GetJoinGameDownload(sessionID string) (*rest.JoinGameDow
 	return nil, errors.New("offline mode: join game download not available")
 }
 
-func (c *OfflineClient) ShareLobby(aupack []byte, lobbySecret string, hostDiscordUserID uint64, room *rest.RoomInfo) (*rest.ShareLobbyResponse, error) {
+func (c *OfflineClient) ShareLobby(aupack []byte, hostDiscordUserID uint64, room *rest.RoomInfo) (*rest.ShareLobbyResponse, error) {
 	return nil, errors.New("offline mode: share lobby not available")
 }
 
