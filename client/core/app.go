@@ -736,6 +736,9 @@ func (a *App) DownloadArchiveURLToTempFile(archiveURL string, progressListener p
 }
 
 func (a *App) HandleJoinGameDownload(sessionID string, serverBase string) (*profile.SharedProfile, []byte, *LaunchJoinInfo, error) {
+	if strings.TrimSpace(serverBase) == "" && a.Rest != nil {
+		serverBase = a.Rest.ServerBaseURL()
+	}
 	client := rest.NewClient(serverBase)
 	rs, err := client.GetJoinGameDownload(sessionID)
 	if err != nil {
@@ -1051,6 +1054,9 @@ func (a *App) ParseJoinLobbyURI(uri string) (*JoinLobbyLink, error) {
 }
 
 func (a *App) HandleJoinLobbyDownload(sessionID string, serverBase string) (*profile.SharedProfile, []byte, string, *LaunchJoinInfo, error) {
+	if strings.TrimSpace(serverBase) == "" && a.Rest != nil {
+		serverBase = a.Rest.ServerBaseURL()
+	}
 	client := rest.NewClient(serverBase)
 	rs, err := client.GetJoinLobbyDownload(sessionID)
 	if err != nil {
