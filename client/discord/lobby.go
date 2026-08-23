@@ -27,13 +27,33 @@ const (
 	CallStatusReconnecting = discord.CallStatusReconnecting
 )
 
+type LinkedChannelInfo struct {
+	ID      uint64 `json:"id"`
+	GuildID uint64 `json:"guild_id"`
+	Name    string `json:"name"`
+}
+
+type GuildInfo struct {
+	ID   uint64 `json:"id"`
+	Name string `json:"name"`
+}
+
+type GuildChannelInfo struct {
+	ID         uint64              `json:"id"`
+	Name       string              `json:"name"`
+	Type       discord.ChannelType `json:"type"`
+	Position   int32               `json:"position"`
+	IsLinkable bool                `json:"is_linkable"`
+}
+
 type LobbyInfo struct {
-	ID         uint64            `json:"id"`
-	Secret     string            `json:"secret"`
-	HostUserID uint64            `json:"host_user_id"`
-	Metadata   map[string]string `json:"metadata"`
-	Members    []LobbyMember     `json:"members"`
-	CreatedAt  time.Time         `json:"created_at"`
+	ID            uint64             `json:"id"`
+	Secret        string             `json:"secret"`
+	HostUserID    uint64             `json:"host_user_id"`
+	LinkedChannel *LinkedChannelInfo `json:"linked_channel,omitempty"`
+	Metadata      map[string]string  `json:"metadata"`
+	Members       []LobbyMember      `json:"members"`
+	CreatedAt     time.Time          `json:"created_at"`
 }
 
 type LobbyMember struct {
@@ -43,7 +63,6 @@ type LobbyMember struct {
 	AvatarURL        string            `json:"avatar_url"`
 	Metadata         map[string]string `json:"metadata"`
 	IsHost           bool              `json:"is_host"`
-	IsReady          bool              `json:"is_ready"`
 	IsSpeaking       bool              `json:"is_speaking"`
 	IsVoiceConnected bool              `json:"is_voice_connected"`
 	IsMuted          bool              `json:"is_muted"`
@@ -370,6 +389,15 @@ func (s *DiscordService) refreshActiveLobbyInfo(lobbyID uint64) *LobbyInfo {
 		}
 	}
 
+	var linkedChan *LinkedChannelInfo
+	if lc, ok := handle.LinkedChannel(); ok {
+		linkedChan = &LinkedChannelInfo{
+			ID:      lc.Id(),
+			GuildID: lc.GuildId(),
+			Name:    lc.Name(),
+		}
+	}
+
 	meta := propertiesToMap(handle.Metadata())
 	membersRaw := handle.LobbyMembers()
 	members := make([]LobbyMember, 0, len(membersRaw))
@@ -380,7 +408,6 @@ func (s *DiscordService) refreshActiveLobbyInfo(lobbyID uint64) *LobbyInfo {
 		member := LobbyMember{
 			UserID:           mID,
 			Metadata:         mMeta,
-			IsReady:          strings.EqualFold(mMeta["ready"], "true"),
 			IsHost:           strings.EqualFold(mMeta["is_host"], "true"),
 			IsSpeaking:       speakingMap[mID],
 			IsVoiceConnected: voiceParticipants[mID],
@@ -413,12 +440,13 @@ func (s *DiscordService) refreshActiveLobbyInfo(lobbyID uint64) *LobbyInfo {
 	}
 
 	info := &LobbyInfo{
-		ID:         lobbyID,
-		Secret:     s.activeLobbySecret,
-		HostUserID: hostID,
-		Metadata:   meta,
-		Members:    members,
-		CreatedAt:  time.Now(),
+		ID:            lobbyID,
+		Secret:        s.activeLobbySecret,
+		HostUserID:    hostID,
+		LinkedChannel: linkedChan,
+		Metadata:      meta,
+		Members:       members,
+		CreatedAt:     time.Now(),
 	}
 	s.activeLobbyInfo = info
 	s.lobbyMu.Unlock()
@@ -707,4 +735,140 @@ func (s *DiscordService) RemoveSpeakingCallback(id int) {
 	s.voiceMu.Lock()
 	defer s.voiceMu.Unlock()
 	delete(s.speakingCallbacks, id)
+}
+
+// ---------------- Connected Channel (Linked Channel) Operations ----------------
+
+func (s *DiscordService) GetUserGuilds(callback func(err error, guilds []GuildInfo)) {
+	if s.client == nil {
+		if callback != nil {
+			callback(errors.New("discord client not initialized"), nil)
+		}
+		return
+	}
+
+	s.client.GetUserGuilds(func(result *discord.ClientResult, rawGuilds []discord.GuildMinimal) {
+		if !result.Successful() {
+			err := fmt.Errorf("failed to get guilds: code %d", result.ErrorCode())
+			slog.Warn("Failed to get user guilds", "error", err)
+			if callback != nil {
+				callback(err, nil)
+			}
+			return
+		}
+
+		guilds := make([]GuildInfo, 0, len(rawGuilds))
+		for _, g := range rawGuilds {
+			guilds = append(guilds, GuildInfo{
+				ID:   g.Id(),
+				Name: g.Name(),
+			})
+		}
+		if callback != nil {
+			callback(nil, guilds)
+		}
+	})
+}
+
+func (s *DiscordService) GetGuildChannels(guildID uint64, callback func(err error, channels []GuildChannelInfo)) {
+	if s.client == nil {
+		if callback != nil {
+			callback(errors.New("discord client not initialized"), nil)
+		}
+		return
+	}
+
+	s.client.GetGuildChannels(guildID, func(result *discord.ClientResult, rawChannels []discord.GuildChannel) {
+		if !result.Successful() {
+			err := fmt.Errorf("failed to get guild channels: code %d", result.ErrorCode())
+			slog.Warn("Failed to get guild channels", "guildID", guildID, "error", err)
+			if callback != nil {
+				callback(err, nil)
+			}
+			return
+		}
+
+		channels := make([]GuildChannelInfo, 0, len(rawChannels))
+		for _, ch := range rawChannels {
+			channels = append(channels, GuildChannelInfo{
+				ID:         ch.Id(),
+				Name:       ch.Name(),
+				Type:       ch.Type(),
+				Position:   ch.Position(),
+				IsLinkable: ch.IsLinkable(),
+			})
+		}
+		if callback != nil {
+			callback(nil, channels)
+		}
+	})
+}
+
+func (s *DiscordService) LinkChannelToLobby(channelID uint64, callback func(error)) {
+	s.lobbyMu.RLock()
+	lobbyID := s.activeLobbyID
+	s.lobbyMu.RUnlock()
+
+	if lobbyID == 0 {
+		if callback != nil {
+			callback(ErrNotConnectedToLobby)
+		}
+		return
+	}
+
+	s.client.LinkChannelToLobby(lobbyID, channelID, func(result *discord.ClientResult) {
+		if !result.Successful() {
+			err := fmt.Errorf("failed to link channel: code %d", result.ErrorCode())
+			slog.Warn("Failed to link channel to lobby", "lobbyID", lobbyID, "channelID", channelID, "error", err)
+			if callback != nil {
+				callback(err)
+			}
+			return
+		}
+		slog.Info("Successfully linked channel to lobby", "lobbyID", lobbyID, "channelID", channelID)
+		info := s.refreshActiveLobbyInfo(lobbyID)
+		if callback != nil {
+			callback(nil)
+		}
+		s.notifyLobbyUpdated(info)
+	})
+}
+
+func (s *DiscordService) UnlinkChannelFromLobby(callback func(error)) {
+	s.lobbyMu.RLock()
+	lobbyID := s.activeLobbyID
+	s.lobbyMu.RUnlock()
+
+	if lobbyID == 0 {
+		if callback != nil {
+			callback(ErrNotConnectedToLobby)
+		}
+		return
+	}
+
+	s.client.UnlinkChannelFromLobby(lobbyID, func(result *discord.ClientResult) {
+		if !result.Successful() {
+			err := fmt.Errorf("failed to unlink channel: code %d", result.ErrorCode())
+			slog.Warn("Failed to unlink channel from lobby", "lobbyID", lobbyID, "error", err)
+			if callback != nil {
+				callback(err)
+			}
+			return
+		}
+		slog.Info("Successfully unlinked channel from lobby", "lobbyID", lobbyID)
+		info := s.refreshActiveLobbyInfo(lobbyID)
+		if callback != nil {
+			callback(nil)
+		}
+		s.notifyLobbyUpdated(info)
+	})
+}
+
+func (s *DiscordService) GetLinkedChannel() (*LinkedChannelInfo, bool) {
+	s.lobbyMu.RLock()
+	defer s.lobbyMu.RUnlock()
+	if s.activeLobbyInfo == nil || s.activeLobbyInfo.LinkedChannel == nil {
+		return nil, false
+	}
+	return s.activeLobbyInfo.LinkedChannel, true
 }
