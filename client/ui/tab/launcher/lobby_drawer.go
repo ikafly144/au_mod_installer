@@ -829,14 +829,6 @@ func (l *Launcher) showLinkChannelDialog() {
 		return
 	}
 
-	if !ds.CanCurrentUserLinkLobby() {
-		l.state.ShowInfoDialog(
-			lang.LocalizeKey("launcher.lobby.link_channel_title", "Link Discord Channel"),
-			lang.LocalizeKey("launcher.lobby.cant_link_lobby_message", "Channel linking requires a persistent lobby created via Discord Backend API with CanLinkLobby permission. Client-side secret lobbies are not eligible for channel linking."),
-		)
-		return
-	}
-
 	loadingDialog := dialog.NewCustom(
 		lang.LocalizeKey("launcher.lobby.loading_guilds", "Loading Discord Servers..."),
 		lang.LocalizeKey("common.cancel", "Cancel"),
