@@ -21,7 +21,6 @@ import (
 	"sync"
 	"time"
 
-	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/lang"
 	"github.com/google/uuid"
 
@@ -304,7 +303,7 @@ func (a *App) StartActivityPolling(ctx context.Context) {
 }
 
 func (a *App) updateRichPresence() {
-	if a.DiscordService == nil {
+	if a.DiscordService == nil || !a.DiscordService.IsLoggedIn() {
 		return
 	}
 
@@ -314,75 +313,169 @@ func (a *App) updateRichPresence() {
 	runningStartedAt := a.runningStartedAt
 	a.runningProfileMu.Unlock()
 
-	if profileID == uuid.Nil {
-		a.DiscordService.ClearActivity()
-		// Auto-stop sharing when game ends
-		a.InvalidateCachedRoomShareAsync()
-		return
-	}
+	lobbyShare := a.GetSharedLobby()
+	activeLobby, hasActiveLobby := a.DiscordService.GetActiveLobby()
 
-	prof, ok := a.ProfileManager.Get(profileID)
-	if !ok {
-		a.DiscordService.ClearActivity()
-		return
-	}
-
-	act := sdk.NewActivity()
-	act.SetType(sdk.ActivityTypesPlaying)
-	act.SetName("Mod of Us")
-	act.SetDetails(fmt.Sprintf("Playing %s", prof.Name))
-	act.SetSupportedPlatforms(sdk.ActivityGamePlatformsDesktop)
-
-	assets := sdk.NewActivityAssets()
-	assets.SetLargeImage("icon")
-	if a.Version != "" {
-		assets.SetLargeText(fmt.Sprintf("Mod of Us %s", a.Version))
-	} else {
-		assets.SetLargeText("Mod of Us")
-	}
-	act.SetAssets(assets)
-
-	if !runningStartedAt.IsZero() {
-		timestamp := sdk.NewActivityTimestamps()
-		timestamp.SetStart(uint64(runningStartedAt.UnixMilli()))
-		act.SetTimestamps(timestamp)
-	}
-
-	if lobby != nil && lobby.IsConnected {
-		if lobby.GameState == "Started" {
-			act.SetState(lang.LocalizeKey("discord.status.in_game", "In Game"))
-		} else {
-			act.SetState(lang.LocalizeKey("discord.status.in_lobby", "In Lobby")) // TODO: More detailed state based on GameState?
+	// 1. If game is running
+	if profileID != uuid.Nil {
+		prof, ok := a.ProfileManager.Get(profileID)
+		if !ok {
+			a.DiscordService.ClearActivity()
+			return
 		}
-		if lobby.MaxPlayers > 0 && lobby.JoinedPlayers > 0 {
-			p := sdk.NewActivityParty()
-			p.SetId(strings.ToLower(lobby.GameState) + "/" + hex.EncodeToString(new(sha256.Sum256([]byte(lobby.MatchMakerIp + ":" + strconv.Itoa(lobby.MatchMakerPort) + "@" + lobby.LobbyCode)))[:]))
-			p.SetMaxSize(int32(lobby.MaxPlayers))
-			p.SetCurrentSize(int32(lobby.JoinedPlayers))
-			if fyne.CurrentApp().Preferences().BoolWithFallback("public_party", true) {
-				p.SetPrivacy(sdk.ActivityPartyPrivacyPublic)
+
+		act := sdk.NewActivity()
+		act.SetType(sdk.ActivityTypesPlaying)
+		act.SetName("Mod of Us")
+		act.SetDetails(fmt.Sprintf("Playing %s", prof.Name))
+		act.SetSupportedPlatforms(sdk.ActivityGamePlatformsDesktop)
+
+		assets := sdk.NewActivityAssets()
+		assets.SetLargeImage("icon")
+		if a.Version != "" {
+			assets.SetLargeText(fmt.Sprintf("Mod of Us %s", a.Version))
+		} else {
+			assets.SetLargeText("Mod of Us")
+		}
+		act.SetAssets(assets)
+
+		if !runningStartedAt.IsZero() {
+			timestamp := sdk.NewActivityTimestamps()
+			timestamp.SetStart(uint64(runningStartedAt.UnixMilli()))
+			act.SetTimestamps(timestamp)
+		}
+
+		partyID := ""
+		currentSize := int32(1)
+		maxSize := int32(10)
+
+		if lobby != nil && lobby.IsConnected {
+			if lobby.GameState == "Started" {
+				act.SetState(lang.LocalizeKey("discord.status.in_game", "In Game"))
 			} else {
-				p.SetPrivacy(sdk.ActivityPartyPrivacyPrivate)
+				act.SetState(lang.LocalizeKey("discord.status.in_lobby", "In Lobby"))
 			}
+			if lobby.MaxPlayers > 0 && lobby.JoinedPlayers > 0 {
+				currentSize = int32(lobby.JoinedPlayers)
+				maxSize = int32(lobby.MaxPlayers)
+				partyID = strings.ToLower(lobby.GameState) + "/" + hex.EncodeToString(new(sha256.Sum256([]byte(lobby.MatchMakerIp + ":" + strconv.Itoa(lobby.MatchMakerPort) + "@" + lobby.LobbyCode)))[:])
+			}
+		} else {
+			act.SetState(lang.LocalizeKey("discord.status.in_main_menu", "In Main Menu"))
+		}
+
+		joinSecret := ""
+		if lobbyShare.URL != "" && lobbyShare.ExpiresAt.After(time.Now()) {
+			joinSecret = lobbyShare.URL
+			if partyID == "" {
+				partyID = "lobby-" + lobbyShare.SessionID
+			}
+			a.HeartbeatLobbyShareAsync()
+		} else if hasActiveLobby && activeLobby.Secret != "" {
+			joinSecret = activeLobby.Secret
+			if partyID == "" {
+				partyID = fmt.Sprintf("discord-lobby-%d", activeLobby.ID)
+			}
+			if len(activeLobby.Members) > 0 {
+				currentSize = int32(len(activeLobby.Members))
+			}
+		} else {
+			share := a.GetSharedRoom()
+			if lobby != nil && lobby.GameState == "Joined" && share.URL != "" && share.ExpiresAt.After(time.Now()) {
+				joinSecret = share.URL
+				a.HeartbeatRoomShareAsync()
+			}
+		}
+
+		if partyID != "" || joinSecret != "" {
+			if partyID == "" {
+				partyID = "mod-of-us-party"
+			}
+			p := sdk.NewActivityParty()
+			p.SetId(partyID)
+			p.SetCurrentSize(currentSize)
+			p.SetMaxSize(maxSize)
+			p.SetPrivacy(sdk.ActivityPartyPrivacyPublic)
 			act.SetParty(p)
 		}
-		share := a.GetSharedRoom()
-		if lobby.GameState == "Joined" && share.URL != "" && share.ExpiresAt.After(time.Now()) {
+
+		if joinSecret != "" {
 			secrets := sdk.NewActivitySecrets()
-			secrets.SetJoin(share.URL)
+			secrets.SetJoin(joinSecret)
 			act.SetSecrets(secrets)
 		}
-		// Heartbeat sharing if active
-		a.HeartbeatRoomShareAsync()
-	} else {
-		act.SetState(lang.LocalizeKey("discord.status.in_main_menu", "In Main Menu"))
+
+		a.DiscordService.SetActivity(act, func(d *sdk.ClientResult) {
+			if !d.Successful() {
+				slog.Warn("Failed to update Discord activity", "error", d.ErrorCode())
+			}
+		})
+		return
 	}
 
-	a.DiscordService.SetActivity(act, func(d *sdk.ClientResult) {
-		if !d.Successful() {
-			slog.Warn("Failed to update Discord activity", "error", d.ErrorCode())
+	// 2. If game is NOT running, but user has an active or shared lobby in launcher
+	if (lobbyShare.URL != "" && lobbyShare.ExpiresAt.After(time.Now())) || hasActiveLobby {
+		act := sdk.NewActivity()
+		act.SetType(sdk.ActivityTypesPlaying)
+		act.SetName("Mod of Us")
+		act.SetState(lang.LocalizeKey("discord.status.in_lobby", "In Lobby"))
+		act.SetDetails(lang.LocalizeKey("launcher.lobby.title", "Lobby"))
+		act.SetSupportedPlatforms(sdk.ActivityGamePlatformsDesktop)
+
+		assets := sdk.NewActivityAssets()
+		assets.SetLargeImage("icon")
+		if a.Version != "" {
+			assets.SetLargeText(fmt.Sprintf("Mod of Us %s", a.Version))
+		} else {
+			assets.SetLargeText("Mod of Us")
 		}
-	})
+		act.SetAssets(assets)
+
+		partyID := "lobby"
+		currentSize := int32(1)
+		maxSize := int32(10)
+		joinSecret := ""
+
+		if lobbyShare.URL != "" && lobbyShare.ExpiresAt.After(time.Now()) {
+			joinSecret = lobbyShare.URL
+			partyID = "lobby-" + lobbyShare.SessionID
+			a.HeartbeatLobbyShareAsync()
+		}
+		if hasActiveLobby {
+			if joinSecret == "" && activeLobby.Secret != "" {
+				joinSecret = activeLobby.Secret
+			}
+			if partyID == "lobby" && activeLobby.ID != 0 {
+				partyID = fmt.Sprintf("discord-lobby-%d", activeLobby.ID)
+			}
+			if len(activeLobby.Members) > 0 {
+				currentSize = int32(len(activeLobby.Members))
+			}
+		}
+
+		p := sdk.NewActivityParty()
+		p.SetId(partyID)
+		p.SetCurrentSize(currentSize)
+		p.SetMaxSize(maxSize)
+		p.SetPrivacy(sdk.ActivityPartyPrivacyPublic)
+		act.SetParty(p)
+
+		if joinSecret != "" {
+			secrets := sdk.NewActivitySecrets()
+			secrets.SetJoin(joinSecret)
+			act.SetSecrets(secrets)
+		}
+
+		a.DiscordService.SetActivity(act, func(d *sdk.ClientResult) {
+			if !d.Successful() {
+				slog.Warn("Failed to update Discord activity for launcher lobby", "error", d.ErrorCode())
+			}
+		})
+		return
+	}
+
+	a.DiscordService.ClearActivity()
+	a.InvalidateCachedRoomShareAsync()
 }
 
 func ComputeProfileHash(prof profile.Profile) string {

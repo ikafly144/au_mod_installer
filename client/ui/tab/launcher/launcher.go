@@ -917,12 +917,18 @@ func (l *Launcher) canSendDiscordInvite() bool {
 	if !l.state.Core.DiscordService.IsLoggedIn() {
 		return false
 	}
-	share := l.state.Core.GetSharedRoom()
-	if share.URL == "" || share.ExpiresAt.Before(time.Now()) {
-		return false
+	lobbyShare := l.state.Core.GetSharedLobby()
+	if lobbyShare.URL != "" && lobbyShare.ExpiresAt.After(time.Now()) {
+		return true
 	}
-	_, active := l.state.Core.DiscordService.CurrentActivity()
-	return active
+	roomShare := l.state.Core.GetSharedRoom()
+	if roomShare.URL != "" && roomShare.ExpiresAt.After(time.Now()) {
+		return true
+	}
+	if _, ok := l.state.Core.DiscordService.GetActiveLobby(); ok {
+		return true
+	}
+	return false
 }
 
 var discordModOfUsStatusColor = color.NRGBA{R: 145, G: 70, B: 255, A: 255}
@@ -1116,11 +1122,26 @@ func (l *Launcher) showDiscordFriendsDialog() {
 			if !l.canSendDiscordInvite() {
 				l.state.ShowInfoDialog(
 					lang.LocalizeKey("launcher.discord_friends.invite_unavailable_title", "Invite Unavailable"),
-					lang.LocalizeKey("launcher.discord_friends.invite_unavailable_message", "Invites are available only while sharing a room."),
+					lang.LocalizeKey("launcher.discord_friends.invite_unavailable_message", "Please share a lobby URL first."),
 				)
 				return
 			}
-			l.state.Core.DiscordService.SendInvite(friend.id, l.state.Core.GetSharedRoom().URL)
+			url := l.state.Core.GetSharedLobby().URL
+			if url == "" {
+				url = l.state.Core.GetSharedRoom().URL
+			}
+			l.state.Core.DiscordService.SendInvite(friend.id, url, func(err error) {
+				fyne.Do(func() {
+					if err != nil {
+						l.state.ShowErrorDialog(err)
+					} else {
+						l.state.ShowInfoDialog(
+							lang.LocalizeKey("launcher.discord_friends.invite_sent_title", "Invite Sent"),
+							lang.LocalizeKey("launcher.discord_friends.invite_sent_message", "Sent invite to {{.Name}}.", map[string]any{"Name": friend.name}),
+						)
+					}
+				})
+			})
 		}
 		actionButtons = append(actionButtons, inviteButton)
 

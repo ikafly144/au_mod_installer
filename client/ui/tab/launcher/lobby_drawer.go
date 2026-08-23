@@ -1086,12 +1086,32 @@ func (l *Launcher) buildDrawerFriendCard(friend discordFriend) fyne.CanvasObject
 			if url == "" {
 				url = l.state.Core.GetSharedRoom().URL
 			}
+			if url == "" {
+				profileID := l.selectedProfileID
+				if profileID == uuid.Nil && len(l.profiles) > 0 {
+					profileID = l.profiles[0].ID
+				}
+				if profileID != uuid.Nil {
+					link, err := l.state.Core.ShareCurrentLobby(profileID)
+					if err == nil && link != nil {
+						url = link.URL
+						l.refreshLobbyShareUI()
+					}
+				}
+			}
 			if url != "" {
-				l.state.Core.DiscordService.SendInvite(friend.id, url)
-				l.state.ShowInfoDialog(
-					lang.LocalizeKey("launcher.discord_friends.invite_sent_title", "Invite Sent"),
-					lang.LocalizeKey("launcher.discord_friends.invite_sent_message", "Sent invite to {{.Name}}.", map[string]any{"Name": friend.name}),
-				)
+				l.state.Core.DiscordService.SendInvite(friend.id, url, func(err error) {
+					fyne.Do(func() {
+						if err != nil {
+							l.state.ShowErrorDialog(err)
+						} else {
+							l.state.ShowInfoDialog(
+								lang.LocalizeKey("launcher.discord_friends.invite_sent_title", "Invite Sent"),
+								lang.LocalizeKey("launcher.discord_friends.invite_sent_message", "Sent invite to {{.Name}}.", map[string]any{"Name": friend.name}),
+							)
+						}
+					})
+				})
 			} else {
 				l.state.ShowInfoDialog(
 					lang.LocalizeKey("launcher.discord_friends.invite_unavailable_title", "Invite Unavailable"),
