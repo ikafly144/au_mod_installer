@@ -89,7 +89,7 @@ func NewDiscordService(client *discord.Client) *DiscordService {
 		ds.lobbyMu.Lock()
 		if ds.activeLobbyID == lobbyID {
 			ds.activeLobbyID = 0
-			ds.activeLobbySecret = ""
+			ds.activeLobbySessionID = ""
 			ds.activeLobbyInfo = nil
 		}
 		ds.lobbyMu.Unlock()
@@ -164,7 +164,7 @@ type DiscordService struct {
 
 	lobbyMu                    sync.RWMutex
 	activeLobbyID              uint64
-	activeLobbySecret          string
+	activeLobbySessionID       string
 	activeLobbyInfo            *LobbyInfo
 	lobbyUpdatedCallbacks      map[int]func(*LobbyInfo)
 	nextLobbyCallbackID        int

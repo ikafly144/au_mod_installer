@@ -31,7 +31,6 @@ type sharedLobbySession struct {
 	HostKey           string
 	IP                string
 	Aupack            []byte
-	LobbySecret       string
 	DiscordLobbyID    uint64
 	HostDiscordUserID uint64
 	Room              *restcommon.RoomInfo
@@ -43,7 +42,6 @@ type shareLobbyManager struct {
 	mu              sync.Mutex
 	discordClient   DiscordLobbyClient
 	sessions        map[string]*sharedLobbySession
-	sessionBySecret map[string]string
 	sessionByIP     map[string]string
 	rateByIP        map[string]*ipRateState
 	dedupeByIPLobby map[string]*sharedLobbySession
@@ -57,7 +55,6 @@ func newShareLobbyManagerWithOptions(discordClient DiscordLobbyClient) *shareLob
 	return &shareLobbyManager{
 		discordClient:   discordClient,
 		sessions:        make(map[string]*sharedLobbySession),
-		sessionBySecret: make(map[string]string),
 		sessionByIP:     make(map[string]string),
 		rateByIP:        make(map[string]*ipRateState),
 		dedupeByIPLobby: make(map[string]*sharedLobbySession),
@@ -74,7 +71,7 @@ func (m *shareLobbyManager) create(ip string, req restcommon.ShareLobbyRequest) 
 		return nil, err
 	}
 
-	lobbyKey := dedupeLobbyKey(ip, req.Aupack, req.LobbySecret)
+	lobbyKey := dedupeLobbyKey(ip, req.Aupack)
 	if cached, ok := m.dedupeByIPLobby[lobbyKey]; ok && cached.ExpiresAt.After(now) {
 		if req.Room != nil {
 			r := *req.Room
@@ -127,7 +124,6 @@ func (m *shareLobbyManager) create(ip string, req restcommon.ShareLobbyRequest) 
 		HostKey:           hostKey,
 		IP:                ip,
 		Aupack:            append([]byte(nil), req.Aupack...),
-		LobbySecret:       req.LobbySecret,
 		DiscordLobbyID:    discordLobbyID,
 		HostDiscordUserID: req.HostDiscordUserID,
 		Room:              roomCopy,
@@ -135,9 +131,6 @@ func (m *shareLobbyManager) create(ip string, req restcommon.ShareLobbyRequest) 
 		ExpiresAt:         now.Add(shareLobbyTTL),
 	}
 	m.sessions[sessionID] = s
-	if req.LobbySecret != "" {
-		m.sessionBySecret[req.LobbySecret] = sessionID
-	}
 	m.sessionByIP[ip] = sessionID
 	m.dedupeByIPLobby[lobbyKey] = s
 
@@ -150,25 +143,13 @@ func (m *shareLobbyManager) create(ip string, req restcommon.ShareLobbyRequest) 
 	}, nil
 }
 
-func (m *shareLobbyManager) resolveSessionLocked(idOrSecret string) (*sharedLobbySession, bool) {
-	if s, ok := m.sessions[idOrSecret]; ok {
-		return s, true
-	}
-	if sessID, ok := m.sessionBySecret[idOrSecret]; ok {
-		if s, ok := m.sessions[sessID]; ok {
-			return s, true
-		}
-	}
-	return nil, false
-}
-
 func (m *shareLobbyManager) updateRoom(sessionID, hostKey string, room *restcommon.RoomInfo) (*restcommon.ShareLobbyResponse, error) {
 	now := time.Now()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.cleanupLocked(now)
 
-	s, ok := m.resolveSessionLocked(sessionID)
+	s, ok := m.sessions[sessionID]
 	if !ok {
 		return nil, ErrShareLobbyNotFound
 	}
@@ -176,7 +157,7 @@ func (m *shareLobbyManager) updateRoom(sessionID, hostKey string, room *restcomm
 		return nil, ErrShareLobbyUnauthorized
 	}
 	if now.After(s.ExpiresAt) {
-		m.deleteSessionLocked(s.SessionID)
+		m.deleteSessionLocked(sessionID)
 		return nil, ErrShareLobbyExpired
 	}
 
@@ -190,7 +171,7 @@ func (m *shareLobbyManager) updateRoom(sessionID, hostKey string, room *restcomm
 
 	if s.DiscordLobbyID != 0 && m.discordClient != nil {
 		discordMeta := map[string]string{
-			"session_id": s.SessionID,
+			"session_id": sessionID,
 		}
 		if s.Room != nil {
 			discordMeta["lobby_code"] = s.Room.LobbyCode
@@ -208,8 +189,8 @@ func (m *shareLobbyManager) updateRoom(sessionID, hostKey string, room *restcomm
 	}
 
 	return &restcommon.ShareLobbyResponse{
-		URL:            "/join_lobby?session_id=" + s.SessionID,
-		SessionID:      s.SessionID,
+		URL:            "/join_lobby?session_id=" + sessionID,
+		SessionID:      sessionID,
 		HostKey:        hostKey,
 		DiscordLobbyID: s.DiscordLobbyID,
 		ExpiresAt:      s.ExpiresAt,
@@ -222,12 +203,12 @@ func (m *shareLobbyManager) getDownload(sessionID string) (*restcommon.JoinLobby
 	defer m.mu.Unlock()
 	m.cleanupLocked(now)
 
-	s, ok := m.resolveSessionLocked(sessionID)
+	s, ok := m.sessions[sessionID]
 	if !ok {
 		return nil, ErrShareLobbyNotFound
 	}
 	if now.After(s.ExpiresAt) {
-		m.deleteSessionLocked(s.SessionID)
+		m.deleteSessionLocked(sessionID)
 		return nil, ErrShareLobbyExpired
 	}
 
@@ -238,9 +219,8 @@ func (m *shareLobbyManager) getDownload(sessionID string) (*restcommon.JoinLobby
 	}
 
 	return &restcommon.JoinLobbyDownloadResponse{
-		SessionID:      s.SessionID,
+		SessionID:      sessionID,
 		Aupack:         append([]byte(nil), s.Aupack...),
-		LobbySecret:    s.LobbySecret,
 		DiscordLobbyID: s.DiscordLobbyID,
 		Room:           roomCopy,
 		ExpiresAt:      s.ExpiresAt,
@@ -253,12 +233,12 @@ func (m *shareLobbyManager) addMember(sessionID string, userID uint64) error {
 	defer m.mu.Unlock()
 	m.cleanupLocked(now)
 
-	s, ok := m.resolveSessionLocked(sessionID)
+	s, ok := m.sessions[sessionID]
 	if !ok {
 		return ErrShareLobbyNotFound
 	}
 	if now.After(s.ExpiresAt) {
-		m.deleteSessionLocked(s.SessionID)
+		m.deleteSessionLocked(sessionID)
 		return ErrShareLobbyExpired
 	}
 
@@ -278,12 +258,12 @@ func (m *shareLobbyManager) removeMember(sessionID string, userID uint64) error 
 	defer m.mu.Unlock()
 	m.cleanupLocked(now)
 
-	s, ok := m.resolveSessionLocked(sessionID)
+	s, ok := m.sessions[sessionID]
 	if !ok {
 		return ErrShareLobbyNotFound
 	}
 	if now.After(s.ExpiresAt) {
-		m.deleteSessionLocked(s.SessionID)
+		m.deleteSessionLocked(sessionID)
 		return ErrShareLobbyExpired
 	}
 
@@ -301,12 +281,12 @@ func (m *shareLobbyManager) getSessionMeta(sessionID string) (*sharedLobbySessio
 	defer m.mu.Unlock()
 	m.cleanupLocked(now)
 
-	s, ok := m.resolveSessionLocked(sessionID)
+	s, ok := m.sessions[sessionID]
 	if !ok {
 		return nil, ErrShareLobbyNotFound
 	}
 	if now.After(s.ExpiresAt) {
-		m.deleteSessionLocked(s.SessionID)
+		m.deleteSessionLocked(sessionID)
 		return nil, ErrShareLobbyExpired
 	}
 	cp := *s
@@ -320,14 +300,14 @@ func (m *shareLobbyManager) delete(sessionID, hostKey string) error {
 	defer m.mu.Unlock()
 	m.cleanupLocked(now)
 
-	s, ok := m.resolveSessionLocked(sessionID)
+	s, ok := m.sessions[sessionID]
 	if !ok {
 		return ErrShareLobbyNotFound
 	}
 	if s.HostKey != hostKey {
 		return ErrShareLobbyUnauthorized
 	}
-	m.deleteSessionLocked(s.SessionID)
+	m.deleteSessionLocked(sessionID)
 	return nil
 }
 
@@ -337,7 +317,7 @@ func (m *shareLobbyManager) updateExpiration(sessionID, hostKey string) (*restco
 	defer m.mu.Unlock()
 	m.cleanupLocked(now)
 
-	s, ok := m.resolveSessionLocked(sessionID)
+	s, ok := m.sessions[sessionID]
 	if !ok {
 		return nil, ErrShareLobbyNotFound
 	}
@@ -348,8 +328,8 @@ func (m *shareLobbyManager) updateExpiration(sessionID, hostKey string) (*restco
 	s.ExpiresAt = now.Add(shareLobbyTTL)
 
 	return &restcommon.ShareLobbyResponse{
-		URL:            "/join_lobby?session_id=" + s.SessionID,
-		SessionID:      s.SessionID,
+		URL:            "/join_lobby?session_id=" + sessionID,
+		SessionID:      sessionID,
 		HostKey:        hostKey,
 		DiscordLobbyID: s.DiscordLobbyID,
 		ExpiresAt:      s.ExpiresAt,
@@ -395,19 +375,16 @@ func (m *shareLobbyManager) deleteSessionLocked(sessionID string) {
 		}()
 	}
 	delete(m.sessions, sessionID)
-	if s.LobbySecret != "" {
-		delete(m.sessionBySecret, s.LobbySecret)
-	}
 	if current, ok := m.sessionByIP[s.IP]; ok && current == sessionID {
 		delete(m.sessionByIP, s.IP)
 	}
-	lobbyKey := dedupeLobbyKey(s.IP, s.Aupack, s.LobbySecret)
+	lobbyKey := dedupeLobbyKey(s.IP, s.Aupack)
 	if current, ok := m.dedupeByIPLobby[lobbyKey]; ok && current.SessionID == sessionID {
 		delete(m.dedupeByIPLobby, lobbyKey)
 	}
 }
 
-func dedupeLobbyKey(ip string, aupack []byte, lobbySecret string) string {
+func dedupeLobbyKey(ip string, aupack []byte) string {
 	sum := sha256.Sum256(aupack)
-	return fmt.Sprintf("%s|%s|%s", ip, hex.EncodeToString(sum[:]), lobbySecret)
+	return fmt.Sprintf("%s|%s", ip, hex.EncodeToString(sum[:]))
 }

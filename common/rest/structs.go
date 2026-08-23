@@ -55,7 +55,6 @@ type JoinGameDownloadResponse struct {
 
 type ShareLobbyRequest struct {
 	Aupack            []byte    `json:"aupack"`
-	LobbySecret       string    `json:"lobby_secret"`
 	HostDiscordUserID uint64    `json:"host_discord_user_id,omitempty"`
 	Room              *RoomInfo `json:"room,omitempty"`
 }
@@ -85,7 +84,6 @@ type JoinLobbyMemberRequest struct {
 type JoinLobbyDownloadResponse struct {
 	SessionID      string    `json:"session_id"`
 	Aupack         []byte    `json:"aupack"`
-	LobbySecret    string    `json:"lobby_secret"`
 	DiscordLobbyID uint64    `json:"discord_lobby_id,omitempty"`
 	Room           *RoomInfo `json:"room,omitempty"`
 	ExpiresAt      time.Time `json:"expires_at"`

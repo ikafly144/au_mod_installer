@@ -301,11 +301,6 @@ func router(srv *service.ModService, versionProvider service.VersionInfoProvider
 			ctx.JSON(http.StatusBadRequest, gin.H{"error": "failed to read aupack file"})
 			return
 		}
-		lobbySecret := strings.TrimSpace(ctx.PostForm("lobby_secret"))
-		if lobbySecret == "" {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": "lobby_secret is required"})
-			return
-		}
 
 		var room *rest.RoomInfo
 		lobbyCode := strings.TrimSpace(ctx.PostForm("lobby_code"))
@@ -342,7 +337,6 @@ func router(srv *service.ModService, versionProvider service.VersionInfoProvider
 
 		req := rest.ShareLobbyRequest{
 			Aupack:            aupack,
-			LobbySecret:       lobbySecret,
 			HostDiscordUserID: hostDiscordUserID,
 			Room:              room,
 		}
