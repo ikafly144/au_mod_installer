@@ -17,7 +17,13 @@ func NewGormRepository(db *gorm.DB) *GormRepository {
 }
 
 func (r *GormRepository) Migrate() error {
-	if err := r.db.AutoMigrate(&model.ModDetails{}, &model.ModVersionFile{}, &model.ModVersionDetails{}); err != nil {
+	if err := r.db.AutoMigrate(
+		&model.ModDetails{},
+		&model.ModVersionFile{},
+		&model.ModVersionDetails{},
+		&model.ModSubmission{},
+		&model.VersionSubmission{},
+	); err != nil {
 		return err
 	}
 	return nil

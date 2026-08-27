@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -49,11 +50,66 @@ func realMain(ctx context.Context) error {
 		*basePath = envBasePath
 	}
 
-	db, err := gorm.Open(postgres.Open(os.Getenv("DATABASE_URL")))
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		databaseURL = "postgres://postgres:password@localhost:5432/au_mod_installer?sslmode=disable"
+	}
+
+	db, err := gorm.Open(postgres.Open(databaseURL))
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
-	modSrv := service.NewModService(gormrepo.NewGormRepository(db))
+
+	gormRepo := gormrepo.NewGormRepository(db)
+	if err := gormRepo.Migrate(); err != nil {
+		slog.WarnContext(ctx, "Database migration warning", "error", err)
+	}
+
+	// Initialize S3-compatible Storage (MinIO / Cloudflare R2 / AWS S3)
+	s3Bucket := os.Getenv("S3_BUCKET")
+	if s3Bucket == "" {
+		s3Bucket = "au-mods"
+	}
+	s3Region := os.Getenv("S3_REGION")
+	if s3Region == "" {
+		s3Region = "us-east-1"
+	}
+	usePathStyle := true
+	if val := os.Getenv("S3_USE_PATH_STYLE"); val != "" {
+		if parsed, err := strconv.ParseBool(val); err == nil {
+			usePathStyle = parsed
+		}
+	}
+
+	storageCfg := service.StorageConfig{
+		Endpoint:        os.Getenv("S3_ENDPOINT"),
+		PublicEndpoint:  os.Getenv("S3_PUBLIC_ENDPOINT"),
+		Region:          s3Region,
+		Bucket:          s3Bucket,
+		AccessKeyID:     os.Getenv("S3_ACCESS_KEY_ID"),
+		SecretAccessKey: os.Getenv("S3_SECRET_ACCESS_KEY"),
+		UsePathStyle:    usePathStyle,
+	}
+
+	storageSvc, err := service.NewS3StorageService(ctx, storageCfg)
+	if err != nil {
+		slog.WarnContext(ctx, "Failed to initialize S3 storage service", "error", err)
+	} else {
+		if err := storageSvc.EnsureBucket(ctx); err != nil {
+			slog.WarnContext(ctx, "Failed to ensure S3 bucket exists", "error", err, "bucket", s3Bucket)
+		}
+	}
+
+	// Initialize Security & File Scanning Service
+	scanSvc := service.NewScanService(os.Getenv("VIRUSTOTAL_API_KEY"))
+
+	// Initialize Submission Service
+	submissionSvc := service.NewSubmissionService(gormRepo, gormRepo, storageSvc, scanSvc)
+
+	// Initialize Mod Service
+	modSrv := service.NewModService(gormRepo)
+
+	// Initialize Version Info Provider
 	versionInfoTTL := time.Duration(0)
 	if rawTTL := os.Getenv("VERSION_INFO_TTL"); rawTTL != "" {
 		parsedTTL, err := time.ParseDuration(rawTTL)
@@ -69,6 +125,21 @@ func realMain(ctx context.Context) error {
 		TTL:        versionInfoTTL,
 	})
 
+	// Initialize Discord Bot Service
+	discordCfg := service.DiscordConfig{
+		Token:            os.Getenv("DISCORD_TOKEN"),
+		GuildID:          os.Getenv("DISCORD_GUILD_ID"),
+		ReviewChannelID:  os.Getenv("DISCORD_REVIEW_CHANNEL_ID"),
+		ShowcaseForumID:  os.Getenv("DISCORD_SHOWCASE_FORUM_ID"),
+		UpdatesChannelID: os.Getenv("DISCORD_UPDATES_CHANNEL_ID"),
+	}
+
+	discordBot := service.NewDiscordBotService(discordCfg, submissionSvc, modSrv)
+	if err := discordBot.Start(ctx); err != nil {
+		slog.WarnContext(ctx, "Failed to start Discord bot", "error", err)
+	}
+	defer discordBot.Stop(context.Background())
+
 	srv := &http.Server{
 		Addr:    *addr,
 		Handler: router(modSrv, versionSvc, *pathPrefix, *basePath),
@@ -80,7 +151,7 @@ func realMain(ctx context.Context) error {
 		}
 	}()
 
-	slog.InfoContext(ctx, "Server started")
+	slog.InfoContext(ctx, "Server started", "addr", *addr)
 
 	<-ctx.Done()
 

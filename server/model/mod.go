@@ -66,11 +66,14 @@ func (a *StringArray) Scan(value any) error {
 }
 
 type ModDetails struct {
-	ID           string  `gorm:"primaryKey" json:"id"`
-	Name         string  `gorm:"not null" json:"name"`
-	Description  string  `gorm:"not null" json:"description"`
-	Author       string  `gorm:"not null" json:"author"`
-	ThumbnailURI *string `gorm:"default:null" json:"-"`
+	ID                     string      `gorm:"primaryKey" json:"id"`
+	Name                   string      `gorm:"not null" json:"name"`
+	Description            string      `gorm:"not null" json:"description"`
+	Author                 string      `gorm:"not null" json:"author"`
+	OwnerDiscordID         string      `gorm:"index:idx_mod_owner_discord;default:''" json:"-"`
+	CollaboratorDiscordIDs StringArray `gorm:"type:json" json:"-"`
+	DiscordThreadID        string      `gorm:"default:''" json:"-"`
+	ThumbnailURI           *string     `gorm:"default:null" json:"-"`
 
 	LatestVersionID       *string `gorm:"index;default:null;" json:"-"`
 	LatestVersionExternal string  `gorm:"-" json:"latest_version"`
