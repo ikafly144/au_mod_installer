@@ -19,7 +19,7 @@ require (
 	github.com/nightlyone/lockfile v1.0.0
 	github.com/rs/zerolog v1.35.1
 	github.com/sqweek/dialog v0.0.0-20260123140253-64c163d53aac
-	github.com/stretchr/testify v1.12.0
+	github.com/stretchr/testify v1.12.1
 	github.com/urfave/cli/v3 v3.11.0
 	github.com/zzl/go-win32api/v2 v2.2.0
 	golang.org/x/mod v0.40.0
@@ -105,6 +105,7 @@ require (
 	github.com/xrash/smetrics v0.0.0-20250705151800-55b8f293f342 // indirect
 	github.com/yuin/goldmark v1.8.5 // indirect
 	go.mongodb.org/mongo-driver/v2 v2.8.0 // indirect
+	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/arch v0.30.0 // indirect
 	golang.org/x/crypto v0.55.0 // indirect
 	golang.org/x/image v0.45.0 // indirect
