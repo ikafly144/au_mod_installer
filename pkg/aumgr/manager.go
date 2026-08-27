@@ -12,6 +12,7 @@ const (
 	LauncherSteam     LauncherType = "steam"
 	LauncherEpicGames LauncherType = "epic"
 	LauncherMicrosoft LauncherType = "microsoft"
+	LauncherItch      LauncherType = "itch"
 )
 
 var launcherTypeNames = map[LauncherType]string{
@@ -19,6 +20,7 @@ var launcherTypeNames = map[LauncherType]string{
 	LauncherSteam:     "Steam",
 	LauncherEpicGames: "Epic Games",
 	LauncherMicrosoft: "Microsoft Store",
+	LauncherItch:      "itch.io",
 }
 
 func (lt LauncherType) String() string {
@@ -46,6 +48,9 @@ func DetectLauncherType(amongUsDir string) LauncherType {
 	}
 	if strings.Contains(amongUsDir, "Innersloth.AmongUs") && strings.Contains(amongUsDir, "WindowsApps") {
 		return LauncherMicrosoft
+	}
+	if strings.Contains(amongUsDir, "among-us") && strings.Contains(amongUsDir, "AmongUsItch") {
+		return LauncherItch
 	}
 	return LauncherUnknown
 }
