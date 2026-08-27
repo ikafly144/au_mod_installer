@@ -103,8 +103,8 @@ func realMain(ctx context.Context) error {
 	// Initialize Security & File Scanning Service
 	scanSvc := service.NewScanService(os.Getenv("VIRUSTOTAL_API_KEY"))
 
-	// Initialize Submission Service
-	submissionSvc := service.NewSubmissionService(gormRepo, gormRepo, storageSvc, scanSvc)
+	// Initialize Submission & Moderation Service
+	submissionSvc := service.NewSubmissionService(gormRepo, gormRepo, gormRepo, storageSvc, scanSvc)
 
 	// Initialize Mod Service
 	modSrv := service.NewModService(gormRepo)
@@ -127,11 +127,14 @@ func realMain(ctx context.Context) error {
 
 	// Initialize Discord Bot Service
 	discordCfg := service.DiscordConfig{
-		Token:            os.Getenv("DISCORD_TOKEN"),
-		GuildID:          os.Getenv("DISCORD_GUILD_ID"),
-		ReviewChannelID:  os.Getenv("DISCORD_REVIEW_CHANNEL_ID"),
-		ShowcaseForumID:  os.Getenv("DISCORD_SHOWCASE_FORUM_ID"),
-		UpdatesChannelID: os.Getenv("DISCORD_UPDATES_CHANNEL_ID"),
+		Token:             os.Getenv("DISCORD_TOKEN"),
+		GuildID:           os.Getenv("DISCORD_GUILD_ID"),
+		ModRoleID:         os.Getenv("DISCORD_MOD_ROLE_ID"),
+		ReviewChannelID:   os.Getenv("DISCORD_REVIEW_CHANNEL_ID"),
+		ShowcaseForumID:   os.Getenv("DISCORD_SHOWCASE_FORUM_ID"),
+		UpdatesChannelID:  os.Getenv("DISCORD_UPDATES_CHANNEL_ID"),
+		ReportChannelID:   os.Getenv("DISCORD_REPORT_CHANNEL_ID"),
+		AuditLogChannelID: os.Getenv("DISCORD_AUDIT_LOG_CHANNEL_ID"),
 	}
 
 	discordBot := service.NewDiscordBotService(discordCfg, submissionSvc, modSrv)

@@ -23,6 +23,8 @@ func (r *GormRepository) Migrate() error {
 		&model.ModVersionDetails{},
 		&model.ModSubmission{},
 		&model.VersionSubmission{},
+		&model.ModAuditLog{},
+		&model.ModReport{},
 	); err != nil {
 		return err
 	}
@@ -42,6 +44,7 @@ func (r *GormRepository) GetModIds(after string, limit int) ([]string, string, e
 	var next string
 
 	query := r.db.Model(&model.ModDetails{}).
+		Where("status = ? OR status = ''", model.ModStatusApproved).
 		Order("created_at DESC").
 		Order("id DESC")
 

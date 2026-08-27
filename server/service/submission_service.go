@@ -17,13 +17,14 @@ import (
 )
 
 var (
-	ErrModAlreadyExists      = errors.New("a mod with this ID already exists")
-	ErrSubmissionNotFound    = errors.New("submission not found")
-	ErrUnauthorized          = errors.New("you do not have permission to manage this mod")
-	ErrInvalidModID          = errors.New("invalid mod ID: only alphanumeric characters, dots, and hyphens are allowed")
-	ErrInvalidVersionID      = errors.New("invalid version ID")
-	ErrSuspiciousFilesFound  = errors.New("suspicious files detected in mod archive")
-	validModIDRegex          = regexp.MustCompile(`^[a-zA-Z0-9_\.\-]+$`)
+	ErrModAlreadyExists     = errors.New("a mod with this ID already exists")
+	ErrSubmissionNotFound   = errors.New("submission not found")
+	ErrReportNotFound       = errors.New("report not found")
+	ErrUnauthorized         = errors.New("you do not have permission to manage this mod")
+	ErrInvalidModID         = errors.New("invalid mod ID: only alphanumeric characters, dots, and hyphens are allowed")
+	ErrInvalidVersionID     = errors.New("invalid version ID")
+	ErrSuspiciousFilesFound = errors.New("suspicious files detected in mod archive")
+	validModIDRegex         = regexp.MustCompile(`^[a-zA-Z0-9_\.\-]+$`)
 )
 
 type SubmitModRequest struct {
@@ -52,6 +53,7 @@ type SubmitVersionRequest struct {
 type SubmissionService struct {
 	subRepo repository.SubmissionRepository
 	modRepo repository.ModRepository
+	modrRepo repository.ModerationRepository
 	storage StorageService
 	scanner ScanService
 }
@@ -59,14 +61,16 @@ type SubmissionService struct {
 func NewSubmissionService(
 	subRepo repository.SubmissionRepository,
 	modRepo repository.ModRepository,
+	modrRepo repository.ModerationRepository,
 	storage StorageService,
 	scanner ScanService,
 ) *SubmissionService {
 	return &SubmissionService{
-		subRepo: subRepo,
-		modRepo: modRepo,
-		storage: storage,
-		scanner: scanner,
+		subRepo:  subRepo,
+		modRepo:  modRepo,
+		modrRepo: modrRepo,
+		storage:  storage,
+		scanner:  scanner,
 	}
 }
 
@@ -105,6 +109,8 @@ func (s *SubmissionService) SubmitMod(ctx context.Context, req SubmitModRequest)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create mod submission: %w", err)
 	}
+
+	s.logAudit(req.ModID, model.AuditActionModSubmitted, req.SubmitterID, "Initial mod submission", nil)
 
 	return submission, nil
 }
@@ -214,6 +220,11 @@ func (s *SubmissionService) SubmitVersion(ctx context.Context, req SubmitVersion
 		return nil, inspection, fmt.Errorf("failed to create version submission: %w", err)
 	}
 
+	s.logAudit(req.ModID, model.AuditActionVersionSubmitted, req.SubmitterID, fmt.Sprintf("Version %s submitted", req.VersionID), model.StringMap{
+		"version_id": req.VersionID,
+		"filename":   req.Filename,
+	})
+
 	return verSub, inspection, nil
 }
 
@@ -244,6 +255,7 @@ func (s *SubmissionService) ApproveModSubmission(ctx context.Context, submission
 		Name:                   sub.Name,
 		Description:            sub.Description,
 		Author:                 sub.AuthorName,
+		Status:                 model.ModStatusApproved,
 		OwnerDiscordID:         sub.SubmitterID,
 		CollaboratorDiscordIDs: model.StringArray{},
 		ThumbnailURI:           thumb,
@@ -255,6 +267,8 @@ func (s *SubmissionService) ApproveModSubmission(ctx context.Context, submission
 	if err != nil {
 		return nil, fmt.Errorf("failed to create production mod: %w", err)
 	}
+
+	s.logAudit(sub.ModID, model.AuditActionModApproved, reviewerID, "Mod creation approved", nil)
 
 	return mod, nil
 }
@@ -274,6 +288,8 @@ func (s *SubmissionService) RejectModSubmission(ctx context.Context, submissionI
 	if err := s.subRepo.UpdateModSubmission(sub); err != nil {
 		return nil, fmt.Errorf("failed to update submission status: %w", err)
 	}
+
+	s.logAudit(sub.ModID, model.AuditActionModRejected, reviewerID, reason, nil)
 
 	return sub, nil
 }
@@ -329,11 +345,11 @@ func (s *SubmissionService) ApproveVersionSubmission(ctx context.Context, verSub
 	}
 
 	// Update latest version ID on ModDetails
-	if err := s.modRepo.UpdateMod(verSub.ModID, &model.ModDetails{
+	_ = s.modRepo.UpdateMod(verSub.ModID, &model.ModDetails{
 		LatestVersionID: &versionInternalID,
-	}); err != nil {
-		// Log or handle non-fatal update
-	}
+	})
+
+	s.logAudit(verSub.ModID, model.AuditActionVersionApproved, reviewerID, fmt.Sprintf("Version %s approved", verSub.VersionID), nil)
 
 	return versionDetails, nil
 }
@@ -354,7 +370,149 @@ func (s *SubmissionService) RejectVersionSubmission(ctx context.Context, verSubm
 		return nil, fmt.Errorf("failed to update version submission status: %w", err)
 	}
 
+	s.logAudit(verSub.ModID, model.AuditActionVersionRejected, reviewerID, reason, nil)
+
 	return verSub, nil
+}
+
+// Moderation & Kill-switch Actions
+
+func (s *SubmissionService) BanMod(ctx context.Context, modID, actorID, reason string) error {
+	mod, err := s.modRepo.GetModDetails(modID)
+	if err != nil {
+		return err
+	}
+	mod.Status = model.ModStatusBanned
+	if err := s.modRepo.UpdateMod(modID, mod); err != nil {
+		return err
+	}
+	s.logAudit(modID, model.AuditActionModBanned, actorID, reason, nil)
+	return nil
+}
+
+func (s *SubmissionService) UnbanMod(ctx context.Context, modID, actorID string) error {
+	mod, err := s.modRepo.GetModDetails(modID)
+	if err != nil {
+		return err
+	}
+	mod.Status = model.ModStatusApproved
+	if err := s.modRepo.UpdateMod(modID, mod); err != nil {
+		return err
+	}
+	s.logAudit(modID, model.AuditActionModUnbanned, actorID, "Mod unbanned by moderator", nil)
+	return nil
+}
+
+func (s *SubmissionService) UnpublishMod(ctx context.Context, modID, actorID, reason string) error {
+	mod, err := s.modRepo.GetModDetails(modID)
+	if err != nil {
+		return err
+	}
+	mod.Status = model.ModStatusUnpublished
+	if err := s.modRepo.UpdateMod(modID, mod); err != nil {
+		return err
+	}
+	s.logAudit(modID, model.AuditActionModUnpublished, actorID, reason, nil)
+	return nil
+}
+
+func (s *SubmissionService) PublishMod(ctx context.Context, modID, actorID string) error {
+	mod, err := s.modRepo.GetModDetails(modID)
+	if err != nil {
+		return err
+	}
+	mod.Status = model.ModStatusApproved
+	if err := s.modRepo.UpdateMod(modID, mod); err != nil {
+		return err
+	}
+	s.logAudit(modID, model.AuditActionModPublished, actorID, "Mod republished", nil)
+	return nil
+}
+
+// Report Actions
+
+func (s *SubmissionService) CreateReport(ctx context.Context, modID, reporterID string, category model.ReportCategory, reason string) (*model.ModReport, error) {
+	if _, err := s.modRepo.GetModDetails(modID); err != nil {
+		return nil, errors.New("target mod not found")
+	}
+
+	report := &model.ModReport{
+		ID:         uuid.NewString(),
+		ModID:      modID,
+		ReporterID: reporterID,
+		Category:   category,
+		Reason:     reason,
+		Status:     model.ReportStatusPending,
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+	}
+
+	_, err := s.modrRepo.CreateReport(report)
+	if err != nil {
+		return nil, err
+	}
+
+	s.logAudit(modID, model.AuditActionModReported, reporterID, fmt.Sprintf("Reported for: %s", category), nil)
+	return report, nil
+}
+
+func (s *SubmissionService) ResolveReport(ctx context.Context, reportID, actorID, actionTaken string) (*model.ModReport, error) {
+	report, err := s.modrRepo.GetReport(reportID)
+	if err != nil {
+		return nil, ErrReportNotFound
+	}
+
+	now := time.Now()
+	report.Status = model.ReportStatusResolved
+	report.ActionTaken = actionTaken
+	report.ResolvedBy = actorID
+	report.ResolvedAt = &now
+
+	if err := s.modrRepo.UpdateReport(report); err != nil {
+		return nil, err
+	}
+
+	s.logAudit(report.ModID, model.AuditActionReportResolved, actorID, fmt.Sprintf("Report resolved: %s", actionTaken), nil)
+	return report, nil
+}
+
+func (s *SubmissionService) DismissReport(ctx context.Context, reportID, actorID string) (*model.ModReport, error) {
+	report, err := s.modrRepo.GetReport(reportID)
+	if err != nil {
+		return nil, ErrReportNotFound
+	}
+
+	now := time.Now()
+	report.Status = model.ReportStatusDismissed
+	report.ResolvedBy = actorID
+	report.ResolvedAt = &now
+
+	if err := s.modrRepo.UpdateReport(report); err != nil {
+		return nil, err
+	}
+
+	s.logAudit(report.ModID, model.AuditActionReportDismissed, actorID, "Report dismissed", nil)
+	return report, nil
+}
+
+func (s *SubmissionService) GetAuditLogs(ctx context.Context, modID string, limit int) ([]model.ModAuditLog, error) {
+	return s.modrRepo.GetAuditLogs(modID, limit)
+}
+
+func (s *SubmissionService) GetPendingReports(ctx context.Context) ([]model.ModReport, error) {
+	return s.modrRepo.GetPendingReports()
+}
+
+func (s *SubmissionService) GetPendingSubmissions(ctx context.Context) ([]model.ModSubmission, []model.VersionSubmission, error) {
+	modSubs, err := s.subRepo.GetPendingModSubmissions()
+	if err != nil {
+		return nil, nil, err
+	}
+	verSubs, err := s.subRepo.GetPendingVersionSubmissions("")
+	if err != nil {
+		return nil, nil, err
+	}
+	return modSubs, verSubs, nil
 }
 
 func (s *SubmissionService) GetModSubmission(id string) (*model.ModSubmission, error) {
@@ -376,9 +534,13 @@ func (s *SubmissionService) AddCollaborator(ctx context.Context, modID, requeste
 
 	if !slices.Contains(mod.CollaboratorDiscordIDs, collaboratorID) {
 		mod.CollaboratorDiscordIDs = append(mod.CollaboratorDiscordIDs, collaboratorID)
-		return s.modRepo.UpdateMod(modID, &model.ModDetails{
+		err := s.modRepo.UpdateMod(modID, &model.ModDetails{
 			CollaboratorDiscordIDs: mod.CollaboratorDiscordIDs,
 		})
+		if err == nil {
+			s.logAudit(modID, model.AuditActionCollaboratorAdded, requesterID, fmt.Sprintf("Added collaborator: %s", collaboratorID), nil)
+		}
+		return err
 	}
 	return nil
 }
@@ -399,9 +561,13 @@ func (s *SubmissionService) RemoveCollaborator(ctx context.Context, modID, reque
 		}
 	}
 	mod.CollaboratorDiscordIDs = newCollabs
-	return s.modRepo.UpdateMod(modID, &model.ModDetails{
+	err = s.modRepo.UpdateMod(modID, &model.ModDetails{
 		CollaboratorDiscordIDs: mod.CollaboratorDiscordIDs,
 	})
+	if err == nil {
+		s.logAudit(modID, model.AuditActionCollaboratorRemoved, requesterID, fmt.Sprintf("Removed collaborator: %s", collaboratorID), nil)
+	}
+	return err
 }
 
 func (s *SubmissionService) TransferOwnership(ctx context.Context, modID, currentOwnerID, newOwnerID string) error {
@@ -414,9 +580,13 @@ func (s *SubmissionService) TransferOwnership(ctx context.Context, modID, curren
 	}
 
 	mod.OwnerDiscordID = newOwnerID
-	return s.modRepo.UpdateMod(modID, &model.ModDetails{
+	err = s.modRepo.UpdateMod(modID, &model.ModDetails{
 		OwnerDiscordID: newOwnerID,
 	})
+	if err == nil {
+		s.logAudit(modID, model.AuditActionOwnershipTransferred, currentOwnerID, fmt.Sprintf("Transferred ownership to: %s", newOwnerID), nil)
+	}
+	return err
 }
 
 func (s *SubmissionService) SetDiscordThreadID(ctx context.Context, modID, threadID string) error {
@@ -430,4 +600,18 @@ func (s *SubmissionService) isAuthorized(mod *model.ModDetails, discordUserID st
 		return true
 	}
 	return slices.Contains(mod.CollaboratorDiscordIDs, discordUserID)
+}
+
+func (s *SubmissionService) logAudit(modID string, action model.ModAuditAction, actorID, reason string, details model.StringMap) {
+	if s.modrRepo != nil {
+		_ = s.modrRepo.CreateAuditLog(&model.ModAuditLog{
+			ID:        uuid.NewString(),
+			ModID:     modID,
+			Action:    action,
+			ActorID:   actorID,
+			Reason:    reason,
+			Details:   details,
+			CreatedAt: time.Now(),
+		})
+	}
 }

@@ -70,6 +70,7 @@ type ModDetails struct {
 	Name                   string      `gorm:"not null" json:"name"`
 	Description            string      `gorm:"not null" json:"description"`
 	Author                 string      `gorm:"not null" json:"author"`
+	Status                 ModStatus   `gorm:"index:idx_mod_status;default:'approved'" json:"-"`
 	OwnerDiscordID         string      `gorm:"index:idx_mod_owner_discord;default:''" json:"-"`
 	CollaboratorDiscordIDs StringArray `gorm:"type:json" json:"-"`
 	DiscordThreadID        string      `gorm:"default:''" json:"-"`

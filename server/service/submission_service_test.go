@@ -80,8 +80,10 @@ func (m *mockModRepo) CreateModVersion(modID string, details *model.ModVersionDe
 }
 
 func (m *mockModRepo) GetModIds(next string, limit int) (ids []string, nextID string, err error) {
-	for k := range m.mods {
-		ids = append(ids, k)
+	for k, mod := range m.mods {
+		if mod.Status == model.ModStatusApproved || mod.Status == "" {
+			ids = append(ids, k)
+		}
 	}
 	return ids, "", nil
 }
@@ -116,6 +118,9 @@ func (m *mockModRepo) UpdateMod(modID string, details *model.ModDetails) error {
 		}
 		if details.Description != "" {
 			mod.Description = details.Description
+		}
+		if details.Status != "" {
+			mod.Status = details.Status
 		}
 		if details.OwnerDiscordID != "" {
 			mod.OwnerDiscordID = details.OwnerDiscordID
@@ -225,6 +230,16 @@ func (m *mockSubRepo) GetVersionSubmission(id string) (*model.VersionSubmission,
 	return nil, errors.New("not found")
 }
 
+func (m *mockSubRepo) GetVersionSubmissionsByModID(modID string) ([]model.VersionSubmission, error) {
+	var res []model.VersionSubmission
+	for _, s := range m.verSubs {
+		if s.ModID == modID {
+			res = append(res, *s)
+		}
+	}
+	return res, nil
+}
+
 func (m *mockSubRepo) GetPendingVersionSubmissions(modID string) ([]model.VersionSubmission, error) {
 	var res []model.VersionSubmission
 	for _, s := range m.verSubs {
@@ -257,14 +272,79 @@ func (m *mockSubRepo) DeleteVersionSubmission(id string) error {
 	return nil
 }
 
+// Mock ModerationRepository
+type mockModerationRepo struct {
+	auditLogs []model.ModAuditLog
+	reports   map[string]*model.ModReport
+}
+
+func newMockModerationRepo() *mockModerationRepo {
+	return &mockModerationRepo{
+		reports: make(map[string]*model.ModReport),
+	}
+}
+
+func (m *mockModerationRepo) CreateAuditLog(log *model.ModAuditLog) error {
+	m.auditLogs = append(m.auditLogs, *log)
+	return nil
+}
+
+func (m *mockModerationRepo) GetAuditLogs(modID string, limit int) ([]model.ModAuditLog, error) {
+	var res []model.ModAuditLog
+	for _, l := range m.auditLogs {
+		if modID == "" || l.ModID == modID {
+			res = append(res, l)
+		}
+	}
+	return res, nil
+}
+
+func (m *mockModerationRepo) CreateReport(report *model.ModReport) (string, error) {
+	m.reports[report.ID] = report
+	return report.ID, nil
+}
+
+func (m *mockModerationRepo) GetReport(id string) (*model.ModReport, error) {
+	if r, ok := m.reports[id]; ok {
+		return r, nil
+	}
+	return nil, errors.New("not found")
+}
+
+func (m *mockModerationRepo) GetPendingReports() ([]model.ModReport, error) {
+	var res []model.ModReport
+	for _, r := range m.reports {
+		if r.Status == model.ReportStatusPending {
+			res = append(res, *r)
+		}
+	}
+	return res, nil
+}
+
+func (m *mockModerationRepo) GetReportsByModID(modID string) ([]model.ModReport, error) {
+	var res []model.ModReport
+	for _, r := range m.reports {
+		if r.ModID == modID {
+			res = append(res, *r)
+		}
+	}
+	return res, nil
+}
+
+func (m *mockModerationRepo) UpdateReport(report *model.ModReport) error {
+	m.reports[report.ID] = report
+	return nil
+}
+
 func TestSubmissionService_Lifecycle(t *testing.T) {
 	ctx := context.Background()
 	storage := newMockStorage()
 	modRepo := newMockModRepo()
 	subRepo := newMockSubRepo()
+	modrRepo := newMockModerationRepo()
 	scanner := NewScanService("")
 
-	svc := NewSubmissionService(subRepo, modRepo, storage, scanner)
+	svc := NewSubmissionService(subRepo, modRepo, modrRepo, storage, scanner)
 
 	// 1. Submit Mod
 	sub, err := svc.SubmitMod(ctx, SubmitModRequest{
@@ -282,6 +362,7 @@ func TestSubmissionService_Lifecycle(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "com.example.testmod", mod.ID)
 	assert.Equal(t, "user_12345", mod.OwnerDiscordID)
+	assert.Equal(t, model.ModStatusApproved, mod.Status)
 
 	// Verify mod exists in production repo
 	prodMod, err := modRepo.GetModDetails("com.example.testmod")
@@ -330,4 +411,33 @@ func TestSubmissionService_Lifecycle(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "1.1.0", verSub2.VersionID)
+
+	// 6. Moderation: Ban Mod
+	err = svc.BanMod(ctx, "com.example.testmod", "staff_999", "Malware detected")
+	require.NoError(t, err)
+	bannedMod, err := modRepo.GetModDetails("com.example.testmod")
+	require.NoError(t, err)
+	assert.Equal(t, model.ModStatusBanned, bannedMod.Status)
+
+	// 7. Moderation: Unban Mod
+	err = svc.UnbanMod(ctx, "com.example.testmod", "staff_999")
+	require.NoError(t, err)
+	unbannedMod, err := modRepo.GetModDetails("com.example.testmod")
+	require.NoError(t, err)
+	assert.Equal(t, model.ModStatusApproved, unbannedMod.Status)
+
+	// 8. User Reporting
+	report, err := svc.CreateReport(ctx, "com.example.testmod", "player_99", model.ReportCategoryCrash, "Crashes on startup")
+	require.NoError(t, err)
+	assert.Equal(t, model.ReportStatusPending, report.Status)
+
+	// 9. Resolve Report
+	resolvedReport, err := svc.ResolveReport(ctx, report.ID, "staff_999", "Fixed in v1.1.0")
+	require.NoError(t, err)
+	assert.Equal(t, model.ReportStatusResolved, resolvedReport.Status)
+
+	// 10. Audit Logs
+	logs, err := svc.GetAuditLogs(ctx, "com.example.testmod", 20)
+	require.NoError(t, err)
+	assert.NotEmpty(t, logs)
 }

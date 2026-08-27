@@ -21,11 +21,14 @@ import (
 )
 
 type DiscordConfig struct {
-	Token            string
-	GuildID          string
-	ReviewChannelID  string
-	ShowcaseForumID  string
-	UpdatesChannelID string
+	Token               string
+	GuildID             string
+	ModRoleID           string
+	ReviewChannelID     string
+	ShowcaseForumID     string
+	UpdatesChannelID    string
+	ReportChannelID     string
+	AuditLogChannelID   string
 }
 
 type DiscordBotService struct {
@@ -69,7 +72,7 @@ func (s *DiscordBotService) setupRoutes() {
 		})
 	})
 
-	// Slash Commands Routing
+	// Standard Slash Commands
 	r.SlashCommand("/mod/create", s.handleModCreateModal)
 	r.SlashCommand("/mod/version-add", s.handleVersionAdd)
 	r.SlashCommand("/mod/list", s.handleModList)
@@ -77,17 +80,31 @@ func (s *DiscordBotService) setupRoutes() {
 	r.SlashCommand("/mod/collaborator/add", s.handleCollaboratorAdd)
 	r.SlashCommand("/mod/collaborator/remove", s.handleCollaboratorRemove)
 	r.SlashCommand("/mod/transfer-owner", s.handleTransferOwner)
+	r.SlashCommand("/mod/report", s.handleModReportCommand)
+
+	// Moderation Slash Commands
+	r.SlashCommand("/mod/ban", s.handleModBan)
+	r.SlashCommand("/mod/unban", s.handleModUnban)
+	r.SlashCommand("/mod/unpublish", s.handleModUnpublish)
+	r.SlashCommand("/mod/publish", s.handleModPublish)
+	r.SlashCommand("/mod/review-queue", s.handleReviewQueue)
+	r.SlashCommand("/mod/audit-log", s.handleModAuditLog)
 
 	// Modal Submit Routing
 	r.Modal("/mod_create_modal", s.onModCreateModalSubmit)
 	r.Modal("/reject_mod_modal/{id}", s.handleRejectModModalSubmit)
 	r.Modal("/reject_ver_modal/{id}", s.handleRejectVersionModalSubmit)
+	r.Modal("/report_mod_modal/{id}", s.handleReportModModalSubmit)
 
 	// Button Component Routing
 	r.ButtonComponent("/approve_mod/{id}", s.handleApproveModButton)
 	r.ButtonComponent("/reject_mod/{id}", s.handleRejectModButton)
 	r.ButtonComponent("/approve_ver/{id}", s.handleApproveVersionButton)
 	r.ButtonComponent("/reject_ver/{id}", s.handleRejectVersionButton)
+	r.ButtonComponent("/open_report_modal/{id}", s.handleOpenReportModalButton)
+	r.ButtonComponent("/report_ban/{id}", s.handleReportBanButton)
+	r.ButtonComponent("/report_resolve/{id}", s.handleReportResolveButton)
+	r.ButtonComponent("/report_dismiss/{id}", s.handleReportDismissButton)
 }
 
 func (s *DiscordBotService) Start(ctx context.Context) error {
@@ -116,7 +133,7 @@ func (s *DiscordBotService) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to open Discord gateway: %w", err)
 	}
 
-	slog.InfoContext(ctx, "Discord bot connected successfully with handler package")
+	slog.InfoContext(ctx, "Discord bot connected successfully with moderation features")
 
 	// Register Slash Commands
 	if err := s.registerCommands(ctx); err != nil {
@@ -137,7 +154,7 @@ func (s *DiscordBotService) registerCommands(ctx context.Context) error {
 	commands := []discord.ApplicationCommandCreate{
 		discord.SlashCommandCreate{
 			Name:        "mod",
-			Description: "Mod of Us: Mod の作成・管理コマンド",
+			Description: "Mod of Us: Mod の作成・管理・モデレーションコマンド",
 			Options: []discord.ApplicationCommandOption{
 				discord.ApplicationCommandOptionSubCommand{
 					Name:        "create",
@@ -200,6 +217,17 @@ func (s *DiscordBotService) registerCommands(ctx context.Context) error {
 						},
 					},
 				},
+				discord.ApplicationCommandOptionSubCommand{
+					Name:        "report",
+					Description: "規約違反や危険な Mod をモデレーターに通報します",
+					Options: []discord.ApplicationCommandOption{
+						discord.ApplicationCommandOptionString{
+							Name:        "mod_id",
+							Description: "通報対象の Mod ID",
+							Required:    true,
+						},
+					},
+				},
 				discord.ApplicationCommandOptionSubCommandGroup{
 					Name:        "collaborator",
 					Description: "共同開発者の管理",
@@ -254,6 +282,76 @@ func (s *DiscordBotService) registerCommands(ctx context.Context) error {
 						},
 					},
 				},
+				// Moderation Commands
+				discord.ApplicationCommandOptionSubCommand{
+					Name:        "ban",
+					Description: "[モデレーター専用] Mod を BAN (完全配信停止) します",
+					Options: []discord.ApplicationCommandOption{
+						discord.ApplicationCommandOptionString{
+							Name:        "mod_id",
+							Description: "BAN する Mod ID",
+							Required:    true,
+						},
+						discord.ApplicationCommandOptionString{
+							Name:        "reason",
+							Description: "BAN の理由",
+							Required:    true,
+						},
+					},
+				},
+				discord.ApplicationCommandOptionSubCommand{
+					Name:        "unban",
+					Description: "[モデレーター専用] Mod の BAN を解除します",
+					Options: []discord.ApplicationCommandOption{
+						discord.ApplicationCommandOptionString{
+							Name:        "mod_id",
+							Description: "BAN を解除する Mod ID",
+							Required:    true,
+						},
+					},
+				},
+				discord.ApplicationCommandOptionSubCommand{
+					Name:        "unpublish",
+					Description: "[モデレーター専用] Mod を一時的に非公開にします",
+					Options: []discord.ApplicationCommandOption{
+						discord.ApplicationCommandOptionString{
+							Name:        "mod_id",
+							Description: "非公開にする Mod ID",
+							Required:    true,
+						},
+						discord.ApplicationCommandOptionString{
+							Name:        "reason",
+							Description: "非公開の理由",
+							Required:    true,
+						},
+					},
+				},
+				discord.ApplicationCommandOptionSubCommand{
+					Name:        "publish",
+					Description: "[モデレーター専用] 非公開 Mod を再公開します",
+					Options: []discord.ApplicationCommandOption{
+						discord.ApplicationCommandOptionString{
+							Name:        "mod_id",
+							Description: "再公開する Mod ID",
+							Required:    true,
+						},
+					},
+				},
+				discord.ApplicationCommandOptionSubCommand{
+					Name:        "review-queue",
+					Description: "[モデレーター専用] 審査待ちの Mod / バージョン一覧を表示します",
+				},
+				discord.ApplicationCommandOptionSubCommand{
+					Name:        "audit-log",
+					Description: "[モデレーター専用] Mod のモデレーション履歴・監査ログを表示します",
+					Options: []discord.ApplicationCommandOption{
+						discord.ApplicationCommandOptionString{
+							Name:        "mod_id",
+							Description: "確認したい Mod ID",
+							Required:    true,
+						},
+					},
+				},
 			},
 		},
 	}
@@ -269,6 +367,23 @@ func (s *DiscordBotService) registerCommands(ctx context.Context) error {
 
 	_, err := s.client.Rest.SetGlobalCommands(s.client.ApplicationID, commands)
 	return err
+}
+
+func (s *DiscordBotService) isModerator(member *discord.ResolvedMember, user discord.User) bool {
+	if member != nil {
+		perms := member.Permissions
+		if perms.Has(discord.PermissionAdministrator) || perms.Has(discord.PermissionManageGuild) || perms.Has(discord.PermissionModerateMembers) {
+			return true
+		}
+		if s.cfg.ModRoleID != "" {
+			for _, roleID := range member.RoleIDs {
+				if roleID.String() == s.cfg.ModRoleID {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 func (s *DiscordBotService) handleModCreateModal(data discord.SlashCommandInteractionData, e *handler.CommandEvent) error {
@@ -371,13 +486,12 @@ func (s *DiscordBotService) handleVersionAdd(data discord.SlashCommandInteractio
 		return nil
 	}
 
-	// Notify Submitter
 	_, _ = e.UpdateInteractionResponse(discord.MessageUpdate{
 		Content: ptr(fmt.Sprintf("✅ Mod `%s` バージョン `%s` の申請を受け付けました！モデレーターによる審査が行われます。", modID, version)),
 	})
 
-	// Post Review Embed to Staff Channel
 	s.postVersionReviewEmbed(verSub, inspection, e.User())
+	s.postAuditLog(model.AuditActionVersionSubmitted, modID, e.User().Username, fmt.Sprintf("v%s submitted", version), nil)
 	return nil
 }
 
@@ -408,7 +522,13 @@ func (s *DiscordBotService) handleModList(data discord.SlashCommandInteractionDa
 		if latest == "" {
 			latest = "未リリース"
 		}
-		sb.WriteString(fmt.Sprintf("• **%s** (`%s`) - 最新版: `%s`\n", m.Name, m.ID, latest))
+		statusIcon := "🟢"
+		if m.Status == model.ModStatusBanned {
+			statusIcon = "🚫 (BAN)"
+		} else if m.Status == model.ModStatusUnpublished {
+			statusIcon = "🟡 (非公開)"
+		}
+		sb.WriteString(fmt.Sprintf("%s **%s** (`%s`) - 最新版: `%s`\n", statusIcon, m.Name, m.ID, latest))
 	}
 
 	_, _ = e.UpdateInteractionResponse(discord.MessageUpdate{
@@ -429,21 +549,37 @@ func (s *DiscordBotService) handleModInfo(data discord.SlashCommandInteractionDa
 		return nil
 	}
 
+	statusText := "公開中"
+	color := 0x5865F2
+	if mod.Status == model.ModStatusBanned {
+		statusText = "🚫 BAN済み"
+		color = 0xED4245
+	} else if mod.Status == model.ModStatusUnpublished {
+		statusText = "🟡 非公開中"
+		color = 0xFEE75C
+	}
+
 	embed := discord.NewEmbed().
 		WithTitle(mod.Name).
 		WithDescription(mod.Description).
 		AddField("Mod ID", fmt.Sprintf("`%s`", mod.ID), true).
 		AddField("作者", mod.Author, true).
 		AddField("最新バージョン", fmt.Sprintf("`%s`", mod.LatestVersionExternal), true).
-		WithColor(0x5865F2).
+		AddField("状態", statusText, true).
+		WithColor(color).
 		WithTimestamp(time.Now())
 
 	if mod.ThumbnailURI != nil && *mod.ThumbnailURI != "" {
 		embed = embed.WithThumbnail(*mod.ThumbnailURI)
 	}
 
+	actionRow := discord.NewActionRow(
+		discord.NewDangerButton("🚨 通報する (Report)", fmt.Sprintf("/open_report_modal/%s", mod.ID)),
+	)
+
 	_, _ = e.UpdateInteractionResponse(discord.MessageUpdate{
-		Embeds: &[]discord.Embed{embed},
+		Embeds:     &[]discord.Embed{embed},
+		Components: &[]discord.LayoutComponent{actionRow},
 	})
 	return nil
 }
@@ -465,6 +601,7 @@ func (s *DiscordBotService) handleCollaboratorAdd(data discord.SlashCommandInter
 	_, _ = e.UpdateInteractionResponse(discord.MessageUpdate{
 		Content: ptr(fmt.Sprintf("✅ %s を Mod `%s` の共同開発者に追加しました！", user.Mention(), modID)),
 	})
+	s.postAuditLog(model.AuditActionCollaboratorAdded, modID, e.User().Username, fmt.Sprintf("Added %s (%s)", user.Username, user.ID), nil)
 	return nil
 }
 
@@ -485,6 +622,7 @@ func (s *DiscordBotService) handleCollaboratorRemove(data discord.SlashCommandIn
 	_, _ = e.UpdateInteractionResponse(discord.MessageUpdate{
 		Content: ptr(fmt.Sprintf("✅ %s を Mod `%s` の共同開発者から解除しました。", user.Mention(), modID)),
 	})
+	s.postAuditLog(model.AuditActionCollaboratorRemoved, modID, e.User().Username, fmt.Sprintf("Removed %s (%s)", user.Username, user.ID), nil)
 	return nil
 }
 
@@ -505,7 +643,416 @@ func (s *DiscordBotService) handleTransferOwner(data discord.SlashCommandInterac
 	_, _ = e.UpdateInteractionResponse(discord.MessageUpdate{
 		Content: ptr(fmt.Sprintf("👑 Mod `%s` のオーナー権限を %s に譲渡しました！", modID, newOwner.Mention())),
 	})
+	s.postAuditLog(model.AuditActionOwnershipTransferred, modID, e.User().Username, fmt.Sprintf("Transferred to %s (%s)", newOwner.Username, newOwner.ID), nil)
 	return nil
+}
+
+// Moderation Commands
+
+func (s *DiscordBotService) handleModBan(data discord.SlashCommandInteractionData, e *handler.CommandEvent) error {
+	_ = e.DeferCreateMessage(true)
+	if member, ok := data.OptMember("user"); ok && !s.isModerator(&member, e.User()) {
+		_, _ = e.UpdateInteractionResponse(discord.MessageUpdate{
+			Content: ptr("❌ この操作を実行するモデレーター権限がありません。"),
+		})
+		return nil
+	}
+
+	modID := data.String("mod_id")
+	reason := data.String("reason")
+
+	ctx := context.Background()
+	mod, err := s.modService.GetModDetails(modID)
+	if err != nil || mod == nil {
+		_, _ = e.UpdateInteractionResponse(discord.MessageUpdate{
+			Content: ptr(fmt.Sprintf("❌ Mod `%s` が見つかりませんでした。", modID)),
+		})
+		return nil
+	}
+
+	if err := s.subService.BanMod(ctx, modID, e.User().ID.String(), reason); err != nil {
+		_, _ = e.UpdateInteractionResponse(discord.MessageUpdate{
+			Content: ptr(fmt.Sprintf("❌ BAN処理に失敗しました: %v", err)),
+		})
+		return nil
+	}
+
+	// Lock Forum Thread if exists
+	if mod.DiscordThreadID != "" {
+		if threadID, err := snowflake.Parse(mod.DiscordThreadID); err == nil {
+			_, _ = s.client.Rest.CreateMessage(threadID, discord.MessageCreate{
+				Content: fmt.Sprintf("🚨 **この Mod はモデレーターにより利用規約違反のため BAN されました。**\n理由: %s", reason),
+			})
+		}
+	}
+
+	// DM Author
+	if mod.OwnerDiscordID != "" {
+		if authorID, err := snowflake.Parse(mod.OwnerDiscordID); err == nil {
+			if dmCh, err := s.client.Rest.CreateDMChannel(authorID); err == nil && dmCh != nil {
+				_, _ = s.client.Rest.CreateMessage(dmCh.ID(), discord.MessageCreate{
+					Content: fmt.Sprintf("🚨 あなたの Mod **%s** (`%s`) は以下の理由により BAN（配信停止）されました:\n\n> %s", mod.Name, mod.ID, reason),
+				})
+			}
+		}
+	}
+
+	_, _ = e.UpdateInteractionResponse(discord.MessageUpdate{
+		Content: ptr(fmt.Sprintf("🚫 Mod **%s** (`%s`) を BAN しました。API から即座に非公開化されました。", mod.Name, modID)),
+	})
+
+	s.postAuditLog(model.AuditActionModBanned, modID, e.User().Username, reason, nil)
+	return nil
+}
+
+func (s *DiscordBotService) handleModUnban(data discord.SlashCommandInteractionData, e *handler.CommandEvent) error {
+	_ = e.DeferCreateMessage(true)
+	modID := data.String("mod_id")
+
+	ctx := context.Background()
+	if err := s.subService.UnbanMod(ctx, modID, e.User().ID.String()); err != nil {
+		_, _ = e.UpdateInteractionResponse(discord.MessageUpdate{
+			Content: ptr(fmt.Sprintf("❌ BAN解除に失敗しました: %v", err)),
+		})
+		return nil
+	}
+
+	_, _ = e.UpdateInteractionResponse(discord.MessageUpdate{
+		Content: ptr(fmt.Sprintf("✅ Mod `%s` の BAN を解除し、公開状態に戻しました。", modID)),
+	})
+
+	s.postAuditLog(model.AuditActionModUnbanned, modID, e.User().Username, "Unbanned by moderator", nil)
+	return nil
+}
+
+func (s *DiscordBotService) handleModUnpublish(data discord.SlashCommandInteractionData, e *handler.CommandEvent) error {
+	_ = e.DeferCreateMessage(true)
+	modID := data.String("mod_id")
+	reason := data.String("reason")
+
+	ctx := context.Background()
+	if err := s.subService.UnpublishMod(ctx, modID, e.User().ID.String(), reason); err != nil {
+		_, _ = e.UpdateInteractionResponse(discord.MessageUpdate{
+			Content: ptr(fmt.Sprintf("❌ 非公開処理に失敗しました: %v", err)),
+		})
+		return nil
+	}
+
+	_, _ = e.UpdateInteractionResponse(discord.MessageUpdate{
+		Content: ptr(fmt.Sprintf("🟡 Mod `%s` を非公開に設定しました。", modID)),
+	})
+
+	s.postAuditLog(model.AuditActionModUnpublished, modID, e.User().Username, reason, nil)
+	return nil
+}
+
+func (s *DiscordBotService) handleModPublish(data discord.SlashCommandInteractionData, e *handler.CommandEvent) error {
+	_ = e.DeferCreateMessage(true)
+	modID := data.String("mod_id")
+
+	ctx := context.Background()
+	if err := s.subService.PublishMod(ctx, modID, e.User().ID.String()); err != nil {
+		_, _ = e.UpdateInteractionResponse(discord.MessageUpdate{
+			Content: ptr(fmt.Sprintf("❌ 再公開処理に失敗しました: %v", err)),
+		})
+		return nil
+	}
+
+	_, _ = e.UpdateInteractionResponse(discord.MessageUpdate{
+		Content: ptr(fmt.Sprintf("✅ Mod `%s` を再公開しました。", modID)),
+	})
+
+	s.postAuditLog(model.AuditActionModPublished, modID, e.User().Username, "Republished by moderator", nil)
+	return nil
+}
+
+func (s *DiscordBotService) handleReviewQueue(data discord.SlashCommandInteractionData, e *handler.CommandEvent) error {
+	_ = e.DeferCreateMessage(true)
+	ctx := context.Background()
+	modSubs, verSubs, err := s.subService.GetPendingSubmissions(ctx)
+	if err != nil {
+		_, _ = e.UpdateInteractionResponse(discord.MessageUpdate{
+			Content: ptr(fmt.Sprintf("❌ 審査キューの取得に失敗しました: %v", err)),
+		})
+		return nil
+	}
+
+	var sb strings.Builder
+	sb.WriteString("📋 **現在の審査キュー一覧:**\n\n")
+
+	sb.WriteString(fmt.Sprintf("**新規 Mod 申請 (%d 件):**\n", len(modSubs)))
+	if len(modSubs) == 0 {
+		sb.WriteString("（審査待ちの新規 Mod はありません）\n")
+	} else {
+		for _, sub := range modSubs {
+			sb.WriteString(fmt.Sprintf("• **%s** (`%s`) - 申請者: <@%s>\n", sub.Name, sub.ModID, sub.SubmitterID))
+		}
+	}
+
+	sb.WriteString(fmt.Sprintf("\n**新バージョン申請 (%d 件):**\n", len(verSubs)))
+	if len(verSubs) == 0 {
+		sb.WriteString("（審査待ちの新バージョンはありません）\n")
+	} else {
+		for _, sub := range verSubs {
+			sb.WriteString(fmt.Sprintf("• Mod: `%s` (v%s) - 申請者: <@%s>\n", sub.ModID, sub.VersionID, sub.SubmitterID))
+		}
+	}
+
+	_, _ = e.UpdateInteractionResponse(discord.MessageUpdate{
+		Content: ptr(sb.String()),
+	})
+	return nil
+}
+
+func (s *DiscordBotService) handleModAuditLog(data discord.SlashCommandInteractionData, e *handler.CommandEvent) error {
+	_ = e.DeferCreateMessage(true)
+	modID := data.String("mod_id")
+
+	ctx := context.Background()
+	logs, err := s.subService.GetAuditLogs(ctx, modID, 15)
+	if err != nil {
+		_, _ = e.UpdateInteractionResponse(discord.MessageUpdate{
+			Content: ptr(fmt.Sprintf("❌ 監査ログの取得に失敗しました: %v", err)),
+		})
+		return nil
+	}
+
+	if len(logs) == 0 {
+		_, _ = e.UpdateInteractionResponse(discord.MessageUpdate{
+			Content: ptr(fmt.Sprintf("📜 Mod `%s` の監査ログはありません。", modID)),
+		})
+		return nil
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("📜 **Mod `%s` の監査ログ履歴 (最新15件):**\n\n", modID))
+	for _, l := range logs {
+		sb.WriteString(fmt.Sprintf("• `[%s]` **%s** by <@%s> - %s\n", l.CreatedAt.Format("2006-01-02 15:04"), l.Action, l.ActorID, l.Reason))
+	}
+
+	_, _ = e.UpdateInteractionResponse(discord.MessageUpdate{
+		Content: ptr(sb.String()),
+	})
+	return nil
+}
+
+// User Report Handlers
+
+func (s *DiscordBotService) handleModReportCommand(data discord.SlashCommandInteractionData, e *handler.CommandEvent) error {
+	modID := data.String("mod_id")
+	return s.showReportModal(e, modID)
+}
+
+func (s *DiscordBotService) handleOpenReportModalButton(data discord.ButtonInteractionData, e *handler.ComponentEvent) error {
+	modID := e.Vars["id"]
+	modal := discord.NewModalCreate(fmt.Sprintf("/report_mod_modal/%s", modID), "Mod の通報",
+		discord.NewLabel("通報理由・カテゴリ (malware/crash/nsfw/copyright/other)",
+			discord.NewShortTextInput("category").
+				WithPlaceholder("malware / crash / copyright / other").
+				WithRequired(true).
+				WithMaxLength(32),
+		),
+		discord.NewLabel("詳細な理由・問題の説明",
+			discord.NewParagraphTextInput("reason").
+				WithPlaceholder("発生した問題や不正な挙動の詳細を記述してください").
+				WithRequired(true).
+				WithMaxLength(500),
+		),
+	)
+	return e.Modal(modal)
+}
+
+func (s *DiscordBotService) showReportModal(e *handler.CommandEvent, modID string) error {
+	modal := discord.NewModalCreate(fmt.Sprintf("/report_mod_modal/%s", modID), "Mod の通報",
+		discord.NewLabel("通報カテゴリ (malware/crash/nsfw/copyright/other)",
+			discord.NewShortTextInput("category").
+				WithPlaceholder("malware / crash / copyright / other").
+				WithRequired(true).
+				WithMaxLength(32),
+		),
+		discord.NewLabel("詳細な理由・問題の説明",
+			discord.NewParagraphTextInput("reason").
+				WithPlaceholder("発生した問題や不正な挙動の詳細を記述してください").
+				WithRequired(true).
+				WithMaxLength(500),
+		),
+	)
+	return e.Modal(modal)
+}
+
+func (s *DiscordBotService) handleReportModModalSubmit(e *handler.ModalEvent) error {
+	_ = e.DeferCreateMessage(true)
+	modID := e.Vars["id"]
+	categoryStr := strings.ToLower(strings.TrimSpace(e.Data.Text("category")))
+	reason := e.Data.Text("reason")
+
+	category := model.ReportCategoryOther
+	switch categoryStr {
+	case "malware", "virus":
+		category = model.ReportCategoryMalware
+	case "crash", "bug":
+		category = model.ReportCategoryCrash
+	case "nsfw":
+		category = model.ReportCategoryNSFW
+	case "copyright":
+		category = model.ReportCategoryCopyright
+	case "spam":
+		category = model.ReportCategorySpam
+	}
+
+	ctx := context.Background()
+	report, err := s.subService.CreateReport(ctx, modID, e.User().ID.String(), category, reason)
+	if err != nil {
+		_, _ = e.UpdateInteractionResponse(discord.MessageUpdate{
+			Content: ptr(fmt.Sprintf("❌ 通報の送信に失敗しました: %v", err)),
+		})
+		return nil
+	}
+
+	_, _ = e.UpdateInteractionResponse(discord.MessageUpdate{
+		Content: ptr("✅ 通報を受け付けました。モデレーターチームが確認・調査を行います。ご協力ありがとうございます。"),
+	})
+
+	s.postReportTicketEmbed(report, e.User())
+	s.postAuditLog(model.AuditActionModReported, modID, e.User().Username, fmt.Sprintf("Reported: %s", reason), nil)
+	return nil
+}
+
+func (s *DiscordBotService) postReportTicketEmbed(report *model.ModReport, reporter discord.User) {
+	if s.cfg.ReportChannelID == "" || s.client == nil {
+		return
+	}
+	chID, err := snowflake.Parse(s.cfg.ReportChannelID)
+	if err != nil {
+		return
+	}
+
+	embed := discord.NewEmbed().
+		WithTitle("🚨 [Mod 通報チケット] " + report.ModID).
+		AddField("通報対象 Mod", fmt.Sprintf("`%s`", report.ModID), true).
+		AddField("カテゴリ", string(report.Category), true).
+		AddField("通報者", reporter.Mention(), true).
+		AddField("通報理由", report.Reason, false).
+		WithColor(0xED4245).
+		WithTimestamp(time.Now())
+
+	actionRow := discord.NewActionRow(
+		discord.NewDangerButton("🚫 即時 BAN", fmt.Sprintf("/report_ban/%s", report.ID)),
+		discord.NewSuccessButton("✅ 解決済みにする", fmt.Sprintf("/report_resolve/%s", report.ID)),
+		discord.NewSecondaryButton("❌ 却下 / 誤報", fmt.Sprintf("/report_dismiss/%s", report.ID)),
+	)
+
+	_, _ = s.client.Rest.CreateMessage(chID, discord.MessageCreate{
+		Embeds:     []discord.Embed{embed},
+		Components: []discord.LayoutComponent{actionRow},
+	})
+}
+
+func (s *DiscordBotService) handleReportBanButton(data discord.ButtonInteractionData, e *handler.ComponentEvent) error {
+	reportID := e.Vars["id"]
+	_ = e.DeferUpdateMessage()
+
+	ctx := context.Background()
+	report, err := s.subService.modrRepo.GetReport(reportID)
+	if err != nil || report == nil {
+		return nil
+	}
+
+	_ = s.subService.BanMod(ctx, report.ModID, e.User().ID.String(), "Banned via user report: "+report.Reason)
+	_, _ = s.subService.ResolveReport(ctx, reportID, e.User().ID.String(), "Mod banned")
+
+	resolvedEmbed := discord.NewEmbed().
+		WithTitle(fmt.Sprintf("🚫 [通報対応完了: BAN] %s", report.ModID)).
+		AddField("対象 Mod", fmt.Sprintf("`%s`", report.ModID), true).
+		AddField("対応者", e.User().Mention(), true).
+		AddField("結果", "Mod を BAN しました", false).
+		WithColor(0xED4245).
+		WithTimestamp(time.Now())
+
+	_ = e.UpdateMessage(discord.MessageUpdate{
+		Embeds:     &[]discord.Embed{resolvedEmbed},
+		Components: &[]discord.LayoutComponent{},
+	})
+	return nil
+}
+
+func (s *DiscordBotService) handleReportResolveButton(data discord.ButtonInteractionData, e *handler.ComponentEvent) error {
+	reportID := e.Vars["id"]
+	_ = e.DeferUpdateMessage()
+
+	ctx := context.Background()
+	report, err := s.subService.ResolveReport(ctx, reportID, e.User().ID.String(), "Resolved by moderator")
+	if err != nil {
+		return nil
+	}
+
+	resolvedEmbed := discord.NewEmbed().
+		WithTitle(fmt.Sprintf("✅ [通報対応完了: 解決] %s", report.ModID)).
+		AddField("対象 Mod", fmt.Sprintf("`%s`", report.ModID), true).
+		AddField("対応者", e.User().Mention(), true).
+		AddField("結果", "解決済みに設定", false).
+		WithColor(0x57F287).
+		WithTimestamp(time.Now())
+
+	_ = e.UpdateMessage(discord.MessageUpdate{
+		Embeds:     &[]discord.Embed{resolvedEmbed},
+		Components: &[]discord.LayoutComponent{},
+	})
+	return nil
+}
+
+func (s *DiscordBotService) handleReportDismissButton(data discord.ButtonInteractionData, e *handler.ComponentEvent) error {
+	reportID := e.Vars["id"]
+	_ = e.DeferUpdateMessage()
+
+	ctx := context.Background()
+	report, err := s.subService.DismissReport(ctx, reportID, e.User().ID.String())
+	if err != nil {
+		return nil
+	}
+
+	dismissedEmbed := discord.NewEmbed().
+		WithTitle(fmt.Sprintf("❌ [通報対応完了: 却下] %s", report.ModID)).
+		AddField("対象 Mod", fmt.Sprintf("`%s`", report.ModID), true).
+		AddField("対応者", e.User().Mention(), true).
+		AddField("結果", "却下 / 誤報としてクローズ", false).
+		WithColor(0x95A5A6).
+		WithTimestamp(time.Now())
+
+	_ = e.UpdateMessage(discord.MessageUpdate{
+		Embeds:     &[]discord.Embed{dismissedEmbed},
+		Components: &[]discord.LayoutComponent{},
+	})
+	return nil
+}
+
+func (s *DiscordBotService) postAuditLog(action model.ModAuditAction, modID, actor, reason string, details model.StringMap) {
+	if s.cfg.AuditLogChannelID == "" || s.client == nil {
+		return
+	}
+	chID, err := snowflake.Parse(s.cfg.AuditLogChannelID)
+	if err != nil {
+		return
+	}
+
+	color := 0x5865F2
+	if strings.Contains(string(action), "BAN") || strings.Contains(string(action), "REJECT") {
+		color = 0xED4245
+	} else if strings.Contains(string(action), "APPROVE") {
+		color = 0x57F287
+	}
+
+	embed := discord.NewEmbed().
+		WithTitle(fmt.Sprintf("📜 [監査ログ] %s", action)).
+		AddField("Mod ID", fmt.Sprintf("`%s`", modID), true).
+		AddField("実行者", actor, true).
+		AddField("内容/理由", reason, false).
+		WithColor(color).
+		WithTimestamp(time.Now())
+
+	_, _ = s.client.Rest.CreateMessage(chID, discord.MessageCreate{
+		Embeds: []discord.Embed{embed},
+	})
 }
 
 func (s *DiscordBotService) onModCreateModalSubmit(e *handler.ModalEvent) error {
@@ -538,6 +1085,7 @@ func (s *DiscordBotService) onModCreateModalSubmit(e *handler.ModalEvent) error 
 	})
 
 	s.postModReviewEmbed(sub, e.User())
+	s.postAuditLog(model.AuditActionModSubmitted, modID, e.User().Username, "Mod created and submitted for review", nil)
 	return nil
 }
 
@@ -603,6 +1151,8 @@ func (s *DiscordBotService) handleApproveModButton(data discord.ButtonInteractio
 			}
 		}
 	}
+
+	s.postAuditLog(model.AuditActionModApproved, mod.ID, e.User().Username, "Mod approved and published", nil)
 	return nil
 }
 
@@ -646,6 +1196,8 @@ func (s *DiscordBotService) handleRejectModModalSubmit(e *handler.ModalEvent) er
 			})
 		}
 	}
+
+	s.postAuditLog(model.AuditActionModRejected, sub.ModID, e.User().Username, reason, nil)
 	return nil
 }
 
@@ -696,6 +1248,8 @@ func (s *DiscordBotService) handleApproveVersionButton(data discord.ButtonIntera
 			}
 		}
 	}
+
+	s.postAuditLog(model.AuditActionVersionApproved, ver.ModID, e.User().Username, fmt.Sprintf("v%s approved", ver.VersionID), nil)
 	return nil
 }
 
@@ -739,6 +1293,8 @@ func (s *DiscordBotService) handleRejectVersionModalSubmit(e *handler.ModalEvent
 			})
 		}
 	}
+
+	s.postAuditLog(model.AuditActionVersionRejected, verSub.ModID, e.User().Username, reason, nil)
 	return nil
 }
 
