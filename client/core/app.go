@@ -10,16 +10,17 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/lang"
 	"github.com/google/uuid"
 
@@ -29,6 +30,7 @@ import (
 	"github.com/ikafly144/au_mod_installer/client/rest"
 	commonrest "github.com/ikafly144/au_mod_installer/common/rest"
 	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
+	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
 	"github.com/ikafly144/au_mod_installer/pkg/profile"
 	"github.com/ikafly144/au_mod_installer/pkg/progress"
 )
@@ -69,10 +71,23 @@ type App struct {
 	roomShareMu         sync.Mutex
 	roomShareGenerating bool
 	roomShareCache      SharedRoomLink
+
+	// Shared lobby state
+	lobbyShareMu         sync.Mutex
+	lobbyShareGenerating bool
+	lobbyShareCache      SharedLobbyLink
 }
 
 type SharedRoomLink struct {
 	RoomKey   string
+	URL       string
+	SessionID string
+	HostKey   string
+	ExpiresAt time.Time
+	InFlight  bool
+}
+
+type SharedLobbyLink struct {
 	URL       string
 	SessionID string
 	HostKey   string
@@ -102,6 +117,89 @@ func (a *App) IsRoomShareGenerating() bool {
 	a.roomShareMu.Lock()
 	defer a.roomShareMu.Unlock()
 	return a.roomShareGenerating
+}
+
+func (a *App) GetSharedLobby() SharedLobbyLink {
+	a.lobbyShareMu.Lock()
+	defer a.lobbyShareMu.Unlock()
+	return a.lobbyShareCache
+}
+
+func (a *App) SetSharedLobby(link SharedLobbyLink) {
+	a.lobbyShareMu.Lock()
+	a.lobbyShareCache = link
+	a.lobbyShareMu.Unlock()
+}
+
+func (a *App) SetLobbyShareGenerating(generating bool) {
+	a.lobbyShareMu.Lock()
+	a.lobbyShareGenerating = generating
+	a.lobbyShareMu.Unlock()
+}
+
+func (a *App) IsLobbyShareGenerating() bool {
+	a.lobbyShareMu.Lock()
+	defer a.lobbyShareMu.Unlock()
+	return a.lobbyShareGenerating
+}
+
+func (a *App) InvalidateCachedLobbyShareAsync() {
+	a.lobbyShareMu.Lock()
+	cache := a.lobbyShareCache
+	a.lobbyShareCache = SharedLobbyLink{}
+	a.lobbyShareMu.Unlock()
+	if cache.SessionID == "" || cache.HostKey == "" {
+		return
+	}
+	go func() {
+		if err := a.Rest.DeleteSharedLobby(cache.SessionID, cache.HostKey); err != nil {
+			slog.Warn("Failed to invalidate shared lobby link", "error", err)
+		}
+	}()
+}
+
+func (a *App) HeartbeatLobbyShareAsync() {
+	a.lobbyShareMu.Lock()
+	if a.lobbyShareCache.InFlight || a.lobbyShareCache.SessionID == "" || a.lobbyShareCache.HostKey == "" {
+		a.lobbyShareMu.Unlock()
+		return
+	}
+	cache := a.lobbyShareCache
+	a.lobbyShareMu.Unlock()
+
+	// Only heartbeat if it expires within 30 minutes
+	if cache.ExpiresAt.After(time.Now().Add(30 * time.Minute)) {
+		return
+	}
+
+	a.lobbyShareMu.Lock()
+	if a.lobbyShareCache.SessionID != cache.SessionID || a.lobbyShareCache.InFlight {
+		a.lobbyShareMu.Unlock()
+		return
+	}
+	a.lobbyShareCache.InFlight = true
+	a.lobbyShareMu.Unlock()
+
+	go func() {
+		defer func() {
+			a.lobbyShareMu.Lock()
+			if a.lobbyShareCache.SessionID == cache.SessionID {
+				a.lobbyShareCache.InFlight = false
+			}
+			a.lobbyShareMu.Unlock()
+		}()
+
+		rs, err := a.Rest.UpdateSharedLobbyExpiration(cache.SessionID, cache.HostKey)
+		if err != nil {
+			slog.Warn("Failed to heartbeat shared lobby link", "error", err)
+			return
+		}
+		a.lobbyShareMu.Lock()
+		if a.lobbyShareCache.SessionID == cache.SessionID {
+			a.lobbyShareCache.ExpiresAt = rs.ExpiresAt
+		}
+		a.lobbyShareMu.Unlock()
+	}()
 }
 
 func (a *App) InvalidateCachedRoomShareAsync() {
@@ -204,7 +302,7 @@ func (a *App) StartActivityPolling(ctx context.Context) {
 }
 
 func (a *App) updateRichPresence() {
-	if a.DiscordService == nil {
+	if a.DiscordService == nil || !a.DiscordService.IsLoggedIn() {
 		return
 	}
 
@@ -214,75 +312,251 @@ func (a *App) updateRichPresence() {
 	runningStartedAt := a.runningStartedAt
 	a.runningProfileMu.Unlock()
 
-	if profileID == uuid.Nil {
-		a.DiscordService.ClearActivity()
-		// Auto-stop sharing when game ends
-		a.InvalidateCachedRoomShareAsync()
-		return
-	}
+	lobbyShare := a.GetSharedLobby()
+	activeLobby, hasActiveLobby := a.DiscordService.GetActiveLobby()
 
-	prof, ok := a.ProfileManager.Get(profileID)
-	if !ok {
-		a.DiscordService.ClearActivity()
-		return
-	}
-
-	act := sdk.NewActivity()
-	act.SetType(sdk.ActivityTypesPlaying)
-	act.SetName("Mod of Us")
-	act.SetDetails(fmt.Sprintf("Playing %s", prof.Name))
-	act.SetSupportedPlatforms(sdk.ActivityGamePlatformsDesktop)
-
-	assets := sdk.NewActivityAssets()
-	assets.SetLargeImage("icon")
-	if a.Version != "" {
-		assets.SetLargeText(fmt.Sprintf("Mod of Us %s", a.Version))
-	} else {
-		assets.SetLargeText("Mod of Us")
-	}
-	act.SetAssets(assets)
-
-	if !runningStartedAt.IsZero() {
-		timestamp := sdk.NewActivityTimestamps()
-		timestamp.SetStart(uint64(runningStartedAt.UnixMilli()))
-		act.SetTimestamps(timestamp)
-	}
-
-	if lobby != nil && lobby.IsConnected {
-		if lobby.GameState == "Started" {
-			act.SetState(lang.LocalizeKey("discord.status.in_game", "In Game"))
-		} else {
-			act.SetState(lang.LocalizeKey("discord.status.in_lobby", "In Lobby")) // TODO: More detailed state based on GameState?
+	// 1. If game is running
+	if profileID != uuid.Nil {
+		prof, ok := a.ProfileManager.Get(profileID)
+		if !ok {
+			a.DiscordService.ClearActivity()
+			return
 		}
-		if lobby.MaxPlayers > 0 && lobby.JoinedPlayers > 0 {
-			p := sdk.NewActivityParty()
-			p.SetId(strings.ToLower(lobby.GameState) + "/" + hex.EncodeToString(new(sha256.Sum256([]byte(lobby.MatchMakerIp + ":" + strconv.Itoa(lobby.MatchMakerPort) + "@" + lobby.LobbyCode)))[:]))
-			p.SetMaxSize(int32(lobby.MaxPlayers))
-			p.SetCurrentSize(int32(lobby.JoinedPlayers))
-			if fyne.CurrentApp().Preferences().BoolWithFallback("public_party", true) {
-				p.SetPrivacy(sdk.ActivityPartyPrivacyPublic)
+
+		act := sdk.NewActivity()
+		act.SetType(sdk.ActivityTypesPlaying)
+		act.SetName("Mod of Us")
+		act.SetDetails(fmt.Sprintf("Playing %s", prof.Name))
+		act.SetSupportedPlatforms(sdk.ActivityGamePlatformsDesktop)
+
+		assets := sdk.NewActivityAssets()
+		assets.SetLargeImage("icon")
+		if a.Version != "" {
+			assets.SetLargeText(fmt.Sprintf("Mod of Us %s", a.Version))
+		} else {
+			assets.SetLargeText("Mod of Us")
+		}
+		act.SetAssets(assets)
+
+		if !runningStartedAt.IsZero() {
+			timestamp := sdk.NewActivityTimestamps()
+			timestamp.SetStart(uint64(runningStartedAt.UnixMilli()))
+			act.SetTimestamps(timestamp)
+		}
+
+		partyID := ""
+		currentSize := int32(1)
+		maxSize := int32(10)
+
+		if lobby != nil && lobby.IsConnected {
+			if lobby.GameState == "Started" {
+				act.SetState(lang.LocalizeKey("discord.status.in_game", "In Game"))
 			} else {
-				p.SetPrivacy(sdk.ActivityPartyPrivacyPrivate)
+				act.SetState(lang.LocalizeKey("discord.status.in_lobby", "In Lobby"))
 			}
+			if lobby.MaxPlayers > 0 && lobby.JoinedPlayers > 0 {
+				currentSize = int32(lobby.JoinedPlayers)
+				maxSize = int32(lobby.MaxPlayers)
+				partyID = strings.ToLower(lobby.GameState) + "/" + hex.EncodeToString(new(sha256.Sum256([]byte(lobby.MatchMakerIp + ":" + strconv.Itoa(lobby.MatchMakerPort) + "@" + lobby.LobbyCode)))[:])
+			}
+		} else {
+			act.SetState(lang.LocalizeKey("discord.status.in_main_menu", "In Main Menu"))
+		}
+
+		joinSecret := ""
+		if lobbyShare.URL != "" && lobbyShare.ExpiresAt.After(time.Now()) {
+			joinSecret = lobbyShare.URL
+			if partyID == "" {
+				partyID = "lobby-" + lobbyShare.SessionID
+			}
+			a.HeartbeatLobbyShareAsync()
+		} else if hasActiveLobby && activeLobby.Secret != "" {
+			joinSecret = activeLobby.Secret
+			if partyID == "" {
+				partyID = fmt.Sprintf("discord-lobby-%d", activeLobby.ID)
+			}
+			if len(activeLobby.Members) > 0 {
+				currentSize = int32(len(activeLobby.Members))
+			}
+		} else {
+			share := a.GetSharedRoom()
+			if lobby != nil && lobby.GameState == "Joined" && share.URL != "" && share.ExpiresAt.After(time.Now()) {
+				joinSecret = share.URL
+				a.HeartbeatRoomShareAsync()
+			}
+		}
+
+		if partyID != "" || joinSecret != "" {
+			if partyID == "" {
+				partyID = "mod-of-us-party"
+			}
+			p := sdk.NewActivityParty()
+			p.SetId(partyID)
+			p.SetCurrentSize(currentSize)
+			p.SetMaxSize(maxSize)
+			p.SetPrivacy(sdk.ActivityPartyPrivacyPublic)
 			act.SetParty(p)
 		}
-		share := a.GetSharedRoom()
-		if lobby.GameState == "Joined" && share.URL != "" && share.ExpiresAt.After(time.Now()) {
+
+		if joinSecret != "" {
 			secrets := sdk.NewActivitySecrets()
-			secrets.SetJoin(share.URL)
+			secrets.SetJoin(joinSecret)
 			act.SetSecrets(secrets)
 		}
-		// Heartbeat sharing if active
-		a.HeartbeatRoomShareAsync()
-	} else {
-		act.SetState(lang.LocalizeKey("discord.status.in_main_menu", "In Main Menu"))
+
+		a.DiscordService.SetActivity(act, func(d *sdk.ClientResult) {
+			if !d.Successful() {
+				slog.Warn("Failed to update Discord activity", "error", d.ErrorCode())
+			}
+		})
+		return
 	}
 
-	a.DiscordService.SetActivity(act, func(d *sdk.ClientResult) {
-		if !d.Successful() {
-			slog.Warn("Failed to update Discord activity", "error", d.ErrorCode())
+	// 2. If game is NOT running, but user has an active or shared lobby in launcher
+	if (lobbyShare.URL != "" && lobbyShare.ExpiresAt.After(time.Now())) || hasActiveLobby {
+		act := sdk.NewActivity()
+		act.SetType(sdk.ActivityTypesPlaying)
+		act.SetName("Mod of Us")
+		act.SetState(lang.LocalizeKey("discord.status.in_lobby", "In Lobby"))
+		act.SetDetails(lang.LocalizeKey("launcher.lobby.title", "Lobby"))
+		act.SetSupportedPlatforms(sdk.ActivityGamePlatformsDesktop)
+
+		assets := sdk.NewActivityAssets()
+		assets.SetLargeImage("icon")
+		if a.Version != "" {
+			assets.SetLargeText(fmt.Sprintf("Mod of Us %s", a.Version))
+		} else {
+			assets.SetLargeText("Mod of Us")
 		}
-	})
+		act.SetAssets(assets)
+
+		partyID := "lobby"
+		currentSize := int32(1)
+		maxSize := int32(10)
+		joinSecret := ""
+
+		if lobbyShare.URL != "" && lobbyShare.ExpiresAt.After(time.Now()) {
+			joinSecret = lobbyShare.URL
+			partyID = "lobby-" + lobbyShare.SessionID
+			a.HeartbeatLobbyShareAsync()
+		}
+		if hasActiveLobby {
+			if joinSecret == "" && activeLobby.Secret != "" {
+				joinSecret = activeLobby.Secret
+			}
+			if partyID == "lobby" && activeLobby.ID != 0 {
+				partyID = fmt.Sprintf("discord-lobby-%d", activeLobby.ID)
+			}
+			if len(activeLobby.Members) > 0 {
+				currentSize = int32(len(activeLobby.Members))
+			}
+		}
+
+		p := sdk.NewActivityParty()
+		p.SetId(partyID)
+		p.SetCurrentSize(currentSize)
+		p.SetMaxSize(maxSize)
+		p.SetPrivacy(sdk.ActivityPartyPrivacyPublic)
+		act.SetParty(p)
+
+		if joinSecret != "" {
+			secrets := sdk.NewActivitySecrets()
+			secrets.SetJoin(joinSecret)
+			act.SetSecrets(secrets)
+		}
+
+		a.DiscordService.SetActivity(act, func(d *sdk.ClientResult) {
+			if !d.Successful() {
+				slog.Warn("Failed to update Discord activity for launcher lobby", "error", d.ErrorCode())
+			}
+		})
+		return
+	}
+
+	a.DiscordService.ClearActivity()
+	a.InvalidateCachedRoomShareAsync()
+}
+
+func ComputeProfileHash(prof profile.Profile) string {
+	keys := make([]string, 0, len(prof.ModVersions))
+	for modID := range prof.ModVersions {
+		keys = append(keys, modID)
+	}
+	slices.Sort(keys)
+	builder := strings.Builder{}
+	for _, modID := range keys {
+		builder.WriteString(modID)
+		builder.WriteString(":")
+		builder.WriteString(prof.ModVersions[modID].VersionID)
+		builder.WriteString(";")
+	}
+	sum := sha256.Sum256([]byte(builder.String()))
+	return hex.EncodeToString(sum[:8])
+}
+
+func (a *App) CheckProfileCompatibility(profileID uuid.UUID, lobbyMeta map[string]string) bool {
+	if lobbyMeta == nil {
+		return true
+	}
+	expectedHash := lobbyMeta["profile_hash"]
+	if expectedHash == "" {
+		return true
+	}
+	prof, ok := a.ProfileManager.Get(profileID)
+	if !ok {
+		return false
+	}
+	return ComputeProfileHash(prof) == expectedHash
+}
+
+func (a *App) SyncGameDiscordLobby(info *IPCLobbyInfo) {
+	if a.DiscordService == nil || !a.DiscordService.IsLoggedIn() {
+		return
+	}
+
+	a.runningProfileMu.Lock()
+	profileID := a.runningProfileID
+	a.runningProfileMu.Unlock()
+
+	if profileID == uuid.Nil || info == nil || !info.IsConnected || strings.TrimSpace(info.LobbyCode) == "" {
+		return
+	}
+
+	// If already in an active Discord lobby, just update room metadata on server
+	if _, ok := a.DiscordService.GetActiveLobby(); ok {
+		_ = a.UpdateCurrentLobbyRoom(info)
+		return
+	}
+
+	_, err := a.ShareCurrentLobby(profileID)
+	if err != nil {
+		slog.Warn("Failed to create server-managed lobby for in-game session", "error", err)
+	}
+}
+
+func (a *App) CreateManualLobby(profileID uuid.UUID, callback func(err error, lobbyID uint64)) {
+	if a.DiscordService == nil || !a.DiscordService.IsLoggedIn() {
+		if callback != nil {
+			callback(discord.ErrNotLoggedIn, 0)
+		}
+		return
+	}
+	_, err := a.ShareCurrentLobby(profileID)
+	if err != nil {
+		if callback != nil {
+			callback(err, 0)
+		}
+		return
+	}
+	if callback != nil {
+		var dID uint64
+		if a.DiscordService != nil {
+			if active, ok := a.DiscordService.GetActiveLobby(); ok {
+				dID = active.ID
+			}
+		}
+		callback(nil, dID)
+	}
 }
 
 func New(version string, restClient rest.Client, activityService *discord.DiscordService) (*App, error) {
@@ -462,6 +736,9 @@ func (a *App) DownloadArchiveURLToTempFile(archiveURL string, progressListener p
 }
 
 func (a *App) HandleJoinGameDownload(sessionID string, serverBase string) (*profile.SharedProfile, []byte, *LaunchJoinInfo, error) {
+	if strings.TrimSpace(serverBase) == "" && a.Rest != nil {
+		serverBase = a.Rest.ServerBaseURL()
+	}
 	client := rest.NewClient(serverBase)
 	rs, err := client.GetJoinGameDownload(sessionID)
 	if err != nil {
@@ -592,4 +869,244 @@ func (a *App) ParseJoinGameURI(uri string) (*JoinGameLink, error) {
 		ServerBase: serverBase,
 		ErrorType:  strings.TrimSpace(values.Get("error_type")),
 	}, nil
+}
+
+func (a *App) ShareCurrentLobby(profileID uuid.UUID) (*SharedLobbyLink, error) {
+	a.lobbyShareMu.Lock()
+	if a.lobbyShareCache.SessionID != "" && a.lobbyShareCache.ExpiresAt.After(time.Now()) {
+		cached := a.lobbyShareCache
+		a.lobbyShareMu.Unlock()
+		return &cached, nil
+	}
+	a.lobbyShareMu.Unlock()
+
+	prof, ok := a.ProfileManager.Get(profileID)
+	if !ok {
+		return nil, fmt.Errorf("profile not found: %s", profileID)
+	}
+
+	var iconPNG []byte
+	if icon, err := a.ProfileManager.LoadIconPNG(profileID); err == nil {
+		iconPNG = icon
+	}
+
+	aupack, err := a.ExportProfileArchive(prof, iconPNG)
+	if err != nil {
+		return nil, fmt.Errorf("failed to export profile archive: %w", err)
+	}
+
+	// Current room if in-game
+	var roomPtr *commonrest.RoomInfo
+	a.runningProfileMu.Lock()
+	lobby := a.lobbyInfo
+	a.runningProfileMu.Unlock()
+	if room, ok := a.CurrentRoomInfo(lobby); ok {
+		roomPtr = &room
+	}
+
+	// Determine host discord user ID
+	var hostDiscordUserID uint64
+	if a.DiscordService != nil {
+		if user, ok := a.DiscordService.UserInfo(); ok && user != nil {
+			hostDiscordUserID = user.Id()
+		}
+	}
+
+	rs, err := a.Rest.ShareLobby(aupack, hostDiscordUserID, roomPtr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to share lobby: %w", err)
+	}
+
+	link := SharedLobbyLink{
+		URL:       rs.URL,
+		SessionID: rs.SessionID,
+		HostKey:   rs.HostKey,
+		ExpiresAt: rs.ExpiresAt,
+	}
+	a.SetSharedLobby(link)
+
+	if a.DiscordService != nil && a.DiscordService.IsLoggedIn() {
+		memberMeta := map[string]string{
+			"is_host":        "true",
+			"client_version": a.Version,
+		}
+		lobbyMeta := map[string]string{
+			"session_id": rs.SessionID,
+		}
+		if roomPtr != nil {
+			lobbyMeta["lobby_code"] = roomPtr.LobbyCode
+			lobbyMeta["server_ip"] = roomPtr.ServerIP
+			lobbyMeta["server_port"] = fmt.Sprint(roomPtr.ServerPort)
+			lobbyMeta["game_version"] = roomPtr.GameVersion
+		}
+		a.DiscordService.CreateOrJoinLobby(rs.SessionID, lobbyMeta, memberMeta, func(joinErr error, lobbyID uint64) {
+			if joinErr != nil {
+				slog.Warn("Failed to create/join Discord lobby for host", "error", joinErr, "sessionID", rs.SessionID)
+			} else {
+				slog.Info("Host successfully joined Discord lobby", "lobbyID", lobbyID, "sessionID", rs.SessionID)
+			}
+		})
+	}
+
+	return &link, nil
+}
+
+func (a *App) UpdateCurrentLobbyRoom(info *IPCLobbyInfo) error {
+	a.runningProfileMu.Lock()
+	profileID := a.runningProfileID
+	a.runningProfileMu.Unlock()
+
+	var roomPtr *commonrest.RoomInfo
+	if info != nil && info.IsConnected && strings.TrimSpace(info.LobbyCode) != "" {
+		gameVersion := ""
+		if profileID != uuid.Nil {
+			profileDir := filepath.Join(a.ConfigDir, "profiles", profileID.String())
+			if meta, err := modmgr.GetProfileMetadata(profileDir); err == nil && meta != nil {
+				gameVersion = meta.GameVersion
+			}
+		}
+		if gameVersion == "" {
+			if gamePath, err := a.DetectGamePath(); err == nil && gamePath != "" {
+				if v, err := aumgr.GetVersion(gamePath); err == nil {
+					gameVersion = v
+				}
+			}
+		}
+		roomPtr = &commonrest.RoomInfo{
+			LobbyCode:      info.LobbyCode,
+			ServerIP:       info.ServerIP,
+			ServerPort:     uint16(info.ServerPort),
+			MatchMakerIp:   info.MatchMakerIp,
+			MatchMakerPort: uint16(info.MatchMakerPort),
+			GameVersion:    gameVersion,
+		}
+	}
+
+	// 1. Update server shared lobby session if active
+	a.lobbyShareMu.Lock()
+	cache := a.lobbyShareCache
+	a.lobbyShareMu.Unlock()
+	if cache.SessionID != "" && cache.HostKey != "" {
+		go func() {
+			if rs, err := a.Rest.UpdateSharedLobbyRoom(cache.SessionID, cache.HostKey, roomPtr); err != nil {
+				slog.Warn("Failed to update shared lobby room on server", "error", err)
+			} else {
+				a.lobbyShareMu.Lock()
+				if a.lobbyShareCache.SessionID == cache.SessionID {
+					a.lobbyShareCache.ExpiresAt = rs.ExpiresAt
+				}
+				a.lobbyShareMu.Unlock()
+			}
+		}()
+	}
+
+	// 2. Update Discord Social SDK Lobby metadata if active
+	if a.DiscordService != nil && a.DiscordService.IsLoggedIn() {
+		if active, ok := a.DiscordService.GetActiveLobby(); ok {
+			meta := make(map[string]string)
+			maps.Copy(meta, active.Metadata)
+			if roomPtr != nil {
+				meta["room_code"] = roomPtr.LobbyCode
+				meta["server_ip"] = roomPtr.ServerIP
+				meta["server_port"] = strconv.Itoa(int(roomPtr.ServerPort))
+				meta["match_maker_ip"] = roomPtr.MatchMakerIp
+				meta["match_maker_port"] = strconv.Itoa(int(roomPtr.MatchMakerPort))
+				meta["game_version"] = roomPtr.GameVersion
+			} else {
+				delete(meta, "room_code")
+				delete(meta, "server_ip")
+				delete(meta, "server_port")
+				delete(meta, "match_maker_ip")
+				delete(meta, "match_maker_port")
+			}
+			a.DiscordService.UpdateLobbyMemberMetadata(meta, nil)
+		}
+	}
+
+	return nil
+}
+
+type JoinLobbyLink struct {
+	SessionID  string
+	ServerBase string
+	ErrorType  string
+}
+
+func (a *App) ParseJoinLobbyURI(uri string) (*JoinLobbyLink, error) {
+	slog.Info("parsing join lobby URI", "uri", uri)
+	parsed, err := url.Parse(uri)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse join lobby URI: %w", err)
+	}
+	if !strings.EqualFold(parsed.Scheme, "mod-of-us") || !strings.EqualFold(parsed.Host, "join_lobby") {
+		return nil, fmt.Errorf("invalid join lobby URI")
+	}
+	path := strings.TrimPrefix(parsed.Path, "/")
+	if !strings.HasPrefix(path, "v1/") {
+		return nil, fmt.Errorf("unsupported join lobby URI version")
+	}
+	sessionID := strings.TrimPrefix(path, "v1/")
+	values := parsed.Query()
+	serverBase := strings.TrimSpace(values.Get("server"))
+	if serverBase == "" {
+		return nil, fmt.Errorf("join lobby URI missing server")
+	}
+	if parsedServer, err := url.Parse(serverBase); err != nil || parsedServer.Scheme == "" || parsedServer.Host == "" {
+		return nil, fmt.Errorf("invalid join lobby URI server")
+	}
+	return &JoinLobbyLink{
+		SessionID:  sessionID,
+		ServerBase: serverBase,
+		ErrorType:  strings.TrimSpace(values.Get("error_type")),
+	}, nil
+}
+
+func (a *App) HandleJoinLobbyDownload(sessionID string, serverBase string) (*profile.SharedProfile, []byte, *LaunchJoinInfo, error) {
+	if strings.TrimSpace(serverBase) == "" && a.Rest != nil {
+		serverBase = a.Rest.ServerBaseURL()
+	}
+	client := rest.NewClient(serverBase)
+	rs, err := client.GetJoinLobbyDownload(sessionID)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	if rs.DiscordLobbyID != 0 && a.DiscordService != nil {
+		if user, ok := a.DiscordService.UserInfo(); ok && user != nil {
+			_ = client.AddLobbyMember(sessionID, user.Id())
+		}
+	}
+
+	tmpFile, err := os.CreateTemp("", "mod-of-us-lobby-*.aupack")
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	defer os.Remove(tmpFile.Name())
+	if _, err := tmpFile.Write(rs.Aupack); err != nil {
+		_ = tmpFile.Close()
+		return nil, nil, nil, err
+	}
+	stat, err := tmpFile.Stat()
+	if err != nil {
+		_ = tmpFile.Close()
+		return nil, nil, nil, err
+	}
+	shared, iconPNG, err := a.HandleSharedProfileArchive(tmpFile, stat.Size())
+	_ = tmpFile.Close()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	var joinInfo *LaunchJoinInfo
+	if rs.Room != nil && rs.Room.LobbyCode != "" {
+		joinInfo = &LaunchJoinInfo{
+			LobbyCode:      rs.Room.LobbyCode,
+			ServerIP:       rs.Room.ServerIP,
+			ServerPort:     rs.Room.ServerPort,
+			MatchMakerIp:   rs.Room.MatchMakerIp,
+			MatchMakerPort: rs.Room.MatchMakerPort,
+			GameVersion:    rs.Room.GameVersion,
+		}
+	}
+	return shared, iconPNG, joinInfo, nil
 }
