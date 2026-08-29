@@ -3,7 +3,7 @@ module github.com/ikafly144/au_mod_installer
 go 1.27.0
 
 require (
-	fyne.io/fyne/v2 v2.8.0
+	fyne.io/fyne/v2 v2.8.1
 	git.sr.ht/~jackmordaunt/go-toast v1.1.2
 	git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3
 	github.com/AlecAivazis/survey/v2 v2.3.7
@@ -31,7 +31,7 @@ require (
 )
 
 require (
-	fyne.io/systray v1.12.2 // indirect
+	fyne.io/systray v1.12.3-0.20260810170012-af4e8e793ec4 // indirect
 	fyne.io/tools v1.7.2 // indirect
 	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/FyshOS/fancyfs v0.0.1 // indirect
