@@ -4,7 +4,7 @@ go 1.27.0
 
 require (
 	fyne.io/fyne/v2 v2.8.1
-	git.sr.ht/~jackmordaunt/go-toast v1.1.2
+	git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3
 	git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3
 	github.com/AlecAivazis/survey/v2 v2.3.7
 	github.com/Microsoft/go-winio v0.6.2
