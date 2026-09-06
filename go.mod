@@ -11,7 +11,7 @@ require (
 	github.com/TheTitanrain/w32 v0.0.0-20200114052255-2654d97dbd3d
 	github.com/danieljoos/wincred v1.2.3
 	github.com/gin-gonic/gin v1.12.0
-	github.com/google/go-github/v90 v90.0.0
+	github.com/google/go-github/v91 v91.0.0
 	github.com/google/go-github/v91 v91.0.0
 	github.com/google/uuid v1.6.0
 	github.com/ikafly144/discord_social_sdk v0.1.2
