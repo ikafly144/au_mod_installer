@@ -25,7 +25,7 @@ require (
 	github.com/urfave/cli/v3 v3.11.0
 	github.com/zzl/go-win32api/v2 v2.2.0
 	golang.org/x/mod v0.41.0
-	golang.org/x/sys v0.47.0
+	golang.org/x/sys v0.48.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gorm.io/driver/postgres v1.6.2
 	gorm.io/gorm v1.31.2
