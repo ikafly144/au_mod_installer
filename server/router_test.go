@@ -174,3 +174,173 @@ func TestRouter_JoinGame_HTML(t *testing.T) {
 		assert.Contains(t, joinRec.Body.String(), "error_type=session_not_found")
 	})
 }
+
+func TestRouter_ShareLobby_Lifecycle(t *testing.T) {
+	srv := service.NewModService(nil)
+	handler := router(srv, staticVersionInfoProvider{}, "", "")
+
+	// 1. Create shared lobby
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, err := writer.CreateFormFile("aupack", "test.aupack")
+	require.NoError(t, err)
+	_, err = part.Write([]byte("lobby-pack-data"))
+	require.NoError(t, err)
+	require.NoError(t, writer.WriteField("lobby_code", "LOBBY1"))
+	require.NoError(t, writer.Close())
+
+	createReq := httptest.NewRequest(http.MethodPost, "/share_lobby", body)
+	createReq.Header.Set("Content-Type", writer.FormDataContentType())
+	createRec := httptest.NewRecorder()
+	handler.ServeHTTP(createRec, createReq)
+	require.Equal(t, http.StatusOK, createRec.Code)
+
+	var shareRs restcommon.ShareLobbyResponse
+	require.NoError(t, json.Unmarshal(createRec.Body.Bytes(), &shareRs))
+	assert.NotEmpty(t, shareRs.SessionID)
+	assert.NotEmpty(t, shareRs.HostKey)
+	assert.Contains(t, shareRs.URL, "/join_lobby?session_id="+shareRs.SessionID)
+
+	// 2. Fetch lobby download (initially has room LOBBY1)
+	dlReq := httptest.NewRequest(http.MethodGet, "/join_lobby?session_id="+shareRs.SessionID+"&download=1", nil)
+	dlRec := httptest.NewRecorder()
+	handler.ServeHTTP(dlRec, dlReq)
+	require.Equal(t, http.StatusOK, dlRec.Code)
+	var dlRs restcommon.JoinLobbyDownloadResponse
+	require.NoError(t, json.Unmarshal(dlRec.Body.Bytes(), &dlRs))
+	require.NotNil(t, dlRs.Room)
+	assert.Equal(t, "LOBBY1", dlRs.Room.LobbyCode)
+
+	// 3. Update room dynamically without changing session ID / Lobby URL
+	updateBody := &bytes.Buffer{}
+	upWriter := multipart.NewWriter(updateBody)
+	require.NoError(t, upWriter.WriteField("host_key", shareRs.HostKey))
+	require.NoError(t, upWriter.WriteField("lobby_code", "LOBBY2_NEW"))
+	require.NoError(t, upWriter.Close())
+
+	upReq := httptest.NewRequest(http.MethodPut, "/share_lobby/"+shareRs.SessionID+"/room", updateBody)
+	upReq.Header.Set("Content-Type", upWriter.FormDataContentType())
+	upRec := httptest.NewRecorder()
+	handler.ServeHTTP(upRec, upReq)
+	require.Equal(t, http.StatusOK, upRec.Code)
+
+	// 4. Verify updated room info
+	dlReq2 := httptest.NewRequest(http.MethodGet, "/join_lobby?session_id="+shareRs.SessionID+"&download=1", nil)
+	dlRec2 := httptest.NewRecorder()
+	handler.ServeHTTP(dlRec2, dlReq2)
+	require.Equal(t, http.StatusOK, dlRec2.Code)
+	var dlRs2 restcommon.JoinLobbyDownloadResponse
+	require.NoError(t, json.Unmarshal(dlRec2.Body.Bytes(), &dlRs2))
+	require.NotNil(t, dlRs2.Room)
+	assert.Equal(t, "LOBBY2_NEW", dlRs2.Room.LobbyCode)
+
+	// 5. HTML join redirect page
+	joinReq := httptest.NewRequest(http.MethodGet, "/join_lobby?session_id="+shareRs.SessionID, nil)
+	joinRec := httptest.NewRecorder()
+	handler.ServeHTTP(joinRec, joinReq)
+	require.Equal(t, http.StatusOK, joinRec.Code)
+	assert.Contains(t, joinRec.Body.String(), "mod-of-us://join_lobby/v1/"+shareRs.SessionID+"?server=")
+
+	// 6. Delete shared lobby
+	delReq := httptest.NewRequest(http.MethodDelete, "/share_lobby/"+shareRs.SessionID+"?host_key="+shareRs.HostKey, nil)
+	delRec := httptest.NewRecorder()
+	handler.ServeHTTP(delRec, delReq)
+	require.Equal(t, http.StatusOK, delRec.Code)
+}
+
+func TestBuildJoinLobbyDeepLink(t *testing.T) {
+	assert.Equal(
+		t,
+		"mod-of-us://join_lobby/v1/test-lobby-session?server=http%3A%2F%2Flocalhost%3A8080",
+		buildJoinLobbyDeepLink("http://localhost:8080", "test-lobby-session", ""),
+	)
+	assert.Equal(
+		t,
+		"mod-of-us://join_lobby/v1/test-lobby-session?error_type=invalid_session&server=http%3A%2F%2Flocalhost%3A8080",
+		buildJoinLobbyDeepLink("http://localhost:8080", "test-lobby-session", restcommon.JoinLobbyErrorInvalidSession),
+	)
+}
+
+type mockDiscordLobbyClient struct {
+	createdHostUserID uint64
+	addedLobbyID      uint64
+	addedUserID       uint64
+	removedLobbyID    uint64
+	removedUserID     uint64
+	deletedLobbyID    uint64
+	updatedLobbyID    uint64
+	updatedMeta       map[string]string
+}
+
+func (m *mockDiscordLobbyClient) CreateLobby(ctx context.Context, hostUserID uint64, metadata map[string]string) (uint64, error) {
+	m.createdHostUserID = hostUserID
+	return 1234567890, nil
+}
+
+func (m *mockDiscordLobbyClient) UpdateLobbyMetadata(ctx context.Context, lobbyID uint64, metadata map[string]string) error {
+	m.updatedLobbyID = lobbyID
+	m.updatedMeta = metadata
+	return nil
+}
+
+func (m *mockDiscordLobbyClient) AddMember(ctx context.Context, lobbyID uint64, userID uint64, metadata map[string]string) error {
+	m.addedLobbyID = lobbyID
+	m.addedUserID = userID
+	return nil
+}
+
+func (m *mockDiscordLobbyClient) RemoveMember(ctx context.Context, lobbyID uint64, userID uint64) error {
+	m.removedLobbyID = lobbyID
+	m.removedUserID = userID
+	return nil
+}
+
+func (m *mockDiscordLobbyClient) DeleteLobby(ctx context.Context, lobbyID uint64) error {
+	m.deletedLobbyID = lobbyID
+	return nil
+}
+
+func TestRouter_ShareLobby_WithDiscordLobbyIntegration(t *testing.T) {
+	mockDiscord := &mockDiscordLobbyClient{}
+	srv := service.NewModServiceWithOptions(nil, mockDiscord)
+	handler := router(srv, staticVersionInfoProvider{}, "", "")
+
+	// 1. Create shared lobby with host discord user id
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, err := writer.CreateFormFile("aupack", "test.aupack")
+	require.NoError(t, err)
+	_, err = part.Write([]byte("lobby-pack-data"))
+	require.NoError(t, err)
+	require.NoError(t, writer.WriteField("host_discord_user_id", "987654321"))
+	require.NoError(t, writer.Close())
+
+	createReq := httptest.NewRequest(http.MethodPost, "/share_lobby", body)
+	createReq.Header.Set("Content-Type", writer.FormDataContentType())
+	createRec := httptest.NewRecorder()
+	handler.ServeHTTP(createRec, createReq)
+	require.Equal(t, http.StatusOK, createRec.Code)
+
+	var shareRs restcommon.ShareLobbyResponse
+	require.NoError(t, json.Unmarshal(createRec.Body.Bytes(), &shareRs))
+	assert.Equal(t, uint64(1234567890), shareRs.DiscordLobbyID)
+	assert.Equal(t, uint64(987654321), mockDiscord.createdHostUserID)
+
+	// 2. Add guest member
+	memberBody := []byte(`{"discord_user_id": 555555555}`)
+	memberReq := httptest.NewRequest(http.MethodPost, "/share_lobby/"+shareRs.SessionID+"/members", bytes.NewReader(memberBody))
+	memberReq.Header.Set("Content-Type", "application/json")
+	memberRec := httptest.NewRecorder()
+	handler.ServeHTTP(memberRec, memberReq)
+	require.Equal(t, http.StatusOK, memberRec.Code)
+	assert.Equal(t, uint64(1234567890), mockDiscord.addedLobbyID)
+	assert.Equal(t, uint64(555555555), mockDiscord.addedUserID)
+
+	// 3. Remove guest member
+	delMemberReq := httptest.NewRequest(http.MethodDelete, "/share_lobby/"+shareRs.SessionID+"/members/555555555", nil)
+	delMemberRec := httptest.NewRecorder()
+	handler.ServeHTTP(delMemberRec, delMemberReq)
+	require.Equal(t, http.StatusOK, delMemberRec.Code)
+	assert.Equal(t, uint64(1234567890), mockDiscord.removedLobbyID)
+	assert.Equal(t, uint64(555555555), mockDiscord.removedUserID)
+}

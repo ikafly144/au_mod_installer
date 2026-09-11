@@ -208,8 +208,15 @@ func realMain(sharedURI string, sharedArchive string) error {
 	w := a.NewWindow(lang.LocalizeKey("app.name", "Mod of Us") + " " + version)
 	go func() {
 		activityService.WaitReady()
-		if !social.RegisterLaunchCommand(APPLICATION_ID, "") {
-			slog.Warn("Failed to register launch command to Discord SDK")
+		exePath, err := os.Executable()
+		if err == nil && exePath != "" {
+			if !social.RegisterLaunchCommand(APPLICATION_ID, fmt.Sprintf("\"%s\"", exePath)) {
+				slog.Warn("Failed to register launch command to Discord SDK")
+			}
+		} else {
+			if !social.RegisterLaunchCommand(APPLICATION_ID, "") {
+				slog.Warn("Failed to register launch command to Discord SDK")
+			}
 		}
 	}()
 
