@@ -6,8 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 type Manager struct {
@@ -79,7 +78,7 @@ func (m *Manager) Add(p Profile) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if p.ID == uuid.Nil {
+	if p.ID == uuid.Nil() {
 		return fmt.Errorf("profile ID cannot be nil")
 	}
 
@@ -130,7 +129,7 @@ func (m *Manager) Get(id uuid.UUID) (Profile, bool) {
 }
 
 func (m *Manager) ProfileDir(id uuid.UUID) (string, error) {
-	if id == uuid.Nil {
+	if id == uuid.Nil() {
 		return "", fmt.Errorf("profile ID cannot be nil")
 	}
 	return m.profileDir(id), nil
@@ -145,7 +144,7 @@ func (m *Manager) profileIconPath(id uuid.UUID) string {
 }
 
 func (m *Manager) SaveIconPNG(id uuid.UUID, png []byte) error {
-	if id == uuid.Nil {
+	if id == uuid.Nil() {
 		return fmt.Errorf("profile ID cannot be nil")
 	}
 	if len(png) == 0 {
@@ -163,7 +162,7 @@ func (m *Manager) SaveIconPNG(id uuid.UUID, png []byte) error {
 }
 
 func (m *Manager) LoadIconPNG(id uuid.UUID) ([]byte, error) {
-	if id == uuid.Nil {
+	if id == uuid.Nil() {
 		return nil, fmt.Errorf("profile ID cannot be nil")
 	}
 	iconPath := m.profileIconPath(id)
@@ -178,7 +177,7 @@ func (m *Manager) LoadIconPNG(id uuid.UUID) ([]byte, error) {
 }
 
 func (m *Manager) RemoveIcon(id uuid.UUID) error {
-	if id == uuid.Nil {
+	if id == uuid.Nil() {
 		return fmt.Errorf("profile ID cannot be nil")
 	}
 	iconPath := m.profileIconPath(id)

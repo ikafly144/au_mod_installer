@@ -4,7 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/google/uuid"
+	"uuid"
+
 	"github.com/urfave/cli/v3"
 
 	"github.com/ikafly144/au_mod_installer/server/model"

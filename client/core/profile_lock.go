@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
 )
@@ -39,7 +39,7 @@ type ProfileLaunchLock struct {
 }
 
 func (a *App) AcquireProfileLaunchLock(profileID uuid.UUID) (*ProfileLaunchLock, error) {
-	if profileID == uuid.Nil {
+	if profileID == uuid.Nil() {
 		return &ProfileLaunchLock{}, nil
 	}
 
@@ -67,7 +67,7 @@ func (a *App) AcquireProfileLaunchLock(profileID uuid.UUID) (*ProfileLaunchLock,
 }
 
 func (l *ProfileLaunchLock) SetGamePID(gamePID int, startedAt time.Time, directJoinEnabled bool) error {
-	if l == nil || l.path == "" || l.profileID == uuid.Nil {
+	if l == nil || l.path == "" || l.profileID == uuid.Nil() {
 		return nil
 	}
 	if gamePID <= 0 {
@@ -95,7 +95,7 @@ func (l *ProfileLaunchLock) SetGamePID(gamePID int, startedAt time.Time, directJ
 }
 
 func (l *ProfileLaunchLock) Release() error {
-	if l == nil || l.path == "" || l.profileID == uuid.Nil {
+	if l == nil || l.path == "" || l.profileID == uuid.Nil() {
 		return nil
 	}
 	l.mu.Lock()

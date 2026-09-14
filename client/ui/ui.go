@@ -10,7 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
+	"uuid"
+
 	"github.com/zzl/go-win32api/v2/win32"
 
 	"github.com/ikafly144/au_mod_installer/client/ui/tab/launcher"

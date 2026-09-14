@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
+	"uuid"
 
 	commonrest "github.com/ikafly144/au_mod_installer/common/rest"
 	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
@@ -59,7 +59,7 @@ func (a *App) OnGameExitedInternal(profileID uuid.UUID) {
 	a.StopLobbyPolling()
 	a.runningProfileMu.Lock()
 	wasRunning := a.runningProfileID == profileID && a.runningGamePID > 0
-	a.runningProfileID = uuid.Nil
+	a.runningProfileID = uuid.Nil()
 	a.runningGamePID = 0
 	a.runningDirectJoin = false
 	a.runningStartedAt = time.Time{}
@@ -78,7 +78,7 @@ func (a *App) IsCurrentRunningProcess(profileID uuid.UUID, pid int) bool {
 }
 
 func (a *App) WatchRestoredRunningProfile(profileID uuid.UUID, pid int, startedAt time.Time, pollInterval time.Duration, onExited func()) {
-	if profileID == uuid.Nil || pid <= 0 {
+	if profileID == uuid.Nil() || pid <= 0 {
 		return
 	}
 	go func() {
@@ -160,7 +160,7 @@ func (a *App) CurrentRoomInfo(info *IPCLobbyInfo) (commonrest.RoomInfo, bool) {
 	a.runningProfileMu.Lock()
 	profileID := a.runningProfileID
 	a.runningProfileMu.Unlock()
-	if profileID != uuid.Nil {
+	if profileID != uuid.Nil() {
 		profileDir := filepath.Join(a.ConfigDir, "profiles", profileID.String())
 		if meta, err := modmgr.GetProfileMetadata(profileDir); err == nil && meta != nil {
 			gameVersion = meta.GameVersion
@@ -193,7 +193,7 @@ func (a *App) CurrentRunningProfileAndPID() (uuid.UUID, int) {
 
 func (a *App) CurrentRunningProfile() (profile.Profile, int, bool) {
 	profileID, runningPID := a.CurrentRunningProfileAndPID()
-	if profileID == uuid.Nil {
+	if profileID == uuid.Nil() {
 		return profile.Profile{}, 0, false
 	}
 	prof, ok := a.ProfileManager.Get(profileID)
@@ -204,7 +204,7 @@ func (a *App) CurrentRunningProfile() (profile.Profile, int, bool) {
 }
 
 func (a *App) SetRunningProfile(profileID uuid.UUID) {
-	if profileID == uuid.Nil {
+	if profileID == uuid.Nil() {
 		return
 	}
 	a.runningProfileMu.Lock()
@@ -215,7 +215,7 @@ func (a *App) SetRunningProfile(profileID uuid.UUID) {
 func (a *App) ClearRunningProfile(profileID uuid.UUID) {
 	a.runningProfileMu.Lock()
 	if a.runningProfileID == profileID {
-		a.runningProfileID = uuid.Nil
+		a.runningProfileID = uuid.Nil()
 	}
 	a.runningProfileMu.Unlock()
 }
@@ -226,7 +226,7 @@ func (a *App) SetLaunchingProfile(profileID uuid.UUID, launching bool) {
 	if launching {
 		a.launchingProfileID = profileID
 	} else if a.launchingProfileID == profileID {
-		a.launchingProfileID = uuid.Nil
+		a.launchingProfileID = uuid.Nil()
 	}
 	a.runningProfileMu.Unlock()
 }
@@ -242,11 +242,11 @@ func (a *App) CurrentBusyProfile() (uuid.UUID, bool) {
 
 func (a *App) IsAnyProfileBusy() bool {
 	runningProfileID, launching := a.CurrentBusyProfile()
-	return launching || runningProfileID != uuid.Nil
+	return launching || runningProfileID != uuid.Nil()
 }
 
 func (a *App) IsProfileBusy(profileID uuid.UUID) bool {
-	if profileID == uuid.Nil {
+	if profileID == uuid.Nil() {
 		return false
 	}
 	a.runningProfileMu.Lock()
@@ -258,7 +258,7 @@ func (a *App) IsProfileBusy(profileID uuid.UUID) bool {
 }
 
 func (a *App) IsProfileRunning(profileID uuid.UUID) bool {
-	if profileID == uuid.Nil {
+	if profileID == uuid.Nil() {
 		return false
 	}
 	a.runningProfileMu.Lock()

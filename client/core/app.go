@@ -19,9 +19,10 @@ import (
 	"sync"
 	"time"
 
+	"uuid"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/lang"
-	"github.com/google/uuid"
 
 	sdk "github.com/ikafly144/discord_social_sdk"
 
@@ -214,7 +215,7 @@ func (a *App) updateRichPresence() {
 	runningStartedAt := a.runningStartedAt
 	a.runningProfileMu.Unlock()
 
-	if profileID == uuid.Nil {
+	if profileID == uuid.Nil() {
 		a.DiscordService.ClearActivity()
 		// Auto-stop sharing when game ends
 		a.InvalidateCachedRoomShareAsync()

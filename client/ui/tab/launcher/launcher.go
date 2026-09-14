@@ -34,7 +34,8 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
-	"github.com/google/uuid"
+	"uuid"
+
 	discordsdk "github.com/ikafly144/discord_social_sdk"
 
 	"github.com/ikafly144/au_mod_installer/client/core"
@@ -1937,7 +1938,7 @@ func (l *Launcher) setupProfileList() {
 		l.profileList.Refresh()
 	}
 	l.profileList.OnUnselected = func(id widget.ListItemID) {
-		l.selectedProfileID = uuid.Nil
+		l.selectedProfileID = uuid.Nil()
 		l.checkLaunchState()
 		l.refreshProfileGrid()
 		l.profileList.Refresh()
@@ -2287,7 +2288,7 @@ func (l *Launcher) runLaunch() {
 		return
 	}
 
-	if l.selectedProfileID == uuid.Nil {
+	if l.selectedProfileID == uuid.Nil() {
 		l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("launcher.error.no_profile", "Please select a profile to launch.")))
 		return
 	}
@@ -2306,7 +2307,7 @@ func (l *Launcher) runLaunch() {
 			break
 		}
 	}
-	if targetProfile.ID == uuid.Nil {
+	if targetProfile.ID == uuid.Nil() {
 		l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("launcher.error.no_profile", "Please select a profile to launch.")))
 		return
 	}
@@ -2405,13 +2406,13 @@ func (l *Launcher) newLaunchProgressDialog() (*dialog.CustomDialog, *progress.Fy
 
 func (l *Launcher) checkLaunchState() {
 	runningProfileID, launching := l.state.Core.CurrentBusyProfile()
-	if runningProfileID != uuid.Nil && launching {
+	if runningProfileID != uuid.Nil() && launching {
 		l.launchButton.SetText(lang.LocalizeKey("launcher.launch.preparing", "Preparing launch..."))
 		l.launchButton.SetIcon(theme.MediaStopIcon())
 		l.launchButton.Disable()
 		return
 	}
-	if runningProfileID != uuid.Nil {
+	if runningProfileID != uuid.Nil() {
 		l.launchButton.SetText(lang.LocalizeKey("launcher.launch.running", "Running..."))
 		l.launchButton.SetIcon(theme.MediaStopIcon())
 		l.launchButton.Disable()
@@ -2435,7 +2436,7 @@ func (l *Launcher) checkLaunchState() {
 	}
 
 	// Check Profile Selected
-	if l.selectedProfileID == uuid.Nil {
+	if l.selectedProfileID == uuid.Nil() {
 		l.launchButton.Disable()
 		return
 	}
@@ -2585,7 +2586,7 @@ func (l *Launcher) refreshProfiles() {
 		}
 	} else {
 		l.profileList.UnselectAll()
-		l.selectedProfileID = uuid.Nil
+		l.selectedProfileID = uuid.Nil()
 		l.checkLaunchState()
 		l.refreshProfileGrid()
 	}
@@ -2786,7 +2787,7 @@ func (l *Launcher) createProfile() {
 }
 
 func (l *Launcher) deleteProfile(id uuid.UUID) {
-	if id == uuid.Nil {
+	if id == uuid.Nil() {
 		return
 	}
 
@@ -3452,7 +3453,7 @@ func (l *Launcher) invalidateProfileIconCache(id uuid.UUID) {
 }
 
 func (l *Launcher) profileSquareIconImage(prof profile.Profile, fallbackSize int) image.Image {
-	if prof.ID == uuid.Nil {
+	if prof.ID == uuid.Nil() {
 		return placeholderProfileIcon(fallbackSize)
 	}
 
@@ -3500,7 +3501,7 @@ func (l *Launcher) newProfileIconCanvas(prof profile.Profile, size float32, corn
 }
 
 func (l *Launcher) newProfileIconCanvasFromPNG(iconPNG []byte, size float32, cornerRadius float32) *canvas.Image {
-	img := canvas.NewImageFromImage(l.squareIconImageFromPNG(iconPNG, int(size), uuid.Nil))
+	img := canvas.NewImageFromImage(l.squareIconImageFromPNG(iconPNG, int(size), uuid.Nil()))
 	img.CornerRadius = cornerRadius
 	img.SetMinSize(fyne.NewSquareSize(size))
 	img.FillMode = canvas.ImageFillContain
@@ -3514,7 +3515,7 @@ func (l *Launcher) refreshProfileIconCanvas(target *canvas.Image, prof profile.P
 }
 
 func (l *Launcher) refreshProfileIconCanvasFromPNG(target *canvas.Image, iconPNG []byte, fallbackSize int) {
-	target.Image = l.squareIconImageFromPNG(iconPNG, fallbackSize, uuid.Nil)
+	target.Image = l.squareIconImageFromPNG(iconPNG, fallbackSize, uuid.Nil())
 	target.SetMinSize(fyne.NewSquareSize(float32(fallbackSize)))
 	target.Refresh()
 }

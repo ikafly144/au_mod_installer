@@ -8,7 +8,7 @@ import (
 
 	"fyne.io/fyne/v2/lang"
 
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/ikafly144/au_mod_installer/client/core"
 	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
@@ -31,9 +31,9 @@ func (s *State) Launch(path string, directJoinEnabled bool) {
 	activeProfileID, err := uuid.Parse(activeProfileIDStr)
 	if err != nil {
 		slog.Warn("Failed to parse active profile ID", "error", err)
-		activeProfileID = uuid.Nil
+		activeProfileID = uuid.Nil()
 	}
-	if activeProfileID == uuid.Nil {
+	if activeProfileID == uuid.Nil() {
 		s.ShowErrorDialog(errors.New(lang.LocalizeKey("launcher.error.no_profile", "Please select a profile to launch.")))
 		return
 	}
@@ -118,7 +118,7 @@ func (s *State) Launch(path string, directJoinEnabled bool) {
 
 	if launchSucceeded {
 		finishedAt := time.Now()
-		if activeProfileID != uuid.Nil {
+		if activeProfileID != uuid.Nil() {
 			if err := s.UpdateProfileLaunchMetrics(activeProfileID, startedAt, finishedAt); err != nil {
 				s.SetError(err)
 			}

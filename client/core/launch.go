@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
 	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
@@ -52,7 +52,7 @@ func (a *App) PrepareLaunch(gamePath string, profileID uuid.UUID) (string, func(
 		return "", nil, fmt.Errorf("among Us executable not found: %w", err)
 	}
 
-	if profileID == uuid.Nil {
+	if profileID == uuid.Nil() {
 		return "", func() error { return nil }, nil
 	}
 
