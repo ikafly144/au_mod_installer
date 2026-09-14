@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"git.sr.ht/~jackmordaunt/go-toast"
+	"git.sr.ht/~jackmordaunt/go-toast/v2"
 )
 
 const AppName = "Mod of Us"
