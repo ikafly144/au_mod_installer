@@ -102,6 +102,47 @@ type Launcher struct {
 
 	canLaunchListener binding.DataListener
 
+	// Lobby drawer components
+	lobbyDrawerOverlay         *fyne.Container
+	lobbyDrawerPanel           *fyne.Container
+	lobbyDrawerExpanded        bool
+	lobbyDrawerCurrentTab      string
+	lobbyToggleDrawerButton    *widget.Button
+	lobbyDrawerCloseButton     *widget.Button
+	lobbyTabButton             *widget.Button
+	friendsTabButton           *widget.Button
+	lobbyTabContent            *fyne.Container
+	friendsTabContent          *fyne.Container
+	lobbyHeaderTitle           *widget.Label
+	lobbyHeaderSubtitle        *widget.Label
+	lobbyActionBox             *fyne.Container
+	lobbyCreateButton          *widget.Button
+	lobbyLeaveButton           *widget.Button
+	lobbyInviteButton          *widget.Button
+	lobbyShareCard             *fyne.Container
+	lobbyShareButton           *widget.Button
+	lobbyShareCopyButton       *widget.Button
+	lobbyShareStopButton       *widget.Button
+	lobbyShareURLEntry         *widget.Entry
+	lobbyChannelCard           *fyne.Container
+	lobbyChannelButton         *widget.Button
+	lobbyChannelUnlinkButton   *widget.Button
+	lobbyChannelNameLabel      *widget.Label
+	lobbyMemberListContainer   *fyne.Container
+	lobbyVoiceBar              *fyne.Container
+	lobbyVoiceJoinButton       *widget.Button
+	lobbyVoiceLeaveButton      *widget.Button
+	lobbyVoiceMuteButton       *widget.Button
+	lobbyVoiceDeafenButton     *widget.Button
+	lobbyVoiceStatusLabel      *widget.Label
+	lobbyChatMessagesContainer *fyne.Container
+	lobbyChatScroll            *container.Scroll
+	lobbyChatEntry             *widget.Entry
+	lobbyChatSendButton        *widget.Button
+	drawerFriendsSearchEntry   *widget.Entry
+	drawerFriendsListContainer *fyne.Container
+	drawerFriendsLoading       *widget.ProgressBarInfinite
+
 	content *fyne.Container
 }
 
@@ -155,7 +196,7 @@ func NewLauncherTab(s *uicommon.State) *Launcher {
 		launchButton:        widget.NewButtonWithIcon(lang.LocalizeKey("launcher.launch", "Launch"), theme.MediaPlayIcon(), l.runLaunch),
 		shareRoomButton:     widget.NewButtonWithIcon(lang.LocalizeKey("launcher.join_link.create", "Create Join Link"), theme.MailForwardIcon(), func() { l.shareCurrentRoom(true) }),
 		copyRoomLinkButton:  widget.NewButtonWithIcon(lang.LocalizeKey("launcher.join_link.copy", "Copy Link"), theme.ContentCopyIcon(), l.copyRoomLinkToClipboard),
-		inviteFriendsButton: widget.NewButtonWithIcon(lang.LocalizeKey("launcher.discord_friends.button", "Friend List"), theme.MailComposeIcon(), l.showDiscordFriendsDialog),
+		inviteFriendsButton: widget.NewButtonWithIcon(lang.LocalizeKey("launcher.discord_friends.button", "Friend List"), theme.MailComposeIcon(), func() { l.openDrawerTab("friends") }),
 		unpublishRoomButton: widget.NewButtonWithIcon(lang.LocalizeKey("launcher.join_link.unpublish", "Stop Sharing"), theme.MediaStopIcon(), l.unpublishCurrentRoom),
 		roomVisibilitySelector: widget.NewSelect([]string{lang.LocalizeKey("launcher.party.visibility.public", "Public"), lang.LocalizeKey("launcher.party.visibility.private", "Private")}, func(s string) {
 			public := false
@@ -280,8 +321,20 @@ func (l *Launcher) HandleJoinLink(s string) {
 			l.state.Window.RequestFocus()
 		}
 	})
-	if strings.HasPrefix(s, "mod-of-us://") {
+	if strings.HasPrefix(s, "mod-of-us://join_lobby/") {
+		l.handleJoinLobbyURI(s)
+		return
+	}
+	if strings.HasPrefix(s, "mod-of-us://join_game/") {
 		l.handleJoinGameURI(s)
+		return
+	}
+	if strings.HasPrefix(s, "mod-of-us://") {
+		if strings.Contains(s, "join_lobby") {
+			l.handleJoinLobbyURI(s)
+		} else {
+			l.handleJoinGameURI(s)
+		}
 		return
 	}
 	uri, err := url.Parse(s)
@@ -292,7 +345,15 @@ func (l *Launcher) HandleJoinLink(s string) {
 	sessionID := uri.Query().Get("session_id")
 	if sessionID == "" {
 		path := strings.TrimPrefix(uri.Path, "/")
-		if after, ok := strings.CutPrefix(path, "v1/"); ok {
+		if after, ok := strings.CutPrefix(path, "join_lobby/v1/"); ok {
+			sessionID = after
+		} else if after, ok := strings.CutPrefix(path, "join_game/v1/"); ok {
+			sessionID = after
+		} else if after, ok := strings.CutPrefix(path, "v1/"); ok {
+			sessionID = after
+		} else if after, ok := strings.CutPrefix(path, "join_lobby/"); ok {
+			sessionID = after
+		} else if after, ok := strings.CutPrefix(path, "join_game/"); ok {
 			sessionID = after
 		} else if !strings.Contains(path, "/") && path != "" {
 			sessionID = path
@@ -301,11 +362,29 @@ func (l *Launcher) HandleJoinLink(s string) {
 	if sessionID == "" && s != "" && !strings.Contains(s, "/") && !strings.Contains(s, ":") && !strings.Contains(s, "?") {
 		sessionID = s
 	}
-	gameLink := &core.JoinGameLink{
-		SessionID:  sessionID,
-		ServerBase: l.state.Rest.ServerBaseURL(),
+	serverBase := l.state.Rest.ServerBaseURL()
+	if uri.Scheme != "" && uri.Host != "" {
+		base := uri.Scheme + "://" + uri.Host
+		if idx := strings.Index(uri.Path, "/join_lobby"); idx > 0 {
+			base += uri.Path[:idx]
+		} else if idx := strings.Index(uri.Path, "/join_game"); idx > 0 {
+			base += uri.Path[:idx]
+		}
+		serverBase = base
 	}
-	l.handleGameLink(gameLink)
+	if strings.Contains(s, "join_game") {
+		gameLink := &core.JoinGameLink{
+			SessionID:  sessionID,
+			ServerBase: serverBase,
+		}
+		l.handleGameLink(gameLink)
+		return
+	}
+	lobbyLink := &core.JoinLobbyLink{
+		SessionID:  sessionID,
+		ServerBase: serverBase,
+	}
+	l.handleLobbyLink(lobbyLink)
 }
 
 func (l *Launcher) getDiscordUserName(userID uint64) string {
@@ -515,6 +594,7 @@ func (l *Launcher) init() {
 		})
 	}
 	l.setupRoomLinkUI()
+	l.setupLobbyDrawerUI()
 	bind := binding.NewString()
 	bind.AddListener(binding.NewDataListener(func() {
 		l.copyRoomLinkButton.SetText(lang.LocalizeKey("launcher.join_link.copy", "Copy Link"))
@@ -859,12 +939,18 @@ func (l *Launcher) canSendDiscordInvite() bool {
 	if !l.state.Core.DiscordService.IsLoggedIn() {
 		return false
 	}
-	share := l.state.Core.GetSharedRoom()
-	if share.URL == "" || share.ExpiresAt.Before(time.Now()) {
-		return false
+	lobbyShare := l.state.Core.GetSharedLobby()
+	if lobbyShare.URL != "" && lobbyShare.ExpiresAt.After(time.Now()) {
+		return true
 	}
-	_, active := l.state.Core.DiscordService.CurrentActivity()
-	return active
+	roomShare := l.state.Core.GetSharedRoom()
+	if roomShare.URL != "" && roomShare.ExpiresAt.After(time.Now()) {
+		return true
+	}
+	if _, ok := l.state.Core.DiscordService.GetActiveLobby(); ok {
+		return true
+	}
+	return false
 }
 
 var discordModOfUsStatusColor = color.NRGBA{R: 145, G: 70, B: 255, A: 255}
@@ -1058,11 +1144,26 @@ func (l *Launcher) showDiscordFriendsDialog() {
 			if !l.canSendDiscordInvite() {
 				l.state.ShowInfoDialog(
 					lang.LocalizeKey("launcher.discord_friends.invite_unavailable_title", "Invite Unavailable"),
-					lang.LocalizeKey("launcher.discord_friends.invite_unavailable_message", "Invites are available only while sharing a room."),
+					lang.LocalizeKey("launcher.discord_friends.invite_unavailable_message", "Please share a lobby URL first."),
 				)
 				return
 			}
-			l.state.Core.DiscordService.SendInvite(friend.id, l.state.Core.GetSharedRoom().URL)
+			url := l.state.Core.GetSharedLobby().URL
+			if url == "" {
+				url = l.state.Core.GetSharedRoom().URL
+			}
+			l.state.Core.DiscordService.SendInvite(friend.id, url, func(err error) {
+				fyne.Do(func() {
+					if err != nil {
+						l.state.ShowErrorDialog(err)
+					} else {
+						l.state.ShowInfoDialog(
+							lang.LocalizeKey("launcher.discord_friends.invite_sent_title", "Invite Sent"),
+							lang.LocalizeKey("launcher.discord_friends.invite_sent_message", "Sent invite to {{.Name}}.", map[string]any{"Name": friend.name}),
+						)
+					}
+				})
+			})
 		}
 		actionButtons = append(actionButtons, inviteButton)
 
@@ -1602,6 +1703,147 @@ func (l *Launcher) joinGameErrorMessage(errorType string) string {
 	default:
 		return lang.LocalizeKey("launcher.join_link.error.invalid_session", "The join link is invalid.")
 	}
+}
+
+func (l *Launcher) handleJoinLobbyURI(sharedURI string) {
+	joinURI, err := l.state.Core.ParseJoinLobbyURI(sharedURI)
+	if err != nil {
+		uicommon.Alert(
+			lang.LocalizeKey("notification.game_launch_failed.title", "Launch Failed"),
+			lang.LocalizeKey("notification.game_launch_failed.message", "Failed to launch game: {{.Error}}", map[string]any{"Error": err.Error()}),
+		)
+		dialog.ShowError(err, l.state.Window)
+		return
+	}
+	if joinURI.ErrorType != "" {
+		errMsg := l.joinGameErrorMessage(joinURI.ErrorType)
+		uicommon.Alert(
+			lang.LocalizeKey("notification.game_launch_failed.title", "Launch Failed"),
+			lang.LocalizeKey("notification.game_launch_failed.message", "Failed to launch game: {{.Error}}", map[string]any{"Error": errMsg}),
+		)
+		l.state.ShowErrorDialog(errors.New(errMsg))
+		return
+	}
+	l.handleLobbyLink(joinURI)
+}
+
+func (l *Launcher) handleLobbyLink(joinURI *core.JoinLobbyLink) {
+	if joinURI == nil || strings.TrimSpace(joinURI.SessionID) == "" {
+		return
+	}
+
+	if !l.tryStartJoinSession(joinURI.SessionID) {
+		return
+	}
+
+	fyne.Do(func() {
+		if l.state.ShowWindow != nil {
+			l.state.ShowWindow()
+		} else if l.state.Window != nil {
+			l.state.Window.Show()
+			l.state.Window.RequestFocus()
+		}
+	})
+	go func() {
+		defer l.finishJoinSession(joinURI.SessionID)
+
+		shared, iconPNG, joinInfo, err := l.state.Core.HandleJoinLobbyDownload(joinURI.SessionID, joinURI.ServerBase)
+		fyne.DoAndWait(func() {
+			if err != nil {
+				uicommon.Alert(
+					lang.LocalizeKey("notification.game_launch_failed.title", "Launch Failed"),
+					lang.LocalizeKey("notification.game_launch_failed.message", "Failed to launch game: {{.Error}}", map[string]any{"Error": err.Error()}),
+				)
+				dialog.ShowError(err, l.state.Window)
+				return
+			}
+
+			// Join Discord Social SDK Lobby using SessionID as secret
+			if l.state.Core.DiscordService != nil && l.state.Core.DiscordService.IsLoggedIn() {
+				memberMeta := map[string]string{
+					"is_host":        "false",
+					"client_version": l.state.Core.Version,
+				}
+				l.state.Core.DiscordService.CreateOrJoinLobby(joinURI.SessionID, nil, memberMeta, func(joinErr error, lobbyID uint64) {
+					if joinErr != nil {
+						slog.Warn("Failed to join Discord lobby from link", "error", joinErr)
+					} else {
+						slog.Info("Joined Discord lobby from link", "lobbyID", lobbyID)
+					}
+				})
+			}
+
+			// If match room info is available, join directly
+			if joinInfo != nil && joinInfo.LobbyCode != "" {
+				if joinInfo.GameVersion != "" {
+					gamePath := l.state.ModInstallDir()
+					if gamePath == "" {
+						gamePath, _ = l.state.Core.DetectGamePath()
+					}
+					if gamePath != "" {
+						gameVersion, err := aumgr.GetVersion(gamePath)
+						if err == nil && gameVersion != "" && joinInfo.GameVersion != gameVersion {
+							errMsg := lang.LocalizeKey(
+								"launcher.error.game_version_mismatch",
+								"The room's Among Us version ({{.RoomVersion}}) does not match your installed game version ({{.GameVersion}}).",
+								map[string]any{
+									"RoomVersion": joinInfo.GameVersion,
+									"GameVersion": gameVersion,
+								},
+							)
+							uicommon.Alert(
+								lang.LocalizeKey("notification.game_launch_failed.title", "Launch Failed"),
+								lang.LocalizeKey("notification.game_launch_failed.message", "Failed to launch game: {{.Error}}", map[string]any{"Error": errMsg}),
+							)
+							l.state.ShowErrorDialog(errors.New(errMsg))
+							return
+						}
+					}
+				}
+
+				runningProfileID, runningPID := l.state.Core.CurrentRunningProfileAndPID()
+				if runningProfile, ok := l.state.Core.ProfileManager.Get(runningProfileID); ok && runningPID > 0 && runningProfile.MatchesShared(*shared) && l.state.Core.HasDirectJoinFeature(runningProfile.Versions()) {
+					if !l.trySendDirectJoin(runningPID, *joinInfo) {
+						return
+					}
+					if errCh := l.state.Core.SendLobbyJoinByPID(runningPID, *joinInfo); errCh != nil {
+						go func() {
+							if err := <-errCh; err != nil {
+								uicommon.Alert(
+									lang.LocalizeKey("notification.game_launch_failed.title", "Launch Failed"),
+									lang.LocalizeKey("notification.game_launch_failed.message", "Failed to launch game: {{.Error}}", map[string]any{"Error": err.Error()}),
+								)
+								fyne.Do(func() {
+									dialog.ShowError(errors.New(lang.LocalizeKey("launcher.error.failed_to_send_join_request", "Failed to send join request to game process: {{.Error}}", map[string]any{"Error": err.Error()})), l.state.Window)
+								})
+							}
+						}()
+					}
+					uicommon.Notify(
+						lang.LocalizeKey("notification.game_launch_success.title", "Game Launched"),
+						lang.LocalizeKey("launcher.join_link.join_sent", "Sent room join request to running game."),
+					)
+					l.state.ShowInfoDialog(
+						lang.LocalizeKey("common.success", "Success"),
+						lang.LocalizeKey("launcher.join_link.join_sent", "Sent room join request to running game."),
+					)
+					return
+				}
+				if err := l.importProfileWithJoinInfo(shared, iconPNG, joinInfo); err != nil {
+					uicommon.Alert(
+						lang.LocalizeKey("notification.game_launch_failed.title", "Launch Failed"),
+						lang.LocalizeKey("notification.game_launch_failed.message", "Failed to launch game: {{.Error}}", map[string]any{"Error": err.Error()}),
+					)
+					dialog.ShowError(err, l.state.Window)
+					return
+				}
+			} else {
+				// No active room match yet; import profile and open lobby drawer
+				l.importProfile(shared, iconPNG)
+				l.openDrawerTab("lobby")
+			}
+		})
+	}()
 }
 
 func (l *Launcher) handleJoinGameURI(sharedURI string) {
@@ -2262,7 +2504,6 @@ func (l *Launcher) Tab() (*container.TabItem, error) {
 	)
 
 	footer := container.NewVBox(
-		l.roomLinkTray,
 		l.launchButton,
 		l.state.ErrorText,
 	)
@@ -2277,6 +2518,10 @@ func (l *Launcher) Tab() (*container.TabItem, error) {
 		l.profileViews,
 	)
 	return container.NewTabItem(lang.LocalizeKey("launcher.tab_name", "Launcher"), l.content), nil
+}
+
+func (l *Launcher) LobbyDrawerOverlay() fyne.CanvasObject {
+	return l.lobbyDrawerOverlay
 }
 
 func (l *Launcher) runLaunch() {

@@ -105,16 +105,7 @@ func (s *DiscordService) CurrentActivity() (*discord.Activity, bool) {
 	return s.currentActivity, s.currentActivity != nil
 }
 
-func (s *DiscordService) SendInvite(userId uint64, inviteUrl string) {
-	s.activityMu.Lock()
-	activity := s.currentActivity
-	s.activityMu.Unlock()
-
-	if activity == nil {
-		slog.Warn("Cannot send invite, no current activity")
-		return
-	}
-
+func (s *DiscordService) SendInvite(userId uint64, inviteUrl string, callback func(error)) {
 	name := ""
 	if user, ok := s.UserInfo(); ok {
 		if dName := strings.TrimSpace(user.DisplayName()); dName != "" {
@@ -127,16 +118,74 @@ func (s *DiscordService) SendInvite(userId uint64, inviteUrl string) {
 		name = "Unknown"
 	}
 
-	s.client.SendActivityInvite(userId, lang.LocalizeKey("discord.invite_message", "Join {{.Name}} in Mod of Us!\n\n{{.Link}}",
+	inviteMsg := lang.LocalizeKey("discord.invite_message", "Join {{.Name}} in Mod of Us!\n\n{{.Link}}",
 		map[string]any{
 			"Name": name,
 			"Link": inviteUrl,
-		}), func(result *discord.ClientResult) {
-		if !result.Successful() {
-			slog.Warn("Failed to send Discord invite", "error", result.ErrorCode())
-		} else {
-			slog.Info("Successfully sent Discord invite")
+		})
+
+	s.activityMu.Lock()
+	activity := s.currentActivity
+	s.activityMu.Unlock()
+
+	sendInviteSDK := func() {
+		s.client.SendActivityInvite(userId, inviteMsg, func(result *discord.ClientResult) {
+			if !result.Successful() {
+				slog.Warn("Failed to send Discord invite", "error", result.ErrorCode(), "userId", userId)
+				if callback != nil {
+					callback(fmt.Errorf("failed to send Discord invite (code: %d)", result.ErrorCode()))
+				}
+			} else {
+				slog.Info("Successfully sent Discord invite", "userId", userId)
+				if callback != nil {
+					callback(nil)
+				}
+			}
+		})
+	}
+
+	if activity == nil {
+		act := discord.NewActivity()
+		act.SetType(discord.ActivityTypesPlaying)
+		act.SetName("Mod of Us")
+		act.SetState(lang.LocalizeKey("discord.status.in_lobby", "In Lobby"))
+		act.SetSupportedPlatforms(discord.ActivityGamePlatformsDesktop)
+
+		p := discord.NewActivityParty()
+		p.SetId("mod-of-us-lobby")
+		p.SetCurrentSize(1)
+		p.SetMaxSize(10)
+		p.SetPrivacy(discord.ActivityPartyPrivacyPublic)
+		act.SetParty(p)
+
+		if inviteUrl != "" {
+			secrets := discord.NewActivitySecrets()
+			secrets.SetJoin(inviteUrl)
+			act.SetSecrets(secrets)
 		}
+
+		s.SetActivity(act, func(result *discord.ClientResult) {
+			if !result.Successful() {
+				slog.Warn("Failed to set activity before sending invite", "error", result.ErrorCode())
+				if callback != nil {
+					callback(fmt.Errorf("failed to set activity before sending invite: code %d", result.ErrorCode()))
+				}
+				return
+			}
+			sendInviteSDK()
+		})
+		return
+	}
+
+	act := *activity
+	act.SetSupportedPlatforms(discord.ActivityGamePlatformsDesktop)
+	if inviteUrl != "" {
+		secrets := discord.NewActivitySecrets()
+		secrets.SetJoin(inviteUrl)
+		act.SetSecrets(secrets)
+	}
+	s.SetActivity(&act, func(result *discord.ClientResult) {
+		sendInviteSDK()
 	})
 }
 

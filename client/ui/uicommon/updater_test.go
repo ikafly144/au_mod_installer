@@ -88,6 +88,34 @@ func (m *mockRestClient) GetJoinGameDownload(sessionID string) (*restcommon.Join
 	return nil, nil
 }
 
+func (m *mockRestClient) ShareLobby(aupack []byte, hostDiscordUserID uint64, room *restcommon.RoomInfo) (*restcommon.ShareLobbyResponse, error) {
+	return nil, nil
+}
+
+func (m *mockRestClient) UpdateSharedLobbyRoom(sessionID, hostKey string, room *restcommon.RoomInfo) (*restcommon.ShareLobbyResponse, error) {
+	return nil, nil
+}
+
+func (m *mockRestClient) UpdateSharedLobbyExpiration(sessionID, hostKey string) (*restcommon.ShareLobbyResponse, error) {
+	return nil, nil
+}
+
+func (m *mockRestClient) DeleteSharedLobby(sessionID, hostKey string) error {
+	return nil
+}
+
+func (m *mockRestClient) GetJoinLobbyDownload(sessionID string) (*restcommon.JoinLobbyDownloadResponse, error) {
+	return nil, nil
+}
+
+func (m *mockRestClient) AddLobbyMember(sessionID string, discordUserID uint64) error {
+	return nil
+}
+
+func (m *mockRestClient) RemoveLobbyMember(sessionID string, discordUserID uint64) error {
+	return nil
+}
+
 func TestCheckForUpdatesNoUpdate(t *testing.T) {
 	mock := &mockRestClient{
 		versionInfo: &restcommon.VersionInfo{

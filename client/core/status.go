@@ -57,6 +57,11 @@ func (a *App) OnGameStartedInternal(profileID uuid.UUID, pid int) {
 
 func (a *App) OnGameExitedInternal(profileID uuid.UUID) {
 	a.StopLobbyPolling()
+	if a.DiscordService != nil && a.DiscordService.IsLoggedIn() {
+		if _, ok := a.DiscordService.GetActiveLobby(); ok {
+			a.DiscordService.LeaveLobby(nil)
+		}
+	}
 	a.runningProfileMu.Lock()
 	wasRunning := a.runningProfileID == profileID && a.runningGamePID > 0
 	a.runningProfileID = uuid.Nil
@@ -116,6 +121,9 @@ func (a *App) StartLobbyPolling(pid int) {
 		a.lobbyInfo = info
 		onLobbyInfoUpdated := a.OnLobbyInfoUpdated
 		a.runningProfileMu.Unlock()
+		if info != nil && info.IsConnected {
+			a.SyncGameDiscordLobby(info)
+		}
 		if onLobbyInfoUpdated != nil {
 			onLobbyInfoUpdated(info)
 		}

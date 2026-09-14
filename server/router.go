@@ -286,6 +286,334 @@ func router(srv *service.ModService, versionProvider service.VersionInfoProvider
 		ctx.String(http.StatusOK, joinGameHTML("", deepLink, true))
 	})
 
+	// ---------------- Lobby Sharing Endpoints ----------------
+
+	api.POST(rest.EndpointShareLobby.Route, func(ctx *gin.Context) {
+		file, _, err := ctx.Request.FormFile("aupack")
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "aupack file is required"})
+			return
+		}
+		defer file.Close()
+
+		aupack, err := io.ReadAll(file)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "failed to read aupack file"})
+			return
+		}
+
+		var room *rest.RoomInfo
+		lobbyCode := strings.TrimSpace(ctx.PostForm("lobby_code"))
+		serverIP := strings.TrimSpace(ctx.PostForm("server_ip"))
+		if lobbyCode != "" || serverIP != "" {
+			serverPort := uint16(0)
+			if serverPortStr := strings.TrimSpace(ctx.PostForm("server_port")); serverPortStr != "" {
+				if parsed, err := strconv.ParseUint(serverPortStr, 10, 16); err == nil {
+					serverPort = uint16(parsed)
+				}
+			}
+			matchMakerPort := uint16(0)
+			if mmPortStr := strings.TrimSpace(ctx.PostForm("match_maker_port")); mmPortStr != "" {
+				if parsed, err := strconv.ParseUint(mmPortStr, 10, 16); err == nil {
+					matchMakerPort = uint16(parsed)
+				}
+			}
+			room = &rest.RoomInfo{
+				LobbyCode:      lobbyCode,
+				ServerIP:       serverIP,
+				ServerPort:     serverPort,
+				MatchMakerIp:   strings.TrimSpace(ctx.PostForm("match_maker_ip")),
+				MatchMakerPort: matchMakerPort,
+				GameVersion:    strings.TrimSpace(ctx.PostForm("game_version")),
+			}
+		}
+
+		hostDiscordUserID := uint64(0)
+		if hostDiscordUserIDStr := strings.TrimSpace(ctx.PostForm("host_discord_user_id")); hostDiscordUserIDStr != "" {
+			if parsed, err := strconv.ParseUint(hostDiscordUserIDStr, 10, 64); err == nil {
+				hostDiscordUserID = parsed
+			}
+		}
+
+		req := rest.ShareLobbyRequest{
+			Aupack:            aupack,
+			HostDiscordUserID: hostDiscordUserID,
+			Room:              room,
+		}
+
+		ip := clientIP(ctx)
+		rs, err := srv.CreateSharedLobby(ip, req)
+		if err != nil {
+			if err == service.ErrShareLobbyRateLimited {
+				ctx.JSON(http.StatusTooManyRequests, gin.H{"error": "rate limited"})
+				return
+			}
+			slog.ErrorContext(ctx, "Failed to create shared lobby", "error", err, "ip", ip)
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create shared lobby"})
+			return
+		}
+		joinPath := combinePath(pathPrefix, basePath, rest.EndpointJoinLobby.Route)
+		rs.URL = absoluteURL(ctx, joinPath+"?session_id="+url.QueryEscape(rs.SessionID))
+		ctx.JSON(http.StatusOK, rs)
+	})
+
+	api.PUT(rest.EndpointUpdateLobbyRoom.Route, func(ctx *gin.Context) {
+		sessionID := strings.TrimSpace(ctx.Param("session_id"))
+		if sessionID == "" {
+			sessionID = strings.TrimSpace(ctx.Query("session_id"))
+		}
+		hostKey := strings.TrimSpace(ctx.Query("host_key"))
+		if hostKey == "" {
+			hostKey = strings.TrimSpace(ctx.PostForm("host_key"))
+		}
+		if sessionID == "" || hostKey == "" {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "session_id and host_key are required"})
+			return
+		}
+
+		clearRoom := strings.EqualFold(strings.TrimSpace(ctx.Query("clear")), "true") || strings.EqualFold(strings.TrimSpace(ctx.PostForm("clear")), "true")
+		var room *rest.RoomInfo
+		if !clearRoom {
+			lobbyCode := strings.TrimSpace(ctx.PostForm("lobby_code"))
+			if lobbyCode == "" {
+				lobbyCode = strings.TrimSpace(ctx.Query("lobby_code"))
+			}
+			serverIP := strings.TrimSpace(ctx.PostForm("server_ip"))
+			if serverIP == "" {
+				serverIP = strings.TrimSpace(ctx.Query("server_ip"))
+			}
+			if lobbyCode != "" || serverIP != "" {
+				serverPort := uint16(0)
+				serverPortStr := strings.TrimSpace(ctx.PostForm("server_port"))
+				if serverPortStr == "" {
+					serverPortStr = strings.TrimSpace(ctx.Query("server_port"))
+				}
+				if serverPortStr != "" {
+					if parsed, err := strconv.ParseUint(serverPortStr, 10, 16); err == nil {
+						serverPort = uint16(parsed)
+					}
+				}
+				matchMakerPort := uint16(0)
+				mmPortStr := strings.TrimSpace(ctx.PostForm("match_maker_port"))
+				if mmPortStr == "" {
+					mmPortStr = strings.TrimSpace(ctx.Query("match_maker_port"))
+				}
+				if mmPortStr != "" {
+					if parsed, err := strconv.ParseUint(mmPortStr, 10, 16); err == nil {
+						matchMakerPort = uint16(parsed)
+					}
+				}
+				gameVer := strings.TrimSpace(ctx.PostForm("game_version"))
+				if gameVer == "" {
+					gameVer = strings.TrimSpace(ctx.Query("game_version"))
+				}
+				mmIP := strings.TrimSpace(ctx.PostForm("match_maker_ip"))
+				if mmIP == "" {
+					mmIP = strings.TrimSpace(ctx.Query("match_maker_ip"))
+				}
+				room = &rest.RoomInfo{
+					LobbyCode:      lobbyCode,
+					ServerIP:       serverIP,
+					ServerPort:     serverPort,
+					MatchMakerIp:   mmIP,
+					MatchMakerPort: matchMakerPort,
+					GameVersion:    gameVer,
+				}
+			}
+		}
+
+		rs, err := srv.UpdateSharedLobbyRoom(sessionID, hostKey, room)
+		if err != nil {
+			switch err {
+			case service.ErrShareLobbyNotFound:
+				ctx.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+			case service.ErrShareLobbyUnauthorized:
+				ctx.JSON(http.StatusForbidden, gin.H{"error": "invalid host key"})
+			case service.ErrShareLobbyExpired:
+				ctx.JSON(http.StatusGone, gin.H{"error": "session expired"})
+			default:
+				slog.ErrorContext(ctx, "Failed to update shared lobby room", "error", err, "session_id", sessionID)
+				ctx.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update lobby room"})
+			}
+			return
+		}
+		joinPath := combinePath(pathPrefix, basePath, rest.EndpointJoinLobby.Route)
+		rs.URL = absoluteURL(ctx, joinPath+"?session_id="+url.QueryEscape(rs.SessionID))
+		ctx.JSON(http.StatusOK, rs)
+	})
+
+	api.POST(rest.EndpointHeartbeatLobby.Route, func(ctx *gin.Context) {
+		sessionID := strings.TrimSpace(ctx.Query("session_id"))
+		if sessionID == "" {
+			sessionID = strings.TrimSpace(ctx.PostForm("session_id"))
+		}
+		hostKey := strings.TrimSpace(ctx.Query("host_key"))
+		if hostKey == "" {
+			hostKey = strings.TrimSpace(ctx.PostForm("host_key"))
+		}
+		if sessionID == "" || hostKey == "" {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "session_id and host_key are required"})
+			return
+		}
+		rs, err := srv.UpdateSharedLobbyExpiration(sessionID, hostKey)
+		if err != nil {
+			switch err {
+			case service.ErrShareLobbyNotFound:
+				ctx.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+			case service.ErrShareLobbyUnauthorized:
+				ctx.JSON(http.StatusForbidden, gin.H{"error": "invalid host key"})
+			default:
+				slog.ErrorContext(ctx, "Failed to heartbeat shared lobby", "error", err, "session_id", sessionID)
+				ctx.JSON(http.StatusInternalServerError, gin.H{"error": "failed to heartbeat shared lobby"})
+			}
+			return
+		}
+		joinPath := combinePath(pathPrefix, basePath, rest.EndpointJoinLobby.Route)
+		rs.URL = absoluteURL(ctx, joinPath+"?session_id="+url.QueryEscape(rs.SessionID))
+		ctx.JSON(http.StatusOK, rs)
+	})
+
+	api.DELETE(rest.EndpointDeleteLobby.Route, func(ctx *gin.Context) {
+		sessionID := strings.TrimSpace(ctx.Param("session_id"))
+		if sessionID == "" {
+			sessionID = strings.TrimSpace(ctx.Query("session_id"))
+		}
+		hostKey := strings.TrimSpace(ctx.Query("host_key"))
+		if hostKey == "" {
+			hostKey = strings.TrimSpace(ctx.PostForm("host_key"))
+		}
+		if sessionID == "" || hostKey == "" {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "session_id and host_key are required"})
+			return
+		}
+		if err := srv.DeleteSharedLobby(sessionID, hostKey); err != nil {
+			switch err {
+			case service.ErrShareLobbyNotFound:
+				ctx.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+			case service.ErrShareLobbyUnauthorized:
+				ctx.JSON(http.StatusForbidden, gin.H{"error": "invalid host key"})
+			default:
+				slog.ErrorContext(ctx, "Failed to delete shared lobby", "error", err, "session_id", sessionID)
+				ctx.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete shared lobby"})
+			}
+			return
+		}
+		ctx.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
+	api.POST(rest.EndpointAddLobbyMember.Route, func(ctx *gin.Context) {
+		sessionID := strings.TrimSpace(ctx.Param("session_id"))
+		if sessionID == "" {
+			sessionID = strings.TrimSpace(ctx.Query("session_id"))
+		}
+		if sessionID == "" {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "session_id is required"})
+			return
+		}
+
+		var req rest.JoinLobbyMemberRequest
+		if err := ctx.ShouldBindJSON(&req); err != nil {
+			if uidStr := strings.TrimSpace(ctx.PostForm("discord_user_id")); uidStr != "" {
+				if parsed, err := strconv.ParseUint(uidStr, 10, 64); err == nil {
+					req.DiscordUserID = parsed
+				}
+			}
+		}
+		if req.DiscordUserID == 0 {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "discord_user_id is required"})
+			return
+		}
+
+		if err := srv.AddLobbyMember(sessionID, req.DiscordUserID); err != nil {
+			switch err {
+			case service.ErrShareLobbyNotFound:
+				ctx.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+			case service.ErrShareLobbyExpired:
+				ctx.JSON(http.StatusGone, gin.H{"error": "session expired"})
+			default:
+				slog.ErrorContext(ctx, "Failed to add member to lobby", "error", err, "session_id", sessionID)
+				ctx.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add member to lobby"})
+			}
+			return
+		}
+		ctx.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
+	api.DELETE(rest.EndpointRemoveLobbyMember.Route, func(ctx *gin.Context) {
+		sessionID := strings.TrimSpace(ctx.Param("session_id"))
+		userIDStr := strings.TrimSpace(ctx.Param("user_id"))
+		if sessionID == "" || userIDStr == "" {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "session_id and user_id are required"})
+			return
+		}
+		userID, err := strconv.ParseUint(userIDStr, 10, 64)
+		if err != nil || userID == 0 {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid user_id"})
+			return
+		}
+
+		if err := srv.RemoveLobbyMember(sessionID, userID); err != nil {
+			switch err {
+			case service.ErrShareLobbyNotFound:
+				ctx.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+			case service.ErrShareLobbyExpired:
+				ctx.JSON(http.StatusGone, gin.H{"error": "session expired"})
+			default:
+				slog.ErrorContext(ctx, "Failed to remove member from lobby", "error", err, "session_id", sessionID, "user_id", userID)
+				ctx.JSON(http.StatusInternalServerError, gin.H{"error": "failed to remove member from lobby"})
+			}
+			return
+		}
+		ctx.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
+	api.GET(rest.EndpointJoinLobby.Route, func(ctx *gin.Context) {
+		sessionID := strings.TrimSpace(ctx.Query("session_id"))
+		if sessionID == "" {
+			ctx.JSON(http.StatusBadRequest, gin.H{"error": "session_id is required"})
+			return
+		}
+		if ctx.Query("download") != "" {
+			data, err := srv.GetJoinLobbyDownload(sessionID)
+			if err != nil {
+				switch err {
+				case service.ErrShareLobbyNotFound:
+					ctx.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+				case service.ErrShareLobbyExpired:
+					ctx.JSON(http.StatusGone, gin.H{"error": "session expired"})
+				default:
+					slog.ErrorContext(ctx, "Failed to get join lobby download", "error", err, "session_id", sessionID)
+					ctx.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get join lobby data"})
+				}
+				return
+			}
+			ctx.JSON(http.StatusOK, data)
+			return
+		}
+
+		serverBase := absoluteURL(ctx, combinePath(pathPrefix, basePath, ""))
+		_, err := srv.GetJoinLobbyMeta(sessionID)
+		if err != nil {
+			message := "このロビー参加リンクは無効です。時間切れの可能性があります。"
+			errorType := rest.JoinLobbyErrorInvalidSession
+			switch err {
+			case service.ErrShareLobbyExpired:
+				message = "このロビー参加リンクは有効期限切れです。"
+				errorType = rest.JoinLobbyErrorSessionExpired
+			case service.ErrShareLobbyNotFound:
+				message = "このロビー参加リンクは見つかりません。"
+				errorType = rest.JoinLobbyErrorSessionNotFound
+			}
+			deepLink := buildJoinLobbyDeepLink(serverBase, sessionID, errorType)
+			ctx.Header("Content-Type", "text/html; charset=utf-8")
+			ctx.String(http.StatusNotFound, joinGameHTML(message, deepLink, false))
+			return
+		}
+		deepLink := buildJoinLobbyDeepLink(serverBase, sessionID, "")
+		ctx.Header("Content-Type", "text/html; charset=utf-8")
+		ctx.String(http.StatusOK, joinGameHTML("", deepLink, true))
+	})
+
 	if pathPrefix != "" && pathPrefix != "/" {
 		return http.StripPrefix(pathPrefix, r.Handler())
 	}
@@ -340,6 +668,15 @@ func buildJoinGameDeepLink(serverBase, sessionID, errorType string) string {
 		values.Set("error_type", errorType)
 	}
 	return "mod-of-us://join_game/v1/" + url.PathEscape(sessionID) + "?" + values.Encode()
+}
+
+func buildJoinLobbyDeepLink(serverBase, sessionID, errorType string) string {
+	values := make(url.Values)
+	values.Set("server", serverBase)
+	if errorType != "" {
+		values.Set("error_type", errorType)
+	}
+	return "mod-of-us://join_lobby/v1/" + url.PathEscape(sessionID) + "?" + values.Encode()
 }
 
 //go:embed templates/join_game.tmpl
