@@ -11,7 +11,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v91/github"
 
 	"github.com/ikafly144/au_mod_installer/common/githubrelease"
 )
