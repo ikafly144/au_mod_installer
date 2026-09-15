@@ -10,12 +10,12 @@ import (
 	"path/filepath"
 )
 
-//go:embed mod-of-us.msi
+//go:embed modrepo.msi
 var msiData []byte
 
 func main() {
 	tempDir := os.TempDir()
-	msiPath := filepath.Join(tempDir, "mod-of-us-installer.msi")
+	msiPath := filepath.Join(tempDir, "modrepo-installer.msi")
 
 	err := os.WriteFile(msiPath, msiData, 0644)
 	if err != nil {

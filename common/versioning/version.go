@@ -23,8 +23,8 @@ import (
 
 var (
 	repoOwner    = "ikafly144"
-	repoName     = "au_mod_installer"
-	artifactName = "mod-of-us_${OS}_${ARCH}.msi"
+	repoName     = "modrepo"
+	artifactName = "modrepo_${OS}_${ARCH}.msi"
 )
 
 func CheckForUpdates(ctx context.Context, branch Branch, currentVersion string) (releaseTag string, latestStable string, err error) {
@@ -183,7 +183,7 @@ func DownloadUpdateWithProgress(ctx context.Context, tag string, onProgress Prog
 		return "", fmt.Errorf("failed to download MSI: status code %d", resp.StatusCode)
 	}
 	hasher := sha256.New()
-	tempFile, err := os.CreateTemp("", "mod-of-us-*.msi")
+	tempFile, err := os.CreateTemp("", "modrepo-*.msi")
 	if err != nil {
 		return "", fmt.Errorf("failed to create temp file: %w", err)
 	}

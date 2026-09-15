@@ -20,7 +20,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"time"
 
 	"fyne.io/fyne/v2"
 	fyneapp "fyne.io/fyne/v2/app"
@@ -32,41 +31,28 @@ import (
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
-	"golang.org/x/sys/windows"
-
-	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
-	"github.com/ikafly144/au_mod_installer/common/versioning"
+	"github.com/ikafly144/modrepo/client/ui/uicommon"
+	"github.com/ikafly144/modrepo/common/versioning"
 )
 
 type Settings struct {
-	state                   *uicommon.State
-	BranchEntry             *widget.Entry
-	BranchHintLabel         *widget.Label
-	BranchStatusLabel       *widget.RichText
-	AutoSharingCheck        *widget.Check
-	TrayResidentCheck       *widget.Check
-	StartSilentCheck        *widget.Check
-	AutoStartCheck          *widget.Check
-	DisplayScaleSlider      *widget.Slider
-	DisplayScaleSelect      *widget.Select
-	ClearCacheButton        *widget.Button
-	DeleteAmongUsDataButton *widget.Button
-	CheckForUpdatesButton   *widget.Button
-
-	epicAccountLabel *widget.Label
-	epicLoginButton  *widget.Button
-	epicLogoutButton *widget.Button
-
-	discordAccountLabel *widget.Label
-	discordLoginButton  *widget.Button
-	discordLogoutButton *widget.Button
+	state                 *uicommon.State
+	BranchEntry           *widget.Entry
+	BranchHintLabel       *widget.Label
+	BranchStatusLabel     *widget.RichText
+	TrayResidentCheck     *widget.Check
+	StartSilentCheck      *widget.Check
+	AutoStartCheck        *widget.Check
+	DisplayScaleSlider    *widget.Slider
+	DisplayScaleSelect    *widget.Select
+	ClearCacheButton      *widget.Button
+	CheckForUpdatesButton *widget.Button
 
 	displayScaleValues  map[string]float32
 	scaleControlSyncing bool
 	currentDisplayScale float32
 
 	loadLicensesOnce         sync.Once
-	startPollingOnce         sync.Once
 	thirdPartyLicenses       []thirdPartyLicense
 	thirdPartyLicenseLoadErr error
 	projectLicense           projectLicense
@@ -77,7 +63,7 @@ const (
 	displayScaleMax  = float32(2.0)
 	displayScaleStep = float32(0.1)
 
-	projectLicenseURL = "https://github.com/ikafly144/au_mod_installer/blob/master/LICENSE"
+	projectLicenseURL = "https://github.com/ikafly144/modrepo/blob/master/LICENSE"
 )
 
 var projectModulePath = func() string {
@@ -148,11 +134,6 @@ func NewSettings(state *uicommon.State) *Settings {
 		branchStatusLabel.Hide()
 	}
 
-	autoSharingCheck := widget.NewCheck(lang.LocalizeKey("settings.auto_sharing_label", "Enable Room Auto Sharing"), func(checked bool) {
-		fyne.CurrentApp().Preferences().SetBool("auto_sharing", checked)
-	})
-	autoSharingCheck.Checked = fyne.CurrentApp().Preferences().BoolWithFallback("auto_sharing", true)
-
 	trayResidentCheck := widget.NewCheck(lang.LocalizeKey("settings.tray_resident_label", "Stay in System Tray"), func(checked bool) {
 		fyne.CurrentApp().Preferences().SetBool("tray_resident", checked)
 	})
@@ -200,35 +181,20 @@ func NewSettings(state *uicommon.State) *Settings {
 		BranchEntry:         branchEntry,
 		BranchHintLabel:     branchHintLabel,
 		BranchStatusLabel:   branchStatusLabel,
-		AutoSharingCheck:    autoSharingCheck,
 		TrayResidentCheck:   trayResidentCheck,
 		StartSilentCheck:    startSilentCheck,
 		AutoStartCheck:      autoStartCheck,
 		DisplayScaleSlider:  displayScaleSlider,
 		DisplayScaleSelect:  displayScaleSelect,
-		epicAccountLabel:    widget.NewLabel(""),
-		discordAccountLabel: widget.NewLabel(""),
 		displayScaleValues:  displayScaleValues,
 		currentDisplayScale: clampDisplayScale(currentScale),
 	}
-	s.epicAccountLabel.Wrapping = fyne.TextWrapWord
-	s.discordAccountLabel.Wrapping = fyne.TextWrapWord
 	s.DisplayScaleSelect.OnChanged = s.onDisplayScaleChanged
 	s.DisplayScaleSlider.OnChanged = s.onDisplayScaleSliderChanged
 	s.DisplayScaleSlider.OnChangeEnded = s.onDisplayScaleSliderChangeEnded
 	s.setDisplayScaleControls(s.currentDisplayScale)
 
-	s.epicLoginButton = widget.NewButton(lang.LocalizeKey("settings.epic_login", "Login"), s.showEpicLoginDialog)
-	s.epicLogoutButton = widget.NewButton(lang.LocalizeKey("settings.epic_logout", "Logout"), s.epicLogout)
-	s.discordLoginButton = widget.NewButton(lang.LocalizeKey("settings.discord_login", "Login"), s.discordLogin)
-	s.discordLoginButton.Disable()
-	s.discordLogoutButton = widget.NewButton(lang.LocalizeKey("settings.discord_logout", "Logout"), s.discordLogout)
-	s.discordLogoutButton.Hide()
-
 	s.ClearCacheButton = widget.NewButtonWithIcon(lang.LocalizeKey("settings.clear_cache", "Clear Mod Cache"), theme.DeleteIcon(), s.clearCache)
-
-	s.DeleteAmongUsDataButton = widget.NewButtonWithIcon(lang.LocalizeKey("settings.delete_among_us_data", "Delete Among Us Data"), theme.DeleteIcon(), s.deleteAmongUsData)
-	s.DeleteAmongUsDataButton.Importance = widget.DangerImportance
 
 	s.CheckForUpdatesButton = widget.NewButtonWithIcon(lang.LocalizeKey("settings.check_for_updates", "Check for Updates"), theme.ViewRefreshIcon(), func() {
 		s.CheckForUpdatesButton.Disable()
@@ -264,20 +230,6 @@ func (s *Settings) ensureLicensesLoaded() {
 	})
 }
 
-func (s *Settings) startAccountPolling() {
-	s.startPollingOnce.Do(func() {
-		go func() {
-			ticker := time.NewTicker(3 * time.Second)
-			defer ticker.Stop()
-			for {
-				go s.refreshDiscordAccountInfo()
-				fyne.Do(s.refreshEpicAccountInfo)
-				<-ticker.C
-			}
-		}()
-	})
-}
-
 func (s *Settings) clearCache() {
 	dialog.ShowConfirm(lang.LocalizeKey("settings.clear_cache_confirm_title", "Clear Mod Cache"), lang.LocalizeKey("settings.clear_cache_confirm_message", "Are you sure you want to clear the mod cache? This will force re-downloading mods next time."), func(confirm bool) {
 		if !confirm {
@@ -292,7 +244,6 @@ func (s *Settings) clearCache() {
 }
 
 func (s *Settings) Tab() (*container.TabItem, error) {
-	s.startAccountPolling()
 	entry := widget.NewLabelWithData(s.state.SelectedGamePath)
 	entry.Selectable = true
 	pathBg := canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground))
@@ -342,16 +293,16 @@ func (s *Settings) Tab() (*container.TabItem, error) {
 	versionContent.Wrapping = fyne.TextWrapWord
 	basicPage := container.NewVScroll(container.NewVBox(
 		widget.NewCard(
-			lang.LocalizeKey("settings.app.title", "Mod of Us"),
+			lang.LocalizeKey("settings.app.title", "MODREPO"),
 			lang.LocalizeKey("settings.app.subtitle",
-				"Among Us Mod Manager"),
+				"R.E.P.O. Mod Manager"),
 			container.NewVBox(
 				versionContent,
 				container.NewCenter(s.CheckForUpdatesButton),
 			),
 		),
 		widget.NewCard(
-			lang.LocalizeKey("installation.select_install_info", "Among Us Installation Information"),
+			lang.LocalizeKey("installation.select_install_info", "R.E.P.O. Installation Information"),
 			"",
 			container.NewVBox(
 				s.state.InstallSelect,
@@ -388,14 +339,6 @@ func (s *Settings) Tab() (*container.TabItem, error) {
 			),
 		),
 		widget.NewCard(
-			lang.LocalizeKey("settings.auto_sharing", "Auto Sharing"),
-			"",
-			container.NewVBox(
-				s.AutoSharingCheck,
-				newHintLabel(lang.LocalizeKey("settings.auto_sharing_hint", "Automatically generate and update join link when joining a room.")),
-			),
-		),
-		widget.NewCard(
 			lang.LocalizeKey("settings.tray_resident", "System Tray"),
 			"",
 			container.NewVBox(
@@ -420,25 +363,6 @@ func (s *Settings) Tab() (*container.TabItem, error) {
 		),
 	))
 
-	accountPage := container.NewVScroll(container.NewVBox(
-		widget.NewCard(
-			lang.LocalizeKey("settings.discord_account", "Discord Account"),
-			"",
-			container.NewVBox(
-				s.discordAccountLabel,
-				container.NewHBox(s.discordLoginButton, s.discordLogoutButton),
-			),
-		),
-		widget.NewCard(
-			lang.LocalizeKey("settings.epic_games_account", "Epic Games Account"),
-			"",
-			container.NewVBox(
-				s.epicAccountLabel,
-				container.NewHBox(s.epicLoginButton, s.epicLogoutButton),
-			),
-		),
-	))
-
 	warningText := widget.NewRichText(
 		&widget.TextSegment{
 			Style: widget.RichTextStyleStrong,
@@ -458,24 +382,17 @@ func (s *Settings) Tab() (*container.TabItem, error) {
 				s.BranchStatusLabel,
 			)),
 		),
-		widget.NewCard(
-			lang.LocalizeKey("settings.data_management", "Data Management"),
-			"",
-			container.NewVBox(s.DeleteAmongUsDataButton),
-		),
 	))
 
 	openSourcePage := s.newOpenSourcePage()
 
 	pageTitles := []string{
 		lang.LocalizeKey("settings.page.general", "General"),
-		lang.LocalizeKey("settings.page.account", "Account"),
 		lang.LocalizeKey("settings.page.advanced", "Advanced"),
 		lang.LocalizeKey("settings.page.opensource", "Open Source Licenses"),
 	}
 	pageContents := []fyne.CanvasObject{
 		basicPage,
-		accountPage,
 		advancedPage,
 		openSourcePage,
 	}
@@ -529,181 +446,6 @@ func (s *Settings) Tab() (*container.TabItem, error) {
 	return container.NewTabItem(lang.LocalizeKey("settings.title", "Settings"), content), nil
 }
 
-func (s *Settings) refreshEpicAccountInfo() {
-	session := s.state.Core.EpicSessionManager.GetSession()
-	if session == nil {
-		s.epicAccountLabel.SetText(lang.LocalizeKey("settings.epic_logged_out", "Not Logged In")) // Reuse if appropriate or use new key
-		s.epicLoginButton.Show()
-		s.epicLogoutButton.Hide()
-	} else {
-		s.epicAccountLabel.SetText(lang.LocalizeKey("settings.epic_logged_in", "Logged in Epic Games Account"))
-		s.epicLoginButton.Hide()
-		s.epicLogoutButton.Show()
-	}
-}
-
-func (s *Settings) showEpicLoginDialog() {
-	s.state.ShowEpicLoginWindow(func() {
-		s.refreshEpicAccountInfo()
-		dialog.ShowInformation(lang.LocalizeKey("settings.login_success", "Login Successful"), lang.LocalizeKey("settings.login_success_message", "You have been logged in successfully."), s.state.Window)
-	}, nil)
-}
-
-func (s *Settings) epicLogout() {
-	if err := s.state.Core.EpicSessionManager.Clear(); err != nil {
-		dialog.ShowError(err, s.state.Window)
-		return
-	}
-	s.refreshEpicAccountInfo()
-}
-
-func (s *Settings) refreshDiscordAccountInfo() {
-	if s.state.Core == nil || s.state.Core.DiscordService == nil {
-		fyne.Do(func() {
-			s.discordAccountLabel.SetText(lang.LocalizeKey("settings.discord_unavailable", "Discord is unavailable."))
-			s.discordLoginButton.Hide()
-			s.discordLogoutButton.Hide()
-		})
-		return
-	}
-
-	ds := s.state.Core.DiscordService
-	if !ds.IsReady() {
-		fyne.Do(func() {
-			if ds.IsSigningIn() {
-				s.discordAccountLabel.SetText(lang.LocalizeKey("settings.discord_login_waiting", "Discord login waiting..."))
-				s.discordLoginButton.Disable()
-				s.discordLoginButton.Show()
-				s.discordLogoutButton.Hide()
-			} else {
-				s.discordAccountLabel.SetText(lang.LocalizeKey("settings.discord_login_in_progress_message", "Connecting..."))
-				s.discordLoginButton.Disable()
-				s.discordLoginButton.Show()
-				s.discordLogoutButton.Hide()
-			}
-		})
-		go func() {
-			ds.WaitReady()
-			fyne.Do(s.refreshDiscordAccountInfo)
-		}()
-		return
-	}
-
-	fyne.Do(func() {
-		if !ds.IsLoggedIn() {
-			s.discordAccountLabel.SetText(lang.LocalizeKey("settings.discord_logged_out", "Not Logged In"))
-			s.discordLoginButton.Enable()
-			s.discordLoginButton.Show()
-			s.discordLogoutButton.Hide()
-			return
-		}
-
-		user, ok := ds.UserInfo()
-		if !ok {
-			s.discordAccountLabel.SetText(lang.LocalizeKey("settings.discord_logged_in", "Logged in to Discord"))
-		} else {
-			displayName := user.Username()
-			if globalName, ok := user.GlobalName(); ok {
-				globalName = strings.TrimSpace(globalName)
-				if globalName != "" {
-					displayName = globalName
-				}
-			}
-			s.discordAccountLabel.SetText(lang.LocalizeKey("settings.discord_logged_in_user", "Logged in as {{.Name}} (ID: {{.ID}})", map[string]any{
-				"Name": displayName,
-				"ID":   user.Id(),
-			}))
-		}
-		s.discordLoginButton.Hide()
-		s.discordLogoutButton.Show()
-	})
-}
-
-func (s *Settings) discordLogin() {
-	if s.state.Core == nil || s.state.Core.DiscordService == nil {
-		s.state.ShowErrorDialog(errors.New(lang.LocalizeKey("settings.discord_unavailable", "Discord is unavailable.")))
-		return
-	}
-
-	ds := s.state.Core.DiscordService
-	var loginDialog *dialog.CustomDialog
-	cancelled := false
-	if ds.StartSignIn(func(success bool) {
-		fyne.Do(func() {
-			if loginDialog != nil {
-				loginDialog.Hide()
-			}
-			if success {
-				s.refreshDiscordAccountInfo()
-				s.state.ShowInfoDialog(
-					lang.LocalizeKey("settings.login_success", "Login Successful"),
-					lang.LocalizeKey("settings.login_success_message", "You have been logged in successfully."),
-				)
-			} else if !cancelled {
-				s.refreshDiscordAccountInfo()
-				s.state.ShowErrorDialog(errors.New(lang.LocalizeKey("settings.discord_login_failed", "Failed to log in to Discord.")))
-			}
-		})
-	}) {
-		progress := widget.NewProgressBarInfinite()
-		discordWaitingLabel := widget.NewLabel(lang.LocalizeKey("settings.discord_login_waiting", "Please complete the Discord login in your browser."))
-		discordWaitingLabel.Wrapping = fyne.TextWrapWord
-		content := container.NewVBox(
-			discordWaitingLabel,
-			progress,
-		)
-		loginDialog = dialog.NewCustom(
-			lang.LocalizeKey("settings.discord_login_in_progress_title", "Login in progress"),
-			lang.LocalizeKey("common.cancel", "Cancel"),
-			content,
-			s.state.Window,
-		)
-		loginDialog.SetOnClosed(func() {
-			if ds.IsSigningIn() {
-				cancelled = true
-				ds.AbortSignIn()
-				s.refreshDiscordAccountInfo()
-			}
-		})
-		loginDialog.Resize(fyne.NewSize(420, 160))
-		loginDialog.Show()
-	} else {
-		s.state.ShowInfoDialog(
-			lang.LocalizeKey("settings.discord_login_in_progress_title", "Login In Progress"),
-			lang.LocalizeKey("settings.discord_login_in_progress_message", "Discord login is already in progress."),
-		)
-	}
-}
-
-func (s *Settings) discordLogout() {
-	if s.state.Core == nil || s.state.Core.DiscordService == nil {
-		s.state.ShowErrorDialog(errors.New(lang.LocalizeKey("settings.discord_unavailable", "Discord is unavailable.")))
-		return
-	}
-
-	s.state.Core.DiscordService.Logout()
-	go s.refreshDiscordAccountInfo()
-}
-
-func (s *Settings) deleteAmongUsData() {
-	dialog.ShowConfirm(lang.LocalizeKey("settings.delete_among_us_data_confirm_title", "Delete Among Us Data"), lang.LocalizeKey("settings.delete_among_us_data_confirm_message", "Are you sure you want to delete all Among Us data? This will reset all your Among Us settings and save data. This action cannot be undone."), func(confirm bool) {
-		if !confirm {
-			return
-		}
-		appDataDir, err := windows.KnownFolderPath(windows.FOLDERID_LocalAppDataLow, 0)
-		if err != nil {
-			slog.Error("Failed to get LocalAppDataLow folder path", "error", err)
-			dialog.ShowError(err, s.state.Window)
-			return
-		}
-		auDataDir := filepath.Join(appDataDir, "Innersloth", "Among Us")
-		if err := os.RemoveAll(auDataDir); err != nil {
-			dialog.ShowError(err, s.state.Window)
-		} else {
-			dialog.ShowInformation(lang.LocalizeKey("common.success", "Success"), lang.LocalizeKey("settings.among_us_data_deleted", "Among Us data deleted successfully."), s.state.Window)
-		}
-	}, s.state.Window)
-}
 
 func (s *Settings) newOpenSourcePage() fyne.CanvasObject {
 	pageStack := container.NewStack()

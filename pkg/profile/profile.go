@@ -8,7 +8,7 @@ import (
 
 	"uuid"
 
-	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
+	"github.com/ikafly144/modrepo/pkg/modmgr"
 )
 
 type Profile struct {

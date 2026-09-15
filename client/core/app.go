@@ -1,510 +1,193 @@
 package core
 
 import (
-	"compress/zlib"
-	"context"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/hex"
-	"encoding/json/v2"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"uuid"
 
-	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/lang"
-
-	sdk "github.com/ikafly144/discord_social_sdk"
-
-	"github.com/ikafly144/au_mod_installer/client/discord"
-	"github.com/ikafly144/au_mod_installer/client/rest"
-	commonrest "github.com/ikafly144/au_mod_installer/common/rest"
-	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
-	"github.com/ikafly144/au_mod_installer/pkg/profile"
-	"github.com/ikafly144/au_mod_installer/pkg/progress"
-)
-
-const (
-	ProfileVersion                 = "v1"
-	ProfileArchiveDownloadTimeout  = 30 * time.Second
-	ProfileArchiveDownloadMaxBytes = int64(64 << 20)
+	"github.com/ikafly144/modrepo/client/rest"
+	"github.com/ikafly144/modrepo/pkg/profile"
+	"github.com/ikafly144/modrepo/pkg/progress"
+	"github.com/ikafly144/modrepo/pkg/repomgr"
+	"github.com/ikafly144/modrepo/pkg/thunderstore"
 )
 
 type App struct {
-	Version            string
-	ConfigDir          string
-	Rest               rest.Client
-	ProfileManager     *profile.Manager
-	EpicSessionManager *aumgr.EpicSessionManager
-	EpicApi            *aumgr.EpicApi
-
-	DiscordService *discord.DiscordService
+	Version        string
+	ConfigDir      string
+	Rest           rest.Client
+	ProfileManager *profile.Manager
 
 	// Running profile state
 	runningProfileMu   sync.Mutex
 	runningProfileID   uuid.UUID
 	launchingProfileID uuid.UUID
 	launchingProfile   bool
-	runningDirectJoin  bool
 	runningGamePID     int
 	runningStartedAt   time.Time
-	lobbyPollStop      func()
-	lobbyInfo          *IPCLobbyInfo
 
 	// Callbacks for state changes
-	OnGameStarted      func(profileID uuid.UUID, pid int)
-	OnGameExited       func(profileID uuid.UUID)
-	OnLobbyInfoUpdated func(info *IPCLobbyInfo)
-
-	// Shared room state
-	roomShareMu         sync.Mutex
-	roomShareGenerating bool
-	roomShareCache      SharedRoomLink
+	OnGameStarted func(profileID uuid.UUID, pid int)
+	OnGameExited  func(profileID uuid.UUID)
 }
 
-type SharedRoomLink struct {
-	RoomKey   string
-	URL       string
-	SessionID string
-	HostKey   string
-	ExpiresAt time.Time
-	InFlight  bool
-}
-
-func (a *App) GetSharedRoom() SharedRoomLink {
-	a.roomShareMu.Lock()
-	defer a.roomShareMu.Unlock()
-	return a.roomShareCache
-}
-
-func (a *App) SetSharedRoom(link SharedRoomLink) {
-	a.roomShareMu.Lock()
-	a.roomShareCache = link
-	a.roomShareMu.Unlock()
-}
-
-func (a *App) SetRoomShareGenerating(generating bool) {
-	a.roomShareMu.Lock()
-	a.roomShareGenerating = generating
-	a.roomShareMu.Unlock()
-}
-
-func (a *App) IsRoomShareGenerating() bool {
-	a.roomShareMu.Lock()
-	defer a.roomShareMu.Unlock()
-	return a.roomShareGenerating
-}
-
-func (a *App) InvalidateCachedRoomShareAsync() {
-	a.roomShareMu.Lock()
-	cache := a.roomShareCache
-	a.roomShareCache = SharedRoomLink{}
-	a.roomShareMu.Unlock()
-	if cache.SessionID == "" || cache.HostKey == "" {
-		return
-	}
-	go func() {
-		if err := a.Rest.DeleteSharedGame(cache.SessionID, cache.HostKey); err != nil {
-			slog.Warn("Failed to invalidate shared room link", "error", err)
-		}
-	}()
-}
-
-func (a *App) HeartbeatRoomShareAsync() {
-	a.roomShareMu.Lock()
-	if a.roomShareCache.InFlight || a.roomShareCache.SessionID == "" || a.roomShareCache.HostKey == "" {
-		a.roomShareMu.Unlock()
-		return
-	}
-	cache := a.roomShareCache
-	a.roomShareMu.Unlock()
-
-	// Check if current room matches
-	a.runningProfileMu.Lock()
-	profileID := a.runningProfileID
-	lobby := a.lobbyInfo
-	a.runningProfileMu.Unlock()
-
-	room, ok := a.CurrentRoomInfo(lobby)
-	if !ok {
-		return
-	}
-	roomKey := RoomKeyForCache(room, profileID)
-	if cache.RoomKey != roomKey {
-		return
-	}
-
-	// Only heartbeat if it expires within 30 minutes
-	if cache.ExpiresAt.After(time.Now().Add(30 * time.Minute)) {
-		return
-	}
-
-	a.roomShareMu.Lock()
-	if a.roomShareCache.SessionID != cache.SessionID || a.roomShareCache.InFlight {
-		a.roomShareMu.Unlock()
-		return
-	}
-	a.roomShareCache.InFlight = true
-	a.roomShareMu.Unlock()
-
-	go func() {
-		defer func() {
-			a.roomShareMu.Lock()
-			if a.roomShareCache.SessionID == cache.SessionID {
-				a.roomShareCache.InFlight = false
-			}
-			a.roomShareMu.Unlock()
-		}()
-
-		rs, err := a.Rest.UpdateSharedGameExpiration(cache.SessionID, cache.HostKey)
-		if err != nil {
-			slog.Warn("Failed to heartbeat shared room link", "error", err)
-			return
-		}
-		a.roomShareMu.Lock()
-		if a.roomShareCache.SessionID == cache.SessionID {
-			a.roomShareCache.ExpiresAt = rs.ExpiresAt
-		}
-		a.roomShareMu.Unlock()
-	}()
-}
-
-func RoomKeyForCache(room commonrest.RoomInfo, profileID uuid.UUID) string {
-	return strings.ToUpper(strings.TrimSpace(room.LobbyCode)) + "|" + strings.TrimSpace(room.ServerIP) + "|" + fmt.Sprint(room.ServerPort) + "|" + strings.TrimSpace(room.GameVersion) + "|" + profileID.String()
-}
-
-func (a *App) GetLobbyInfo() *IPCLobbyInfo {
-	a.runningProfileMu.Lock()
-	defer a.runningProfileMu.Unlock()
-	return a.lobbyInfo
-}
-
-func (a *App) StartActivityPolling(ctx context.Context) {
-	go func() {
-		ticker := time.NewTicker(2 * time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				a.updateRichPresence()
-			}
-		}
-	}()
-}
-
-func (a *App) updateRichPresence() {
-	if a.DiscordService == nil {
-		return
-	}
-
-	a.runningProfileMu.Lock()
-	profileID := a.runningProfileID
-	lobby := a.lobbyInfo
-	runningStartedAt := a.runningStartedAt
-	a.runningProfileMu.Unlock()
-
-	if profileID == uuid.Nil() {
-		a.DiscordService.ClearActivity()
-		// Auto-stop sharing when game ends
-		a.InvalidateCachedRoomShareAsync()
-		return
-	}
-
-	prof, ok := a.ProfileManager.Get(profileID)
-	if !ok {
-		a.DiscordService.ClearActivity()
-		return
-	}
-
-	act := sdk.NewActivity()
-	act.SetType(sdk.ActivityTypesPlaying)
-	act.SetName("Mod of Us")
-	act.SetDetails(fmt.Sprintf("Playing %s", prof.Name))
-	act.SetSupportedPlatforms(sdk.ActivityGamePlatformsDesktop)
-
-	assets := sdk.NewActivityAssets()
-	assets.SetLargeImage("icon")
-	if a.Version != "" {
-		assets.SetLargeText(fmt.Sprintf("Mod of Us %s", a.Version))
-	} else {
-		assets.SetLargeText("Mod of Us")
-	}
-	act.SetAssets(assets)
-
-	if !runningStartedAt.IsZero() {
-		timestamp := sdk.NewActivityTimestamps()
-		timestamp.SetStart(uint64(runningStartedAt.UnixMilli()))
-		act.SetTimestamps(timestamp)
-	}
-
-	if lobby != nil && lobby.IsConnected {
-		if lobby.GameState == "Started" {
-			act.SetState(lang.LocalizeKey("discord.status.in_game", "In Game"))
-		} else {
-			act.SetState(lang.LocalizeKey("discord.status.in_lobby", "In Lobby")) // TODO: More detailed state based on GameState?
-		}
-		if lobby.MaxPlayers > 0 && lobby.JoinedPlayers > 0 {
-			p := sdk.NewActivityParty()
-			p.SetId(strings.ToLower(lobby.GameState) + "/" + hex.EncodeToString(new(sha256.Sum256([]byte(lobby.MatchMakerIp + ":" + strconv.Itoa(lobby.MatchMakerPort) + "@" + lobby.LobbyCode)))[:]))
-			p.SetMaxSize(int32(lobby.MaxPlayers))
-			p.SetCurrentSize(int32(lobby.JoinedPlayers))
-			if fyne.CurrentApp().Preferences().BoolWithFallback("public_party", true) {
-				p.SetPrivacy(sdk.ActivityPartyPrivacyPublic)
-			} else {
-				p.SetPrivacy(sdk.ActivityPartyPrivacyPrivate)
-			}
-			act.SetParty(p)
-		}
-		share := a.GetSharedRoom()
-		if lobby.GameState == "Joined" && share.URL != "" && share.ExpiresAt.After(time.Now()) {
-			secrets := sdk.NewActivitySecrets()
-			secrets.SetJoin(share.URL)
-			act.SetSecrets(secrets)
-		}
-		// Heartbeat sharing if active
-		a.HeartbeatRoomShareAsync()
-	} else {
-		act.SetState(lang.LocalizeKey("discord.status.in_main_menu", "In Main Menu"))
-	}
-
-	a.DiscordService.SetActivity(act, func(d *sdk.ClientResult) {
-		if !d.Successful() {
-			slog.Warn("Failed to update Discord activity", "error", d.ErrorCode())
-		}
-	})
-}
-
-func New(version string, restClient rest.Client, activityService *discord.DiscordService) (*App, error) {
+func New(version string, restClient rest.Client) (*App, error) {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user config dir: %w", err)
 	}
-	appConfigDir := filepath.Join(configDir, "au_mod_installer")
-	profileManager, err := profile.NewManager(appConfigDir)
-	if err != nil {
-		if err := os.RemoveAll(appConfigDir); err != nil {
-			return nil, fmt.Errorf("failed to remove profile path: %w", err)
-		}
-		profileManager, err = profile.NewManager(appConfigDir)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create profile manager after removal: %w", err)
-		}
+	appConfigDir := filepath.Join(configDir, "MODREPO")
+	if err := os.MkdirAll(appConfigDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create config directory: %w", err)
 	}
 
-	epicSessionManager, err := aumgr.NewEpicSessionManager(appConfigDir)
+	profileManager, err := profile.NewManager(appConfigDir)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create epic session manager: %w", err)
+		slog.Warn("Failed to load profiles, recreating manager", "error", err)
+		profileManager, err = profile.NewManager(appConfigDir)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create profile manager: %w", err)
+		}
 	}
 
 	a := &App{
-		Version:            version,
-		ConfigDir:          appConfigDir,
-		Rest:               restClient,
-		ProfileManager:     profileManager,
-		EpicSessionManager: epicSessionManager,
-		EpicApi:            aumgr.NewEpicApi(),
-		DiscordService:     activityService,
+		Version:        version,
+		ConfigDir:      appConfigDir,
+		Rest:           restClient,
+		ProfileManager: profileManager,
+	}
+
+	// Ensure at least one profile exists
+	if len(profileManager.List()) == 0 {
+		_, err := a.CreateProfile("Default")
+		if err != nil {
+			slog.Warn("Failed to create default profile", "error", err)
+		}
 	}
 
 	return a, nil
 }
 
-func (a *App) DetectGamePath() (string, error) {
-	return aumgr.GetAmongUsDir()
-}
-
-func (a *App) DetectLauncherType(path string) aumgr.LauncherType {
-	return aumgr.DetectLauncherType(path)
-}
-
-func (a *App) ClearModCache() error {
-	cacheDir := filepath.Join(a.ConfigDir, "mods")
-	if _, err := os.Stat(cacheDir); err == nil {
-		return os.RemoveAll(cacheDir)
-	}
-	return nil
-}
-
-func (a *App) HandleSharedProfile(uri string) (*profile.SharedProfile, error) {
-	var ok bool
-	if uri, ok = strings.CutPrefix(uri, "mod-of-us://profile/"); !ok {
-		return nil, fmt.Errorf("invalid profile URI")
-	}
-	if uri, ok = strings.CutPrefix(uri, ProfileVersion+"/"); !ok {
-		return nil, fmt.Errorf("invalid profile version")
+// CreateProfile creates a new profile with BepInEx-BepInExPack pre-installed.
+func (a *App) CreateProfile(name string) (*profile.Profile, error) {
+	prof := profile.Profile{
+		ID:        uuid.New(),
+		Name:      name,
+		UpdatedAt: time.Now(),
 	}
 
-	reader, err := zlib.NewReader(base64.NewDecoder(base64.RawURLEncoding, strings.NewReader(uri)))
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode profile data: %w", err)
-	}
-	defer reader.Close()
-
-	var prof profile.SharedProfile
-	if err := json.UnmarshalRead(reader, &prof); err != nil {
-		return nil, fmt.Errorf("failed to decode profile JSON: %w", err)
+	// Automatically add BepInExPack if available
+	if a.Rest != nil {
+		if bep, err := a.Rest.GetLatestModVersion(thunderstore.BepInExPackModID); err == nil && bep != nil {
+			prof.AddModVersion(*bep)
+			slog.Info("Automatically added BepInExPack to profile", "profile", name, "version", bep.VersionID)
+		}
 	}
 
-	// Reset ID to avoid collision if it's a known one, but maybe better to let user decide?
-	// For now, let's keep it but user should confirm import.
+	if err := a.ProfileManager.Add(prof); err != nil {
+		return nil, err
+	}
 	return &prof, nil
 }
 
-func (a *App) HandleSharedProfileArchive(reader io.ReaderAt, size int64) (*profile.SharedProfile, []byte, error) {
-	prof, iconPNG, err := profile.DecodeSharedArchive(reader, size)
-	if err != nil {
-		return nil, nil, err
-	}
-	return prof, iconPNG, nil
+func (a *App) DetectGamePath() (string, error) {
+	return repomgr.GetRepoDir()
 }
 
-func (a *App) HandleSharedProfileArchiveFile(path string) (*profile.SharedProfile, []byte, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to read profile archive: %w", err)
-	}
-	defer file.Close()
-
-	stat, err := file.Stat()
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to stat profile archive: %w", err)
-	}
-
-	return a.HandleSharedProfileArchive(file, stat.Size())
+func (a *App) DetectLauncherType(path string) repomgr.LauncherType {
+	return repomgr.DetectLauncherType(path)
 }
 
-func (a *App) ExportProfile(prof profile.Profile) (string, error) {
-	builder := &strings.Builder{}
-	writer := zlib.NewWriter(base64.NewEncoder(base64.RawURLEncoding, builder))
-	defer writer.Close()
+func (a *App) GetBinaryType(path string) (repomgr.BinaryType, error) {
+	return repomgr.BinaryType64Bit, nil
+}
 
-	if err := json.MarshalWrite(writer, prof.MakeShared()); err != nil {
-		return "", err
+func (a *App) ClearModCache() error {
+	modsDir := filepath.Join(a.ConfigDir, "mods")
+	cacheDir := filepath.Join(a.ConfigDir, "cache")
+	var err1, err2 error
+	if _, err := os.Stat(modsDir); err == nil {
+		err1 = os.RemoveAll(modsDir)
 	}
-	if err := writer.Flush(); err != nil {
-		return "", err
+	if _, err := os.Stat(cacheDir); err == nil {
+		err2 = os.RemoveAll(cacheDir)
 	}
-
-	return "mod-of-us://profile/" + ProfileVersion + "/" + builder.String(), nil
+	if err1 != nil {
+		return err1
+	}
+	return err2
 }
 
 func (a *App) ExportProfileArchive(prof profile.Profile, iconPNG []byte) ([]byte, error) {
 	return profile.EncodeSharedArchive(prof.MakeShared(), iconPNG)
 }
 
-func (a *App) DownloadArchiveURLToTempFile(archiveURL string, progressListener progress.Progress) (string, error) {
-	parsedURL, err := url.Parse(archiveURL)
+func (a *App) HandleSharedProfileArchive(reader io.ReaderAt, size int64) (*profile.SharedProfile, []byte, error) {
+	return profile.DecodeSharedArchive(reader, size)
+}
+
+func (a *App) HandleSharedProfileArchiveFile(path string) (*profile.SharedProfile, []byte, error) {
+	f, err := os.Open(path)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse archive URL: %w", err)
+		return nil, nil, fmt.Errorf("failed to open archive file: %w", err)
 	}
-	if !strings.EqualFold(parsedURL.Scheme, "http") && !strings.EqualFold(parsedURL.Scheme, "https") {
-		return "", fmt.Errorf("unsupported archive URL scheme: %s", parsedURL.Scheme)
+	defer f.Close()
+
+	stat, err := f.Stat()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to stat archive file: %w", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), ProfileArchiveDownloadTimeout)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, parsedURL.String(), nil)
-	if err != nil {
-		return "", fmt.Errorf("failed to create archive request: %w", err)
-	}
+	return a.HandleSharedProfileArchive(f, stat.Size())
+}
 
-	resp, err := http.DefaultClient.Do(req)
+func (a *App) DownloadArchiveURLToTempFile(rawURL string, p progress.Progress) (string, error) {
+	resp, err := http.Get(rawURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to download archive: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("failed to download archive: unexpected status %s", resp.Status)
-	}
-	if resp.ContentLength > ProfileArchiveDownloadMaxBytes {
-		return "", fmt.Errorf("archive is too large: %d bytes (max %d)", resp.ContentLength, ProfileArchiveDownloadMaxBytes)
-	}
-	if progressListener != nil {
-		progressListener.SetValue(0)
-		progressListener.Start()
-		defer progressListener.Done()
+		return "", fmt.Errorf("failed to download archive: HTTP %d", resp.StatusCode)
 	}
 
-	tempFile, err := os.CreateTemp("", "mod-of-us-profile-url-*.aupack")
+	tempFile, err := os.CreateTemp("", "modrepo-archive-*.repopack")
 	if err != nil {
-		return "", fmt.Errorf("failed to create temp archive file: %w", err)
+		return "", fmt.Errorf("failed to create temp file: %w", err)
 	}
-	tempPath := tempFile.Name()
-	buf := progress.NewProgressWriter(0, 1, resp.ContentLength, progressListener, tempFile)
-	written, copyErr := io.Copy(buf, io.LimitReader(resp.Body, ProfileArchiveDownloadMaxBytes+1))
-	buf.Complete()
-	closeErr := tempFile.Close()
-	if copyErr != nil {
-		_ = os.Remove(tempPath)
-		return "", fmt.Errorf("failed to save downloaded archive: %w", copyErr)
-	}
-	if closeErr != nil {
-		_ = os.Remove(tempPath)
-		return "", fmt.Errorf("failed to finalize downloaded archive: %w", closeErr)
-	}
-	if written > ProfileArchiveDownloadMaxBytes {
-		_ = os.Remove(tempPath)
-		return "", fmt.Errorf("archive is too large: more than %d bytes", ProfileArchiveDownloadMaxBytes)
-	}
-	return tempPath, nil
-}
+	defer tempFile.Close()
 
-func (a *App) HandleJoinGameDownload(sessionID string, serverBase string) (*profile.SharedProfile, []byte, *LaunchJoinInfo, error) {
-	client := rest.NewClient(serverBase)
-	rs, err := client.GetJoinGameDownload(sessionID)
-	if err != nil {
-		return nil, nil, nil, err
+	var writer io.Writer = tempFile
+	if p != nil {
+		pw := progress.NewProgressWriter(0, 1.0, resp.ContentLength, p, tempFile)
+		defer pw.Complete()
+		writer = pw
 	}
 
-	tmpFile, err := os.CreateTemp("", "mod-of-us-join-*.aupack")
-	if err != nil {
-		return nil, nil, nil, err
+	if _, err := io.Copy(writer, resp.Body); err != nil {
+		_ = os.Remove(tempFile.Name())
+		return "", fmt.Errorf("failed to save archive: %w", err)
 	}
-	defer os.Remove(tmpFile.Name())
-	if _, err := tmpFile.Write(rs.Aupack); err != nil {
-		_ = tmpFile.Close()
-		return nil, nil, nil, err
-	}
-	stat, err := tmpFile.Stat()
-	if err != nil {
-		_ = tmpFile.Close()
-		return nil, nil, nil, err
-	}
-	shared, iconPNG, err := a.HandleSharedProfileArchive(tmpFile, stat.Size())
-	_ = tmpFile.Close()
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	joinInfo := &LaunchJoinInfo{
-		LobbyCode:      rs.Room.LobbyCode,
-		ServerIP:       rs.Room.ServerIP,
-		ServerPort:     rs.Room.ServerPort,
-		MatchMakerIp:   rs.Room.MatchMakerIp,
-		MatchMakerPort: rs.Room.MatchMakerPort,
-		GameVersion:    rs.Room.GameVersion,
-	}
-	return shared, iconPNG, joinInfo, nil
+
+	return tempFile.Name(), nil
 }
 
 func (a *App) HandleImportReader(reader io.Reader, extension string) (*profile.SharedProfile, []byte, error) {
-	if !strings.EqualFold(extension, ".aupack") {
+	ext := strings.ToLower(extension)
+	if ext != ".repopack" && ext != ".aupack" && ext != ".zip" {
 		return nil, nil, fmt.Errorf("unsupported file extension: %s", extension)
 	}
 
-	tempFile, err := os.CreateTemp("", "mod-of-us-profile-*.aupack")
+	tempFile, err := os.CreateTemp("", "modrepo-profile-*.repopack")
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create temp file: %w", err)
 	}
@@ -528,69 +211,37 @@ func (a *App) HandleImportReader(reader io.Reader, extension string) (*profile.S
 
 func (a *App) ImportSharedProfile(shared *profile.SharedProfile, iconPNG []byte) (*profile.Profile, error) {
 	prof := profile.Profile{
-		ID:          shared.ID,
+		ID:          uuid.New(), // Give new UUID on import to avoid conflicts
 		Name:        shared.Name,
 		Author:      shared.Author,
 		Description: shared.Description,
 		UpdatedAt:   time.Now(),
 	}
 
-	if p, ok := a.ProfileManager.Get(shared.ID); ok {
-		prof.PlayDurationNS = p.PlayDurationNS
-		prof.LastLaunchedAt = p.LastLaunchedAt
-	}
-
-	// Fetch mod version infos
+	// Fetch mod version details
 	for modID, versionID := range shared.ModVersions {
 		info, err := a.Rest.GetModVersion(modID, versionID)
 		if err != nil {
-			return nil, fmt.Errorf("failed to fetch mod version info for %s:%s: %w", modID, versionID, err)
+			slog.Warn("Failed to fetch mod version for import, trying latest", "modId", modID, "error", err)
+			info, err = a.Rest.GetLatestModVersion(modID)
 		}
-		prof.AddModVersion(*info)
+		if err == nil && info != nil {
+			prof.AddModVersion(*info)
+		}
+	}
+
+	// Ensure BepInEx-BepInExPack is present
+	if _, hasBep := prof.ModVersions[thunderstore.BepInExPackModID]; !hasBep {
+		if bep, err := a.Rest.GetLatestModVersion(thunderstore.BepInExPackModID); err == nil && bep != nil {
+			prof.AddModVersion(*bep)
+		}
 	}
 
 	if err := a.ProfileManager.Add(prof); err != nil {
 		return nil, err
 	}
 	if len(iconPNG) > 0 {
-		if err := a.ProfileManager.SaveIconPNG(prof.ID, iconPNG); err != nil {
-			return nil, err
-		}
+		_ = a.ProfileManager.SaveIconPNG(prof.ID, iconPNG)
 	}
 	return &prof, nil
-}
-
-type JoinGameLink struct {
-	SessionID  string
-	ServerBase string
-	ErrorType  string
-}
-
-func (a *App) ParseJoinGameURI(uri string) (*JoinGameLink, error) {
-	slog.Info("parsing join game URI", "uri", uri)
-	parsed, err := url.Parse(uri)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse join game URI: %w", err)
-	}
-	if !strings.EqualFold(parsed.Scheme, "mod-of-us") || !strings.EqualFold(parsed.Host, "join_game") {
-		return nil, fmt.Errorf("invalid join game URI")
-	}
-	path := strings.TrimPrefix(parsed.Path, "/")
-	if !strings.HasPrefix(path, "v1/") {
-		return nil, fmt.Errorf("unsupported join game URI version")
-	}
-	sessionID := strings.TrimPrefix(path, "v1/")
-	values := parsed.Query()
-	serverBase := strings.TrimSpace(values.Get("server"))
-	if serverBase == "" {
-		return nil, fmt.Errorf("join game URI missing server")
-	}
-	if parsedServer, err := url.Parse(serverBase); err != nil || parsedServer.Scheme == "" || parsedServer.Host == "" {
-		return nil, fmt.Errorf("invalid join game URI server")
-	}
-	return &JoinGameLink{
-		SessionID:  sessionID,
-		ServerBase: serverBase,
-		ErrorType:  strings.TrimSpace(values.Get("error_type")),
-	}, nil
 }

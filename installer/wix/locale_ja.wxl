@@ -1,9 +1,9 @@
 <WixLocalization xmlns="http://wixtoolset.org/schemas/v4/wxl" Culture="ja-JP">
-  <String Id="ProductName" Value="Mod of Us - Among Us モッドマネージャー" />
-  <String Id="FeatureMainTitle" Value="Mod of Us 本体" />
-  <String Id="LaunchAppText" Value="インストール完了後に Mod of Us を起動する" />
-  <String Id="ShortcutName" Value="Mod of Us" />
+  <String Id="ProductName" Value="MODREPO - R.E.P.O. モッドマネージャー" />
+  <String Id="FeatureMainTitle" Value="MODREPO 本体" />
+  <String Id="LaunchAppText" Value="インストール完了後に MODREPO を起動する" />
+  <String Id="ShortcutName" Value="MODREPO" />
   <String Id="ManufacturerName" Value="ikafly144" />
-  <String Id="InstallFolder" Value="Mod of Us" />
-  <String Id="DowngradeError" Value="既に新しいバージョンの Mod of Us がインストールされています。" />
+  <String Id="InstallFolder" Value="MODREPO" />
+  <String Id="DowngradeError" Value="既に新しいバージョンの MODREPO がインストールされています。" />
 </WixLocalization>

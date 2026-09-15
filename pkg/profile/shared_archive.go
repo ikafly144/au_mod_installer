@@ -11,8 +11,9 @@ import (
 )
 
 const (
-	SharedArchiveProfilePath = "mod-of-us.profile.json"
-	SharedArchiveIconPath    = "icon.png"
+	SharedArchiveProfilePath       = "modrepo.profile.json"
+	SharedArchiveLegacyProfilePath = "mod-of-us.profile.json"
+	SharedArchiveIconPath          = "icon.png"
 
 	maxSharedArchiveProfileSize = 1 << 20 // 1 MiB
 	maxSharedArchiveIconSize    = 8 << 20 // 8 MiB
@@ -76,7 +77,7 @@ func DecodeSharedArchive(reader io.ReaderAt, size int64) (*SharedProfile, []byte
 	var iconPNG []byte
 	for _, f := range archiveReader.File {
 		switch normalizeArchivePath(f.Name) {
-		case SharedArchiveProfilePath:
+		case SharedArchiveProfilePath, SharedArchiveLegacyProfilePath:
 			profileJSON, err = readZipEntryLimited(f, maxSharedArchiveProfileSize)
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to read %s: %w", SharedArchiveProfilePath, err)

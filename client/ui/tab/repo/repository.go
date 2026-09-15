@@ -24,10 +24,10 @@ import (
 
 	"uuid"
 
-	"github.com/ikafly144/au_mod_installer/client/core"
-	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
-	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
-	"github.com/ikafly144/au_mod_installer/pkg/profile"
+	"github.com/ikafly144/modrepo/client/core"
+	"github.com/ikafly144/modrepo/client/ui/uicommon"
+	"github.com/ikafly144/modrepo/pkg/modmgr"
+	"github.com/ikafly144/modrepo/pkg/profile"
 
 	_ "image/gif"
 	_ "image/jpeg"
@@ -35,25 +35,40 @@ import (
 )
 
 const (
-	ModsPerPage          = 10
 	repositoryThumbSize  = float32(114)
 	repositoryDetailSize = float32(114)
+	searchDebounceDelay  = 300 * time.Millisecond
+)
+
+// Sort key constants used by the sort dropdown and SearchMods().
+const (
+	SortByDownloads = "downloads"
+	SortByUpdated   = "updated"
+	SortByRating    = "rating"
+	SortByName      = "name"
 )
 
 type Repository struct {
 	state    *uicommon.State
 	loadOnce sync.Once
-	mu       sync.Mutex
 
 	thumbMu             sync.Mutex
 	thumbnailImageCache map[string]image.Image
 	thumbnailFetched    map[string]bool
 	thumbnailLoading    map[string]bool
 
-	lastModID  string
-	noMoreMods bool
-	loading    bool
-	modsBind   binding.List[*modmgr.Mod]
+	// Filtered mod list (result of SearchMods)
+	dataMu   sync.RWMutex
+	filteredMods []*modmgr.Mod
+
+	// Search / filter state
+	searchQuery string
+	sortBy      string
+	category    string
+
+	// Debounce
+	debounceTimer *time.Timer
+	debounceMu    sync.Mutex
 
 	// Containers
 	mainContainer *fyne.Container // Stack container for switching views
@@ -61,67 +76,107 @@ type Repository struct {
 	detailView    *fyne.Container // The detail view container
 
 	// List View Elements
-	modListContainer *fyne.Container
-	modScroll        *container.Scroll
-	searchBar        *widget.Entry
-	reloadBtn        *widget.Button
-	stateLabel       *widget.Label
+	modList       *widget.List
+	searchBar     *widget.Entry
+	sortSelect    *widget.Select
+	categorySelect *widget.Select
+	reloadBtn     *widget.Button
+	stateLabel    *widget.Label
 }
 
 func NewRepository(state *uicommon.State) *Repository {
-	bind := binding.NewList(func(a, b *modmgr.Mod) bool { return a.ID == b.ID })
-
 	repo := &Repository{
 		state:               state,
-		lastModID:           "",
-		modsBind:            bind,
-		modListContainer:    container.NewVBox(),
-		stateLabel:          widget.NewLabel(""),
 		thumbnailImageCache: map[string]image.Image{},
 		thumbnailFetched:    map[string]bool{},
 		thumbnailLoading:    map[string]bool{},
+		sortBy:              SortByDownloads,
 	}
 
-	// Initialize UI components
+	// --- Search bar ---
 	repo.searchBar = widget.NewEntry()
 	repo.searchBar.SetPlaceHolder(lang.LocalizeKey("repository.search_placeholder", "Filter mods by name"))
 	repo.searchBar.OnChanged = func(s string) {
-		go repo.updateModList(s)
+		repo.dataMu.Lock()
+		repo.searchQuery = s
+		repo.dataMu.Unlock()
+		repo.scheduleRefresh()
 	}
 
+	// --- Sort dropdown ---
+	sortOptions := []string{
+		lang.LocalizeKey("repository.sort.downloads", "Popular"),
+		lang.LocalizeKey("repository.sort.updated", "Recently Updated"),
+		lang.LocalizeKey("repository.sort.rating", "Top Rated"),
+		lang.LocalizeKey("repository.sort.name", "Name"),
+	}
+	sortKeys := []string{SortByDownloads, SortByUpdated, SortByRating, SortByName}
+
+	repo.sortSelect = widget.NewSelect(sortOptions, func(selected string) {
+		for i, opt := range sortOptions {
+			if opt == selected {
+				repo.dataMu.Lock()
+				repo.sortBy = sortKeys[i]
+				repo.dataMu.Unlock()
+				repo.scheduleRefresh()
+				return
+			}
+		}
+	})
+	repo.sortSelect.SetSelectedIndex(0)
+
+	// --- Category dropdown ---
+	allCategoriesLabel := lang.LocalizeKey("repository.category.all", "All Categories")
+	repo.categorySelect = widget.NewSelect([]string{allCategoriesLabel}, func(selected string) {
+		repo.dataMu.Lock()
+		if selected == allCategoriesLabel {
+			repo.category = ""
+		} else {
+			repo.category = selected
+		}
+		repo.dataMu.Unlock()
+		repo.scheduleRefresh()
+	})
+	repo.categorySelect.SetSelectedIndex(0)
+
+	// --- Reload button ---
 	repo.reloadBtn = widget.NewButtonWithIcon(lang.LocalizeKey("repository.reload", "Reload"), theme.ViewRefreshIcon(), func() {
 		repo.reloadBtn.Disable()
-		go func() {
-			repo.reloadMods()
-		}()
+		go repo.reloadMods()
 	})
 
+	// --- State label ---
+	repo.stateLabel = widget.NewLabel("")
 	repo.stateLabel.Hide()
 	repo.stateLabel.Wrapping = fyne.TextWrapWord
 
-	repo.modScroll = container.NewVScroll(repo.modListContainer)
-	repo.modScroll.OnScrolled = func(pos fyne.Position) {
-		threshold := float32(4)
-		bottomY := repo.modListContainer.Size().Height - repo.modScroll.Size().Height
-		reachedBottom := bottomY > threshold && pos.Y >= bottomY-threshold
-		if reachedBottom {
-			repo.LoadNext()
-		}
-	}
+	// --- Virtualized list ---
+	repo.modList = widget.NewList(
+		func() int {
+			repo.dataMu.RLock()
+			defer repo.dataMu.RUnlock()
+			return len(repo.filteredMods)
+		},
+		repo.createListItem,
+		repo.updateListItem,
+	)
 
 	// Build List View
-	top := container.New(layout.NewBorderLayout(nil, nil, nil, repo.reloadBtn),
-		repo.searchBar,
-		repo.reloadBtn,
+	toolbar := container.NewVBox(
+		container.New(layout.NewBorderLayout(nil, nil, nil, repo.reloadBtn),
+			repo.searchBar,
+			repo.reloadBtn,
+		),
+		container.NewGridWithColumns(2, repo.sortSelect, repo.categorySelect),
 	)
 	bottom := container.NewVBox(
 		repo.state.ErrorText,
 		repo.stateLabel,
 	)
-	repo.listView = container.New(layout.NewBorderLayout(top, bottom, nil, nil),
-		top,
+	repo.listView = container.New(layout.NewBorderLayout(toolbar, bottom, nil, nil),
+		toolbar,
 		bottom,
-		repo.modScroll,
+		repo.modList,
 	)
 
 	// Initialize Detail View (empty for now)
@@ -131,7 +186,7 @@ func NewRepository(state *uicommon.State) *Repository {
 	repo.detailView.Hide()
 
 	state.ActiveProfile.AddListener(binding.NewDataListener(func() {
-		repo.updateModList(repo.searchBar.Text)
+		repo.refreshList()
 	}))
 
 	return repo
@@ -139,7 +194,7 @@ func NewRepository(state *uicommon.State) *Repository {
 
 func (r *Repository) EnsureLoaded() {
 	r.loadOnce.Do(func() {
-		r.LoadNext()
+		go r.refreshFilteredMods()
 	})
 }
 
@@ -148,103 +203,156 @@ func (r *Repository) Tab() (*container.TabItem, error) {
 	return container.NewTabItem(lang.LocalizeKey("repository.tab_name", "Repository"), r.mainContainer), nil
 }
 
-func (r *Repository) updateModList(filter string) {
-	defer fyne.Do(r.reloadBtn.Enable)
-	var objs []fyne.CanvasObject
-	mods, err := r.modsBind.Get()
+// scheduleRefresh debounces search/filter changes.
+func (r *Repository) scheduleRefresh() {
+	r.debounceMu.Lock()
+	defer r.debounceMu.Unlock()
+	if r.debounceTimer != nil {
+		r.debounceTimer.Stop()
+	}
+	r.debounceTimer = time.AfterFunc(searchDebounceDelay, func() {
+		r.refreshFilteredMods()
+	})
+}
+
+// refreshFilteredMods queries SearchMods with current filters and updates the list.
+func (r *Repository) refreshFilteredMods() {
+	r.dataMu.RLock()
+	query := r.searchQuery
+	cat := r.category
+	sort := r.sortBy
+	r.dataMu.RUnlock()
+
+	mods, err := r.state.Rest.SearchMods(query, cat, sort)
 	if err != nil {
-		slog.Error("Failed to get mods from binding", "error", err)
+		slog.Error("Failed to search mods", "error", err)
+		r.state.SetError(fmt.Errorf("%s", lang.LocalizeKey("repository.failed_to_load", "Failed to load mods: {{.Error}}", map[string]any{"Error": err.Error()})))
 		return
 	}
 
-	searchText := strings.ToLower(filter)
-	for _, mod := range mods {
-		if searchText != "" && !strings.Contains(strings.ToLower(mod.Name), searchText) {
-			continue
-		}
+	r.dataMu.Lock()
+	r.filteredMods = mods
+	r.dataMu.Unlock()
 
-		thumb := r.newModThumbnailCanvas(mod.ID, repositoryThumbSize, 3)
-		r.ensureThumbnailLoaded(mod.ID)
-		thumbBg := canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground))
-		thumbBg.CornerRadius = 6
-		thumbArea := container.NewStack(thumbBg, container.NewCenter(thumb))
+	r.refreshList()
+}
 
-		titleLabel := widget.NewLabelWithStyle(mod.Name, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-		titleLabel.Wrapping = fyne.TextWrapOff
-		titleLabel.Truncation = fyne.TextTruncateEllipsis
+// refreshList tells the virtualized list to re-render visible items.
+func (r *Repository) refreshList() {
+	fyne.Do(func() {
+		r.modList.Refresh()
+	})
+}
 
-		updateBadge := widget.NewLabel("")
-		updateBadge.Hide()
+// createListItem creates a template list item widget (called once per visible slot).
+func (r *Repository) createListItem() fyne.CanvasObject {
+	thumb := canvas.NewImageFromImage(placeholderModThumbnail(int(repositoryThumbSize)))
+	thumb.FillMode = canvas.ImageFillContain
+	thumb.CornerRadius = 3
+	thumb.SetMinSize(fyne.NewSquareSize(repositoryThumbSize))
+	thumbBg := canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground))
+	thumbBg.CornerRadius = 6
+	thumbArea := container.NewStack(thumbBg, container.NewCenter(thumb))
 
-		activeProfileIDStr, _ := r.state.ActiveProfile.Get()
-		if activeProfileIDStr != "" {
-			if activeID, err := uuid.Parse(activeProfileIDStr); err == nil {
-				if activeProfile, ok := r.state.ProfileManager.Get(activeID); ok {
-					if installedVersion, ok := activeProfile.ModVersions[mod.ID]; ok {
-						if installedVersion.VersionID != mod.LatestVersionID {
-							updateBadge.SetText(lang.LocalizeKey("repository.update_available", "Update Available"))
-							updateBadge.Importance = widget.WarningImportance
-							updateBadge.Show()
-						}
+	titleLabel := widget.NewLabelWithStyle("Mod Name", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	titleLabel.Wrapping = fyne.TextWrapOff
+	titleLabel.Truncation = fyne.TextTruncateEllipsis
+
+	updateBadge := widget.NewLabel("")
+	updateBadge.Hide()
+
+	authorLabel := widget.NewLabel("Author")
+	authorLabel.Wrapping = fyne.TextWrapOff
+	authorLabel.Truncation = fyne.TextTruncateEllipsis
+	descriptionLabel := widget.NewLabel("Description")
+	descriptionLabel.Wrapping = fyne.TextWrapOff
+	descriptionLabel.Truncation = fyne.TextTruncateEllipsis
+
+	titleRow := container.NewBorder(nil, nil, nil, updateBadge, titleLabel)
+	textContainer := container.NewVBox(
+		titleRow,
+		authorLabel,
+		descriptionLabel,
+	)
+
+	content := container.New(&modListItemLayout{
+		minThumbSize: repositoryThumbSize,
+		spacing:      theme.Padding(),
+	}, thumbArea, container.NewPadded(textContainer))
+
+	tappable := uicommon.NewTappableContainer(content, nil)
+
+	bg := canvas.NewRectangle(theme.Color(theme.ColorNameBackground))
+	bg.StrokeColor = theme.Color(theme.ColorNameButton)
+	bg.StrokeWidth = 1
+	bg.CornerRadius = theme.InputRadiusSize()
+
+	return container.NewStack(bg, container.NewPadded(tappable))
+}
+
+// updateListItem binds data to a list item at the given index.
+func (r *Repository) updateListItem(id widget.ListItemID, item fyne.CanvasObject) {
+	r.dataMu.RLock()
+	if id >= len(r.filteredMods) {
+		r.dataMu.RUnlock()
+		return
+	}
+	mod := r.filteredMods[id]
+	r.dataMu.RUnlock()
+
+	// Navigate the widget tree:
+	// item = Stack[bg, Padded[tappable]]
+	stackObjs := item.(*fyne.Container).Objects
+	padded := stackObjs[1].(*fyne.Container)        // Padded
+	tappable := padded.Objects[0].(*uicommon.TappableContainer) // TappableContainer
+	contentLayout := tappable.Content.(*fyne.Container) // modListItemLayout container
+
+	thumbArea := contentLayout.Objects[0].(*fyne.Container) // Stack[thumbBg, Center[thumb]]
+	centerContainer := thumbArea.Objects[1].(*fyne.Container)
+	thumb := centerContainer.Objects[0].(*canvas.Image)
+
+	paddedText := contentLayout.Objects[1].(*fyne.Container) // Padded[textContainer]
+	textContainer := paddedText.Objects[0].(*fyne.Container) // VBox[titleRow, author, desc]
+
+	titleRow := textContainer.Objects[0].(*fyne.Container) // Border[titleLabel, updateBadge]
+	titleLabel := titleRow.Objects[0].(*widget.Label)
+	updateBadge := titleRow.Objects[1].(*widget.Label)
+
+	authorLabel := textContainer.Objects[1].(*widget.Label)
+	descriptionLabel := textContainer.Objects[2].(*widget.Label)
+
+	// Update content
+	titleLabel.SetText(mod.Name)
+	authorLabel.SetText(mod.Author)
+	descriptionLabel.SetText(repositoryListSummary(mod.Description, 120))
+
+	// Update thumbnail
+	thumb.Image = r.modThumbnailImage(mod.ID, int(repositoryThumbSize))
+	thumb.Refresh()
+	r.ensureThumbnailLoaded(mod.ID, id)
+
+	// Update badge
+	updateBadge.Hide()
+	activeProfileIDStr, _ := r.state.ActiveProfile.Get()
+	if activeProfileIDStr != "" {
+		if activeID, err := uuid.Parse(activeProfileIDStr); err == nil {
+			if activeProfile, ok := r.state.ProfileManager.Get(activeID); ok {
+				if installedVersion, ok := activeProfile.ModVersions[mod.ID]; ok {
+					if installedVersion.VersionID != mod.LatestVersionID {
+						updateBadge.SetText(lang.LocalizeKey("repository.update_available", "Update Available"))
+						updateBadge.Importance = widget.WarningImportance
+						updateBadge.Show()
 					}
 				}
 			}
 		}
-
-		authorLabel := widget.NewLabel(mod.Author)
-		authorLabel.Wrapping = fyne.TextWrapOff
-		authorLabel.Truncation = fyne.TextTruncateEllipsis
-		descriptionLabel := widget.NewLabel(repositoryListSummary(mod.Description, 120))
-		titleRow := container.NewBorder(nil, nil, nil, updateBadge, titleLabel)
-		textContainer := container.NewVBox(
-			titleRow,
-			authorLabel,
-			descriptionLabel,
-		)
-
-		content := container.New(&modListItemLayout{
-			minThumbSize: repositoryThumbSize,
-			spacing:      theme.Padding(),
-		}, thumbArea, container.NewPadded(textContainer))
-
-		// Make it clickable
-		card := uicommon.NewTappableContainer(content, func() {
-			r.showModDetails(mod)
-		})
-
-		// Add some padding/background similar to a Card
-		bg := canvas.NewRectangle(theme.Color(theme.ColorNameBackground))
-		bg.StrokeColor = theme.Color(theme.ColorNameButton)
-		bg.StrokeWidth = 1
-		bg.CornerRadius = theme.InputRadiusSize()
-
-		item := container.NewStack(bg, container.NewPadded(card))
-
-		objs = append(objs, item)
 	}
 
-	if len(objs) == 0 {
-		objs = append(objs, container.NewCenter(widget.NewLabel(lang.LocalizeKey("repository.no_mods_found", "No mods found."))))
+	// Update tap handler
+	modCopy := mod
+	tappable.OnTapped = func() {
+		r.showModDetails(modCopy)
 	}
-
-	r.mu.Lock()
-	noMore := r.noMoreMods
-	r.mu.Unlock()
-
-	if !noMore && len(mods) > 0 {
-		objs = append(objs, widget.NewButton(lang.LocalizeKey("repository.load_next", "Load more..."), r.LoadNext))
-	} else if len(mods) > 0 {
-		endLabel := widget.NewLabel(lang.LocalizeKey("common.scroll_end_reached", "Reached the bottom."))
-		endLabel.Alignment = fyne.TextAlignCenter
-		endLabel.Importance = widget.LowImportance
-		objs = append(objs, container.NewCenter(endLabel))
-	}
-
-	fyne.Do(func() {
-		r.modListContainer.Objects = objs
-		r.modListContainer.Refresh()
-		r.modScroll.Refresh()
-	})
 }
 
 func (r *Repository) showModDetails(mod *modmgr.Mod) {
@@ -257,7 +365,7 @@ func (r *Repository) showModDetails(mod *modmgr.Mod) {
 
 	// Header Info
 	img := r.newModThumbnailCanvas(mod.ID, repositoryDetailSize, 10)
-	r.ensureThumbnailLoaded(mod.ID)
+	r.ensureThumbnailLoaded(mod.ID, -1)
 	imgBg := canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground))
 	imgBg.CornerRadius = 10
 	imgArea := container.NewStack(imgBg, container.NewCenter(img))
@@ -269,14 +377,6 @@ func (r *Repository) showModDetails(mod *modmgr.Mod) {
 	authorLabel.Wrapping = fyne.TextWrapOff
 	authorLabel.Truncation = fyne.TextTruncateEllipsis
 	headerText := container.NewVBox(titleLabel, authorLabel)
-
-	// if mod.Website != "" {
-	// 	if u, err := url.Parse(mod.Website); err == nil {
-	// 		headerText.Add(widget.NewHyperlink(lang.LocalizeKey("repository.website", "Website"), u))
-	// 	} else {
-	// 		slog.Warn("Failed to parse mod website URL", "url", mod.Website, "error", err)
-	// 	}
-	// }
 
 	headerText.Add(widget.NewButton(lang.LocalizeKey("repository.install_latest", "Install Latest"), func() {
 		r.installModVersion(mod, mod.LatestVersionID)
@@ -455,143 +555,34 @@ func (r *Repository) installModVersion(mod *modmgr.Mod, versionID string) {
 	d.Show()
 }
 
-func (r *Repository) LoadNext() {
-	r.mu.Lock()
-	if r.noMoreMods || r.loading {
-		r.mu.Unlock()
-		return
-	}
-	r.loading = true
-	r.mu.Unlock()
-
-	go func() {
-		defer func() {
-			r.mu.Lock()
-			r.loading = false
-			r.mu.Unlock()
-		}()
-
-		mods, _ := r.modsBind.Get()
-		slog.Info("Loading next mods in repository tab", "current_mods", mods)
-		if err, ok := r.fetchMods(); err != nil {
-			slog.Error("Failed to load next mods in repository tab", "error", err)
-			r.state.SetError(fmt.Errorf("%s", lang.LocalizeKey("repository.failed_to_load", "Failed to load mods: {{.Error}}", map[string]any{"Error": err.Error()})))
-		} else {
-			if !ok {
-				slog.Info("No more mods to load in repository tab")
-				return
-			}
-		}
-	}()
-}
-
-func (r *Repository) fetchMods() (error, bool) {
-	defer func() {
-		r.updateModList(r.currentSearchText())
-	}()
-	if r.state.Rest != nil {
-		mods, err := r.modsBind.Get()
-		if err != nil {
-			return err, false
-		}
-		var afterId string
-		r.mu.Lock()
-		if r.lastModID != "" && len(mods) > 0 {
-			afterId = r.lastModID
-		}
-		r.mu.Unlock()
-
-		slog.Info("Refreshing mods", "afterId", afterId)
-
-		if modIDs, err := r.state.Rest.GetModIDs(ModsPerPage, afterId, ""); err != nil {
-			return err, false
-		} else if len(modIDs) > 0 {
-			startIndex := len(mods)
-			for _, modID := range modIDs {
-				loadingMod := &modmgr.Mod{}
-				loadingMod.ID = modID
-				loadingMod.Name = lang.LocalizeKey("repository.loading_mod", "Loading mod '{{.ID}}'...", map[string]any{"ID": modID})
-				loadingMod.Description = lang.LocalizeKey("repository.loading_mod_details", "Fetching mod details...")
-				if err := r.modsBind.Append(loadingMod); err != nil {
-					return err, false
-				}
-			}
-
-			for i, modID := range modIDs {
-				go r.loadModDetailsAsync(modID, startIndex+i)
-			}
-			r.mu.Lock()
-			r.lastModID = modIDs[len(modIDs)-1]
-			if len(modIDs) < ModsPerPage {
-				r.noMoreMods = true
-			}
-			r.mu.Unlock()
-
-			return nil, true
-		} else {
-			r.mu.Lock()
-			r.noMoreMods = true
-			r.mu.Unlock()
-			slog.Info("No more mods to load")
-			return nil, false
-		}
-	}
-	slog.Error("rest client is nil, cannot refresh mods")
-	return nil, false
-}
-
-func (r *Repository) currentSearchText() string {
-	if r.searchBar == nil {
-		return ""
-	}
-	return r.searchBar.Text
-}
-
-func (r *Repository) loadModDetailsAsync(modID string, listIndex int) {
-	modData, err := r.state.Rest.GetMod(modID)
-	if err != nil {
-		slog.Warn("Failed to fetch mod details while refreshing mods", "modID", modID, "error", err)
-		modData = &modmgr.Mod{}
-		modData.ID = modID
-		modData.Name = lang.LocalizeKey("repository.failed_to_load_mod", "Failed to load mod '{{.ID}}'", map[string]any{"ID": modID})
-		modData.Description = lang.LocalizeKey("repository.failed_to_load_mod_description", "Could not fetch mod details: {{.Error}}", map[string]any{"Error": err.Error()})
-	} else if modData == nil {
-		modData = &modmgr.Mod{}
-		modData.ID = modID
-		modData.Name = lang.LocalizeKey("repository.mod_not_found", "Mod '{{.ID}}' not found", map[string]any{"ID": modID})
-		modData.Description = lang.LocalizeKey("repository.mod_not_found_description", "The mod details are unavailable.")
-	}
-
-	currentValue, err := r.modsBind.GetValue(listIndex)
-	if err != nil || currentValue == nil {
-		return
-	}
-	if currentValue.ID != modID {
-		return
-	}
-	if err := r.modsBind.SetValue(listIndex, modData); err != nil {
-		slog.Warn("Failed to update mod details in list", "modID", modID, "index", listIndex, "error", err)
-		return
-	}
-
-	r.updateModList(r.currentSearchText())
-}
-
+// reloadMods refreshes packages from Thunderstore and rebuilds the mod list.
 func (r *Repository) reloadMods() {
+	defer fyne.Do(r.reloadBtn.Enable)
 	slog.Info("Reloading repository mods")
-	r.mu.Lock()
-	r.lastModID = ""
-	r.noMoreMods = false
-	r.loading = false
-	r.mu.Unlock()
+
 	r.thumbMu.Lock()
 	r.thumbnailImageCache = map[string]image.Image{}
 	r.thumbnailFetched = map[string]bool{}
 	r.thumbnailLoading = map[string]bool{}
 	r.thumbMu.Unlock()
-	fyne.Do(r.modScroll.ScrollToTop)
-	_ = r.modsBind.Set([]*modmgr.Mod{})
-	r.LoadNext()
+
+	r.refreshFilteredMods()
+
+	// Refresh category list after reload
+	r.refreshCategoryList()
+}
+
+// refreshCategoryList updates the category dropdown options from the loaded package data.
+func (r *Repository) refreshCategoryList() {
+	cats := r.state.Rest.GetCategories()
+	allLabel := lang.LocalizeKey("repository.category.all", "All Categories")
+	options := make([]string, 0, len(cats)+1)
+	options = append(options, allLabel)
+	options = append(options, cats...)
+	fyne.Do(func() {
+		r.categorySelect.Options = options
+		r.categorySelect.Refresh()
+	})
 }
 
 func repositoryListSummary(text string, maxRunes int) string {
@@ -644,7 +635,9 @@ func (r *Repository) newModThumbnailCanvas(modID string, size float32, cornerRad
 	return img
 }
 
-func (r *Repository) ensureThumbnailLoaded(modID string) {
+// ensureThumbnailLoaded starts an async thumbnail download if not already cached.
+// listIndex is the widget.List item ID to refresh when the thumbnail is ready (-1 to skip).
+func (r *Repository) ensureThumbnailLoaded(modID string, listIndex int) {
 	if modID == "" || r.state.Rest == nil {
 		return
 	}
@@ -677,7 +670,12 @@ func (r *Repository) ensureThumbnailLoaded(modID string) {
 		}
 		r.thumbMu.Unlock()
 
-		r.updateModList(r.currentSearchText())
+		// Only refresh the specific list item instead of rebuilding the entire list
+		if listIndex >= 0 {
+			fyne.Do(func() {
+				r.modList.RefreshItem(listIndex)
+			})
+		}
 	}(modID)
 }
 

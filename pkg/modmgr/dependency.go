@@ -8,7 +8,7 @@ import (
 
 	version "github.com/mcuadros/go-version"
 
-	"github.com/ikafly144/au_mod_installer/common/rest/model"
+	"github.com/ikafly144/modrepo/common/rest/model"
 )
 
 // VersionProvider is an interface to fetch mod version details.

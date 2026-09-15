@@ -13,31 +13,26 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
-	"time"
 
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/lang"
 	"github.com/Microsoft/go-winio"
-	sdk "github.com/ikafly144/discord_social_sdk"
 	"github.com/nightlyone/lockfile"
 	"github.com/sqweek/dialog"
 	"github.com/zzl/go-win32api/v2/win32"
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 
-	"github.com/ikafly144/au_mod_installer/client/discord"
-	"github.com/ikafly144/au_mod_installer/client/rest"
-	"github.com/ikafly144/au_mod_installer/client/ui"
-	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
+	"github.com/ikafly144/modrepo/client/rest"
+	"github.com/ikafly144/modrepo/client/ui"
+	"github.com/ikafly144/modrepo/client/ui/uicommon"
 )
 
-const AppUserModelID = "com.github.ikafly.au_mod_installer"
+const AppUserModelID = "com.github.ikafly.modrepo"
 
-var DefaultServer = "https://modofus.sabafly.net/api/v1"
-var pipeName = `\\.\pipe\au_mod_installer_ipc`
+var pipeName = `\\.\pipe\modrepo_ipc`
 
 func main() {
 	if hr := win32.SetCurrentProcessExplicitAppUserModelID(win32.StrToPwstr(AppUserModelID)); win32.FAILED(hr) {
@@ -46,11 +41,11 @@ func main() {
 	sharedURI := ""
 	sharedArchive := ""
 	for _, arg := range os.Args[1:] {
-		if strings.HasPrefix(arg, "mod-of-us://") {
+		if strings.HasPrefix(arg, "modrepo://") || strings.HasPrefix(arg, "mod-of-us://") {
 			sharedURI = arg
 			break
 		}
-		if strings.EqualFold(filepath.Ext(arg), ".aupack") {
+		if strings.EqualFold(filepath.Ext(arg), ".repopack") || strings.EqualFold(filepath.Ext(arg), ".aupack") {
 			sharedArchive = arg
 			break
 		}
@@ -61,7 +56,7 @@ func main() {
 		slog.Error("Failed to get ProgramData folder path", "error", err)
 		os.Exit(1)
 	}
-	lockPath := filepath.Join(pd, "au_mod_installer.lock")
+	lockPath := filepath.Join(pd, "modrepo.lock")
 	lock, err := lockfile.New(lockPath)
 	if err != nil {
 		slog.Error("Failed to create lockfile", "error", err)
@@ -96,7 +91,6 @@ func main() {
 			os.Exit(1)
 		}
 
-		// If pipe is not available, it means the existing instance is not available. So we can continue to run the new instance.
 		slog.Warn("Failed to connect to existing instance via IPC", "error", err)
 		if err := os.RemoveAll(lockPath); err != nil {
 			slog.Error("Failed to remove lockfile", "error", err)
@@ -119,45 +113,14 @@ func main() {
 
 func realMain(sharedURI string, sharedArchive string) error {
 	var (
-		localMode string
-		server    string
-		offline   bool
-		silent    bool
-		initial   bool
+		offline bool
+		silent  bool
+		initial bool
 	)
 
 	a := app.New()
 
-	social := sdk.NewClient()
-	activityService := discord.NewDiscordService(social)
-	social.SetActivityJoinCallback(func(s string) {
-		slog.Info("Received join activity callback", "uri", s)
-		activityService.PushQueue(s)
-	})
-	social.AddLogCallback(func(arg0 string, arg1 sdk.LoggingSeverity) {
-		level := slog.LevelInfo
-		switch arg1 {
-		case sdk.LoggingSeverityVerbose:
-			level = slog.LevelDebug
-		case sdk.LoggingSeverityWarning:
-			level = slog.LevelWarn
-		case sdk.LoggingSeverityError:
-			level = slog.LevelError
-		}
-		slog.Default().With(slog.String("component", "discord_sdk")).Log(context.Background(), level, arg0)
-	}, sdk.LoggingSeverityInfo)
-	social.SetApplicationId(APPLICATION_ID)
-
-	go func() {
-		for {
-			sdk.RunCallbacks()
-			time.Sleep(100 * time.Millisecond)
-		}
-	}()
-
-	flag.StringVar(&localMode, "local", "", "Path to local mods.json file for local mode")
-	flag.StringVar(&server, "server", DefaultServer, "URL of the mod server")
-	flag.BoolVar(&offline, "offline", false, "Run in offline mode (only uninstallation and management of installed mods are available)")
+	flag.BoolVar(&offline, "offline", false, "Run in offline mode")
 	flag.BoolVar(&silent, "silent", false, "Start minimized in system tray")
 	flag.BoolVar(&initial, "initial", false, "Indicates the application was launched from updater on startup")
 	flag.Parse()
@@ -171,74 +134,33 @@ func realMain(sharedURI string, sharedArchive string) error {
 		a.Preferences().BoolWithFallback("start_silent", true),
 	)
 
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return fmt.Errorf("failed to get user config dir: %w", err)
+	}
+	cacheDir := filepath.Join(configDir, "MODREPO", "cache")
+
 	var client rest.Client
-	if localMode != "" {
-		slog.Info("Running in local mode", "path", localMode)
-		f, err := rest.NewFileClient(localMode)
-		if err != nil {
-			slog.Error("Failed to create local file client", "error", err)
-			dialog.Message(lang.LocalizeKey("error.local_client_creation_failed", "Failed to create local file client: %s"), err.Error()).Title(lang.LocalizeKey("app.error", "Error")).Error()
-			return err
-		}
-		if err := f.LoadData(); err != nil {
-			slog.Error("Failed to load data from local file", "error", err)
-			dialog.Message(lang.LocalizeKey("error.local_data_load_failed", "Failed to load data from local file: %s"), err.Error()).Title(lang.LocalizeKey("app.error", "Error")).Error()
-			return err
-		}
-		client = f
-	} else if offline {
+	if offline {
 		slog.Info("Running in offline mode")
 		client = rest.NewOfflineClient()
 	} else {
-		slog.Info("Running in server mode", "server", server)
-		client = rest.NewClient(server)
-
-		if _, err := client.GetHealthStatus(); err != nil {
-			slog.Error("Failed to connect to server", "error", err)
-			yes := (&dialog.MsgBuilder{Msg: lang.LocalizeKey("error.server_connection_failed_offline_prompt", "Failed to connect to server: {{.Error}}\nDo you want to continue in offline mode?\n(Only uninstallation and management of installed mods are available)", map[string]any{"Error": err})}).Title(lang.LocalizeKey("error.connection_error", "Connection Error")).YesNo()
-			if yes {
-				slog.Info("Continuing in offline mode")
-				client = rest.NewOfflineClient()
-			} else {
-				return err
+		tsClient := rest.NewThunderstoreClient(cacheDir, nil)
+		go func() {
+			if err := tsClient.RefreshPackages(context.Background()); err != nil {
+				slog.Warn("Failed to fetch Thunderstore packages on startup", "error", err)
 			}
-		}
+		}()
+		client = tsClient
 	}
 
-	w := a.NewWindow(lang.LocalizeKey("app.name", "Mod of Us") + " " + version)
-	go func() {
-		activityService.WaitReady()
-		if !social.RegisterLaunchCommand(APPLICATION_ID, "") {
-			slog.Warn("Failed to register launch command to Discord SDK")
-		}
-	}()
-
-	activityService.SetIdleActivity(func() *sdk.Activity {
-		act := sdk.NewActivity()
-		act.SetType(sdk.ActivityTypesPlaying)
-		act.SetName("Mod of Us")
-		act.SetState(lang.LocalizeKey("discord.status.idle", "Idle"))
-		act.SetDetails(lang.LocalizeKey("discord.status.idle_details", "Not currently running the game"))
-		assets := sdk.NewActivityAssets()
-		assets.SetLargeImage("icon")
-		if version != "" {
-			assets.SetLargeText(fmt.Sprintf("Mod of Us %s", version))
-		} else {
-			assets.SetLargeText("Mod of Us")
-		}
-		act.SetAssets(assets)
-		return act
-	}, func(d *sdk.ClientResult) {
-		if !d.Successful() {
-			slog.Warn("Failed to set idle activity", "error", d.ErrorCode())
-		}
-	})
+	appName := lang.LocalizeKey("app.name", "MODREPO")
+	w := a.NewWindow(appName + " " + version)
 
 	if err := ui.Main(w, version, sharedURI, sharedArchive,
 		ui.WithSilent(silent),
 		ui.WithStateOptions(
 			uicommon.WithRestClient(client),
-			uicommon.WithActivityService(activityService),
 			uicommon.WithInitial(initial),
 		),
 		ui.WithStateInit(func(s *uicommon.State) {
@@ -250,7 +172,6 @@ func realMain(sharedURI string, sharedArchive string) error {
 		return err
 	}
 
-	runtime.KeepAlive(social)
 	return nil
 }
 
@@ -327,40 +248,34 @@ func registerScheme() error {
 		return err
 	}
 
-	key, _, err := registry.CreateKey(registry.CURRENT_USER, `Software\Classes\mod-of-us`, registry.ALL_ACCESS)
-	if err != nil {
-		return err
-	}
-	defer key.Close()
-
-	if err := key.SetStringValue("", "URL:Mod of Us Protocol"); err != nil {
-		return err
-	}
-	if err := key.SetStringValue("URL Protocol", ""); err != nil {
-		return err
-	}
-
-	iconKey, _, err := registry.CreateKey(key, "DefaultIcon", registry.ALL_ACCESS)
+	// Register modrepo:// protocol
+	key, _, err := registry.CreateKey(registry.CURRENT_USER, `Software\Classes\modrepo`, registry.ALL_ACCESS)
 	if err == nil {
-		_ = iconKey.SetStringValue("", "\""+execPath+"\",0")
-		iconKey.Close()
+		_ = key.SetStringValue("", "URL:MODREPO Protocol")
+		_ = key.SetStringValue("URL Protocol", "")
+		iconKey, _, iconErr := registry.CreateKey(key, "DefaultIcon", registry.ALL_ACCESS)
+		if iconErr == nil {
+			_ = iconKey.SetStringValue("", "\""+execPath+"\",0")
+			iconKey.Close()
+		}
+		shellKey, _, shellErr := registry.CreateKey(key, `shell\open\command`, registry.ALL_ACCESS)
+		if shellErr == nil {
+			_ = shellKey.SetStringValue("", "\""+execPath+"\" \"%1\"")
+			shellKey.Close()
+		}
+		key.Close()
 	}
 
-	shellKey, _, err := registry.CreateKey(key, `shell\open\command`, registry.ALL_ACCESS)
+	// Register .repopack file association
+	extKey, _, err := registry.CreateKey(registry.CURRENT_USER, `Software\Classes\.repopack`, registry.ALL_ACCESS)
 	if err == nil {
-		_ = shellKey.SetStringValue("", "\""+execPath+"\" \"%1\"")
-		shellKey.Close()
-	}
-
-	extKey, _, err := registry.CreateKey(registry.CURRENT_USER, `Software\Classes\.aupack`, registry.ALL_ACCESS)
-	if err == nil {
-		_ = extKey.SetStringValue("", "mod-of-us.aupack")
+		_ = extKey.SetStringValue("", "modrepo.repopack")
 		extKey.Close()
 	}
 
-	fileTypeKey, _, err := registry.CreateKey(registry.CURRENT_USER, `Software\Classes\mod-of-us.aupack`, registry.ALL_ACCESS)
+	fileTypeKey, _, err := registry.CreateKey(registry.CURRENT_USER, `Software\Classes\modrepo.repopack`, registry.ALL_ACCESS)
 	if err == nil {
-		_ = fileTypeKey.SetStringValue("", "Mod of Us Archive")
+		_ = fileTypeKey.SetStringValue("", "MODREPO Profile Archive")
 		iconKey, _, iconErr := registry.CreateKey(fileTypeKey, "DefaultIcon", registry.ALL_ACCESS)
 		if iconErr == nil {
 			_ = iconKey.SetStringValue("", "\""+execPath+"\",0")
