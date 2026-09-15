@@ -81,6 +81,10 @@ func (m *mockRestClient) RefreshPackages(ctx context.Context) error {
 	return nil
 }
 
+func (m *mockRestClient) GetCategories() []string {
+	return nil
+}
+
 func (m *mockRestClient) ThunderstoreClient() *thunderstore.Client {
 	return nil
 }

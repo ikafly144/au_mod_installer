@@ -119,6 +119,10 @@ func (c *ThunderstoreClient) SearchMods(query string, category string, sortBy st
 	return mods, nil
 }
 
+func (c *ThunderstoreClient) GetCategories() []string {
+	return c.tsClient.GetCategories()
+}
+
 func packageToMod(p *thunderstore.Package) *modmgr.Mod {
 	m := &modmgr.Mod{
 		ModDetails: model.ModDetails{

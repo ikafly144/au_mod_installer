@@ -68,3 +68,7 @@ func (c *OfflineClient) CheckForUpdates(installedVersions map[string]string) (ma
 func (c *OfflineClient) SearchMods(query string, category string, sortBy string) ([]*modmgr.Mod, error) {
 	return nil, nil
 }
+
+func (c *OfflineClient) GetCategories() []string {
+	return nil
+}

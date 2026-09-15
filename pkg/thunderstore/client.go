@@ -180,6 +180,26 @@ func (c *Client) GetAllPackages() []*Package {
 	return result
 }
 
+// GetCategories returns all unique category names from loaded packages, sorted alphabetically.
+func (c *Client) GetCategories() []string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	seen := make(map[string]struct{})
+	for _, p := range c.pkgList {
+		for _, cat := range p.Categories {
+			seen[cat] = struct{}{}
+		}
+	}
+
+	cats := make([]string, 0, len(seen))
+	for cat := range seen {
+		cats = append(cats, cat)
+	}
+	slices.Sort(cats)
+	return cats
+}
+
 // SearchPackages searches packages by query, category and sorting criteria.
 func (c *Client) SearchPackages(query string, category string, sortBy string) []*Package {
 	c.mu.RLock()

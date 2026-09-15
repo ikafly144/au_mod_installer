@@ -20,6 +20,7 @@ type Client interface {
 	GetModThumbnail(modID string) ([]byte, error)
 	CheckForUpdates(installedVersions map[string]string) (map[string]*modmgr.ModVersion, error)
 	SearchMods(query string, category string, sortBy string) ([]*modmgr.Mod, error)
+	GetCategories() []string
 	RefreshPackages(ctx context.Context) error
 	ThunderstoreClient() *thunderstore.Client
 }
