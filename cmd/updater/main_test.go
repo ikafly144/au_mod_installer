@@ -24,15 +24,15 @@ func TestReadUpdateBranchPreference(t *testing.T) {
 
 func TestBuildLaunchArgs(t *testing.T) {
 	assert.Equal(t, []string{"-silent", "-initial"}, buildLaunchArgs([]string{"-silent"}))
-	assert.Equal(t, []string{"-silent", "-initial"}, buildLaunchArgs([]string{"-target", "Mod of Us.exe", "-silent"}))
-	assert.Equal(t, []string{"-silent", "-initial"}, buildLaunchArgs([]string{"-target=Mod of Us.exe", "-silent"}))
-	assert.Equal(t, []string{"-silent", "-initial"}, buildLaunchArgs([]string{"--target", "C:\\Mod of Us.exe", "-silent"}))
-	assert.Equal(t, []string{"-silent", "-initial"}, buildLaunchArgs([]string{"-from-temp", "-target", "Mod of Us.exe", "-silent"}))
+	assert.Equal(t, []string{"-silent", "-initial"}, buildLaunchArgs([]string{"-target", "MODREPO.exe", "-silent"}))
+	assert.Equal(t, []string{"-silent", "-initial"}, buildLaunchArgs([]string{"-target=MODREPO.exe", "-silent"}))
+	assert.Equal(t, []string{"-silent", "-initial"}, buildLaunchArgs([]string{"--target", "C:\\MODREPO.exe", "-silent"}))
+	assert.Equal(t, []string{"-silent", "-initial"}, buildLaunchArgs([]string{"-from-temp", "-target", "MODREPO.exe", "-silent"}))
 	assert.Equal(t, []string{"-silent", "-initial"}, buildLaunchArgs([]string{"-silent", "-initial"}))
 }
 
 func TestResolveTargetPath(t *testing.T) {
-	absPath := `C:\Program Files\Mod of Us\Mod of Us.exe`
+	absPath := `C:\Program Files\MODREPO\MODREPO.exe`
 	assert.Equal(t, absPath, resolveTargetPath(absPath))
 	assert.NotEmpty(t, resolveTargetPath(""))
 }

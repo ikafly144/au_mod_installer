@@ -2,11 +2,10 @@ package modmgr
 
 import (
 	"iter"
-	"log/slog"
 	"slices"
 
-	"github.com/ikafly144/au_mod_installer/common/rest/model"
-	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
+	"github.com/ikafly144/modrepo/common/rest/model"
+	"github.com/ikafly144/modrepo/pkg/repomgr"
 )
 
 type Mod struct {
@@ -18,12 +17,8 @@ type ModType string
 const (
 	ModTypeMod     ModType = "mod"
 	ModTypeLibrary ModType = "library"
-	// Deprecated: should not be used anymore
-	// ModPack will be represented as profile.Profile now
 	ModTypeModPack ModType = "modpack"
 )
-
-const FeatureDirectJoin = "direct_join"
 
 func (mt ModType) IsVisible() bool {
 	switch mt {
@@ -38,7 +33,6 @@ type ModVersion struct {
 	model.ModVersionDetails
 }
 
-// Deprecated: use model.ModVersionDependency instead
 type ModDependency struct {
 	ID      string            `json:"id"`
 	Version string            `json:"version,omitempty"`
@@ -54,40 +48,25 @@ const (
 	ModDependencyTypeEmbedded ModDependencyType = model.DependencyTypeEmbedded
 )
 
-// Deprecated: use profile.Profile to represent mod packs now
-type ModPack struct {
-	ID      string `json:"id"`
-	Version string `json:"version,omitempty"`
-}
-
-func (m ModVersion) IsCompatible(launcherType aumgr.LauncherType, binaryType aumgr.BinaryType, gameVersion string) bool {
-	if m.CompatibleFilesCount(binaryType) == 0 && len(m.Files) > 0 {
-		return false
+func (m ModVersion) IsCompatible(launcherType repomgr.LauncherType, binaryType repomgr.BinaryType, gameVersion string) bool {
+	if len(m.GameVersions) == 0 {
+		return true
 	}
-	// Check game version compatibility
-	supported := slices.Contains(m.GameVersions, gameVersion)
-	return supported || len(m.GameVersions) == 0
+	return slices.Contains(m.GameVersions, gameVersion)
 }
 
-func (m ModVersion) CompatibleFilesCount(binaryType aumgr.BinaryType) int {
-	var count int
-	for _, file := range m.Files {
-		if binaryType.IsCompatibleWith(file.TargetPlatform) {
-			count++
-		}
+func (m ModVersion) CompatibleFilesCount(binaryType repomgr.BinaryType) int {
+	if len(m.Files) == 0 {
+		return 1
 	}
-	return count
+	return len(m.Files)
 }
 
-func (m ModVersion) Downloads(binaryType aumgr.BinaryType) iter.Seq[model.ModVersionFile] {
+func (m ModVersion) Downloads(binaryType repomgr.BinaryType) iter.Seq[model.ModVersionFile] {
 	return func(yield func(model.ModVersionFile) bool) {
 		for _, file := range m.Files {
-			if binaryType.IsCompatibleWith(file.TargetPlatform) {
-				if !yield(file) {
-					return
-				}
-			} else {
-				slog.Info("Skipping incompatible file", "file", file, "binaryType", binaryType)
+			if !yield(file) {
+				return
 			}
 		}
 	}

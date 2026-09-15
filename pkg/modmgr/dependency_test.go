@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/ikafly144/au_mod_installer/common/rest/model"
+	"github.com/ikafly144/modrepo/common/rest/model"
 )
 
 type mockVersionProvider struct {

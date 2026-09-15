@@ -13,7 +13,7 @@ import (
 
 	"uuid"
 
-	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
+	"github.com/ikafly144/modrepo/pkg/repomgr"
 )
 
 var ErrProfileLaunchBusy = errors.New("profile launch is already running")
@@ -171,7 +171,7 @@ func reconcileProfileLock(lockPath string) (bool, error) {
 			}
 			return false, nil
 		}
-		running, err := aumgr.IsProcessRunning(state.StarterPID)
+		running, err := repomgr.IsProcessRunning(state.StarterPID)
 		if err != nil {
 			return true, fmt.Errorf("failed to check starter process for profile lock: %w", err)
 		}
@@ -189,7 +189,7 @@ func reconcileProfileLock(lockPath string) (bool, error) {
 			}
 			return false, nil
 		}
-		running, err := aumgr.IsProcessRunning(state.GamePID)
+		running, err := repomgr.IsProcessRunning(state.GamePID)
 		if err != nil {
 			return true, fmt.Errorf("failed to check game process for profile lock: %w", err)
 		}

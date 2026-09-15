@@ -18,8 +18,8 @@ import (
 	"fyne.io/fyne/v2/lang"
 	"fyne.io/fyne/v2/widget"
 
-	restcommon "github.com/ikafly144/au_mod_installer/common/rest"
-	"github.com/ikafly144/au_mod_installer/common/versioning"
+	restcommon "github.com/ikafly144/modrepo/common/rest"
+	"github.com/ikafly144/modrepo/common/versioning"
 )
 
 func FindBranchVersion(info *restcommon.VersionInfo, branch string) string {

@@ -3,7 +3,7 @@ package repo
 import (
 	"fyne.io/fyne/v2/data/binding"
 
-	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
+	"github.com/ikafly144/modrepo/pkg/modmgr"
 )
 
 // VersionSelect is an interface for version selection widgets.

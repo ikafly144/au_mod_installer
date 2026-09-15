@@ -24,10 +24,10 @@ import (
 
 	"uuid"
 
-	"github.com/ikafly144/au_mod_installer/client/core"
-	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
-	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
-	"github.com/ikafly144/au_mod_installer/pkg/profile"
+	"github.com/ikafly144/modrepo/client/core"
+	"github.com/ikafly144/modrepo/client/ui/uicommon"
+	"github.com/ikafly144/modrepo/pkg/modmgr"
+	"github.com/ikafly144/modrepo/pkg/profile"
 
 	_ "image/gif"
 	_ "image/jpeg"

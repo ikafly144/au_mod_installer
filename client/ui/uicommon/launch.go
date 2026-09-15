@@ -10,22 +10,12 @@ import (
 
 	"uuid"
 
-	"github.com/ikafly144/au_mod_installer/client/core"
-	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
+	"github.com/ikafly144/modrepo/client/core"
 )
 
-func (s *State) Launch(path string, directJoinEnabled bool) {
+func (s *State) Launch(path string) {
 	s.launchLock.Lock()
 	defer s.launchLock.Unlock()
-
-	if s.Core.DetectLauncherType(path) == aumgr.LauncherEpicGames {
-		if _, err := s.Core.EpicSessionManager.GetValidSession(s.Core.EpicApi); err != nil {
-			s.ShowEpicLoginWindow(func() {
-				go s.Launch(path, directJoinEnabled)
-			}, nil)
-			return
-		}
-	}
 
 	activeProfileIDStr, _ := s.ActiveProfile.Get()
 	activeProfileID, err := uuid.Parse(activeProfileIDStr)
@@ -60,7 +50,6 @@ func (s *State) Launch(path string, directJoinEnabled bool) {
 	}
 
 	defer func() {
-		// Cleanup if needed (currently no-op for profile directory preservation)
 		if err := cleanup(); err != nil {
 			slog.Error("Failed to cleanup", "error", err)
 			s.SetError(err)
@@ -68,91 +57,47 @@ func (s *State) Launch(path string, directJoinEnabled bool) {
 	}()
 
 	startedAt := time.Now()
-	joinInfo := s.TakePendingJoinInfo()
-	isJoinLaunch := joinInfo != nil
-	if joinInfo != nil && joinInfo.GameVersion != "" {
-		gameVersion, err := aumgr.GetVersion(path)
-		if err == nil && gameVersion != "" && joinInfo.GameVersion != gameVersion {
-			errMsg := lang.LocalizeKey(
-				"launcher.error.game_version_mismatch",
-				"The room's Among Us version ({{.RoomVersion}}) does not match your installed game version ({{.GameVersion}}).",
-				map[string]any{
-					"RoomVersion": joinInfo.GameVersion,
-					"GameVersion": gameVersion,
-				},
-			)
-			Alert(
-				lang.LocalizeKey("notification.game_launch_failed.title", "Launch Failed"),
-				lang.LocalizeKey("notification.game_launch_failed.message", "Failed to launch game: {{.Error}}", map[string]any{"Error": errMsg}),
-			)
-			_ = s.CanLaunch.Set(true)
-			_ = s.CanInstall.Set(true)
-			return
-		}
-	}
 	var launchSucceeded bool
-	if err := s.Core.ExecuteLaunch(path, profileDir, joinInfo, func(pid int) error {
-		if err := profileLock.SetGamePID(pid, startedAt, directJoinEnabled); err != nil {
+	if err := s.Core.ExecuteLaunch(path, profileDir, func(pid int) error {
+		if err := profileLock.SetGamePID(pid, startedAt, false); err != nil {
 			return err
 		}
 		s.Core.SetRunningPlayStartedAt(startedAt)
 		s.Core.OnGameStartedInternal(activeProfileID, pid)
 		launchSucceeded = true
-		if isJoinLaunch {
-			Notify(
-				lang.LocalizeKey("notification.game_launch_success.title", "Game Launched"),
-				lang.LocalizeKey("notification.game_launch_success.message", "Among Us has launched."),
+
+		go func() {
+			time.Sleep(1 * time.Second)
+			Alert(
+				lang.LocalizeKey("notification.game_launched.title", "Game Launched"),
+				lang.LocalizeKey("notification.game_launched.message", "R.E.P.O. has been launched."),
 			)
-		}
+		}()
 		return nil
 	}); err != nil {
-		s.ShowErrorDialog(errors.New(lang.LocalizeKey("launch.error.launch_failed", "Failed to launch Among Us: ") + err.Error()))
-		slog.Warn("Failed to launch Among Us", "error", err)
-		if isJoinLaunch {
-			Alert(
-				lang.LocalizeKey("notification.game_launch_failed.title", "Launch Failed"),
-				lang.LocalizeKey("notification.game_launch_failed.message", "Failed to launch Among Us: {{.Error}}", map[string]any{"Error": err.Error()}),
-			)
-		}
+		slog.Error("Failed to execute launch", "error", err)
+		Alert(
+			lang.LocalizeKey("notification.game_launch_failed.title", "Launch Failed"),
+			lang.LocalizeKey("notification.game_launch_failed.message", fmt.Sprintf("Failed to launch game: %s", err.Error())),
+		)
+		s.SetError(err)
+		return
 	}
 
-	if launchSucceeded {
-		finishedAt := time.Now()
-		if activeProfileID != uuid.Nil() {
-			if err := s.UpdateProfileLaunchMetrics(activeProfileID, startedAt, finishedAt); err != nil {
-				s.SetError(err)
-			}
-		}
+	if !launchSucceeded {
+		return
 	}
 
+	playDuration := time.Since(startedAt)
+	if prof, ok := s.ProfileManager.Get(activeProfileID); ok {
+		prof.AddPlayDuration(playDuration)
+		prof.LastLaunchedAt = time.Now()
+		if err := s.ProfileManager.Update(prof); err != nil {
+			slog.Warn("Failed to update profile play duration", "error", err)
+		}
+		if s.OnProfileMetricsUpdated != nil {
+			s.OnProfileMetricsUpdated(activeProfileID)
+		}
+	}
 	s.Core.OnGameExitedInternal(activeProfileID)
-	_ = s.CanLaunch.Set(true)
-	_ = s.CanInstall.Set(true)
-
-	if s.IsWindowVisible() && s.OnActivateReceived != nil {
-		s.OnActivateReceived()
-	}
-}
-
-func (s *State) UpdateProfileLaunchMetrics(profileID uuid.UUID, startedAt, finishedAt time.Time) error {
-	prof, found := s.ProfileManager.Get(profileID)
-	if !found {
-		return nil
-	}
-	if startedAt.IsZero() {
-		startedAt = finishedAt
-	}
-
-	if finishedAt.After(startedAt) {
-		prof.AddPlayDuration(finishedAt.Sub(startedAt))
-	}
-	prof.LastLaunchedAt = finishedAt
-	prof.UpdatedAt = finishedAt
-	if err := s.ProfileManager.Add(prof); err != nil {
-		return fmt.Errorf("failed to save profile launch metrics: %w", err)
-	}
-	if s.OnProfileMetricsUpdated != nil {
-		s.OnProfileMetricsUpdated(profileID)
-	}
-	return nil
 }

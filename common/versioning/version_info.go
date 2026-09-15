@@ -5,7 +5,7 @@ import (
 
 	"golang.org/x/mod/semver"
 
-	restcommon "github.com/ikafly144/au_mod_installer/common/rest"
+	restcommon "github.com/ikafly144/modrepo/common/rest"
 )
 
 // LatestVersionsFromTags returns the latest tag per branch based on semver ordering.

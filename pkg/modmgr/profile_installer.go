@@ -3,37 +3,20 @@ package modmgr
 import (
 	"encoding/json/v2"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
 
-	"github.com/ikafly144/au_mod_installer/common/rest/model"
-	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
-	"github.com/ikafly144/au_mod_installer/pkg/progress"
+	"github.com/ikafly144/modrepo/pkg/progress"
+	"github.com/ikafly144/modrepo/pkg/repomgr"
 )
 
-func fileDestinationPath(file model.ModVersionFile) string {
-	path := file.ExtractPath
-	filename := filepath.Base(file.Filename)
-	if path == "" && file.ContentType == model.ContentTypePluginDll {
-		path = filepath.Join("BepInEx", "plugins", filepath.Base(file.Filename))
-	}
-	if path == "" {
-		path = filename
-	}
-	if filepath.Base(path) != filename {
-		path = filepath.Join(filepath.Dir(path), filename)
-	}
-	return path
-}
-
 type ProfileMetadata struct {
-	GameVersion string           `json:"game_version"`
-	BinaryType  aumgr.BinaryType `json:"binary_type"`
-	ModVersions []ModVersion     `json:"mod_versions"`
-	ModFiles    []string         `json:"mod_files,omitempty"`
+	GameVersion string             `json:"game_version"`
+	BinaryType  repomgr.BinaryType `json:"binary_type"`
+	ModVersions []ModVersion       `json:"mod_versions"`
+	ModFiles    []string           `json:"mod_files,omitempty"`
 }
 
 func getProfileMetadataPath(profileDir string) string {
@@ -69,7 +52,6 @@ func modVersionsEqual(a, b []ModVersion) bool {
 	if len(a) != len(b) {
 		return false
 	}
-	// Sort or map? They might be in different order.
 	ma := make(map[string]string)
 	for _, v := range a {
 		ma[v.ModID] = v.VersionID
@@ -83,7 +65,8 @@ func modVersionsEqual(a, b []ModVersion) bool {
 }
 
 // PrepareProfileDirectory installs mods from cache to the profile directory and generates doorstop_config.ini.
-func PrepareProfileDirectory(profileDir string, gamePath string, cacheDir string, modVersions []ModVersion, binaryType aumgr.BinaryType, gameVersion string, force bool, progressListener progress.Progress) error {
+// The game directory is NEVER modified.
+func PrepareProfileDirectory(profileDir string, gamePath string, cacheDir string, modVersions []ModVersion, binaryType repomgr.BinaryType, gameVersion string, force bool, progressListener progress.Progress) error {
 	if err := os.MkdirAll(profileDir, 0755); err != nil {
 		return fmt.Errorf("failed to create profile directory: %w", err)
 	}
@@ -97,31 +80,23 @@ func PrepareProfileDirectory(profileDir string, gamePath string, cacheDir string
 		return fmt.Errorf("failed to open profile directory: %w", err)
 	}
 	defer profileRoot.Close()
-	cacheRoot, err := os.OpenRoot(cacheDir)
-	if err != nil {
-		return fmt.Errorf("failed to open cache directory: %w", err)
-	}
-	defer cacheRoot.Close()
 
-	shouldInstall := force || meta == nil || !modVersionsEqual(meta.ModVersions, modVersions) || meta.GameVersion != gameVersion || meta.BinaryType != binaryType
+	shouldInstall := force || meta == nil || !modVersionsEqual(meta.ModVersions, modVersions) || meta.GameVersion != gameVersion
 
 	if shouldInstall {
 		if meta != nil {
 			// Delete existing mod files in profile directory
-			var files []string
+			files := make([]string, len(meta.ModFiles))
 			copy(files, meta.ModFiles)
-			// sort files by length desc to delete nested files before their parents
 			slices.SortFunc(files, func(a, b string) int {
 				return len(filepath.Dir(b)) - len(filepath.Dir(a))
 			})
 
-			for _, path := range meta.ModFiles {
+			for _, path := range files {
 				if err := profileRoot.Remove(path); err != nil && !os.IsNotExist(err) {
-					slog.Warn("Failed to remove existing mod file, will attempt to overwrite", "file", path, "error", err)
+					slog.Warn("Failed to remove existing mod file", "file", path, "error", err)
 				}
-				if err := removeEmptyDirs(profileRoot, filepath.Dir(path)); err != nil {
-					slog.Warn("Failed to remove empty directories after deleting mod file", "file", path, "error", err)
-				}
+				_ = removeEmptyDirs(profileRoot, filepath.Dir(path))
 			}
 		}
 
@@ -130,171 +105,53 @@ func PrepareProfileDirectory(profileDir string, gamePath string, cacheDir string
 			progressListener.Start()
 			defer progressListener.Done()
 		}
-		// Clear BepInEx folder
+
+		// Clear BepInEx folder if resetting
 		bepInExDir := filepath.Join(profileDir, "BepInEx")
-		if _, err := os.Stat(bepInExDir); err == nil {
-			if err := os.RemoveAll(bepInExDir); err != nil {
-				return fmt.Errorf("failed to clear BepInEx directory: %w", err)
-			}
-		}
-		// Also clear dotnet folder if it exists (for IL2CPP)
-		dotnetDir := filepath.Join(profileDir, "dotnet")
-		if _, err := os.Stat(dotnetDir); err == nil {
-			if err := os.RemoveAll(dotnetDir); err != nil {
-				return fmt.Errorf("failed to clear dotnet directory: %w", err)
-			}
+		if _, err := os.Stat(bepInExDir); err == nil && force {
+			_ = os.RemoveAll(bepInExDir)
 		}
 
-		var totalFiles int
-		for _, mod := range modVersions {
-			totalFiles += mod.CompatibleFilesCount(binaryType)
-		}
-
-		completedCopies := 0
 		var modPaths []string
-		for _, mod := range modVersions {
+		for idx, mod := range modVersions {
 			hashStr, err := hashModVersion(mod)
 			if err != nil {
 				return fmt.Errorf("failed to hash mod version: %w", err)
 			}
-			modCacheDir := filepath.Join(string(binaryType), mod.ModID, hashStr)
-			cacheRoot, err := cacheRoot.OpenRoot(modCacheDir)
+			modCacheDir := filepath.Join(cacheDir, string(binaryType), mod.ModID, hashStr)
+
+			zipName := mod.ModID + ".zip"
+			if len(mod.Files) > 0 && mod.Files[0].Filename != "" {
+				zipName = mod.Files[0].Filename
+			}
+			cachedZipPath := filepath.Join(modCacheDir, zipName)
+
+			zipFile, err := os.Open(cachedZipPath)
 			if err != nil {
-				return fmt.Errorf("failed to open mod cache directory for %s: %w", mod.ModID, err)
+				return fmt.Errorf("failed to open cached mod zip %s: %w", cachedZipPath, err)
+			}
+			zipInfo, err := zipFile.Stat()
+			if err != nil {
+				zipFile.Close()
+				return fmt.Errorf("failed to stat cached mod zip %s: %w", cachedZipPath, err)
 			}
 
-			var metadata CacheMetadata
-			if metaFile, err := cacheRoot.Open("metadata.json"); err != nil {
-				slog.Warn("Failed to open mod cache metadata, will re-download", "modId", mod.ModID, "versionId", mod.VersionID, "error", err)
-				return fmt.Errorf("mod cache metadata not found for %s: %w", mod.ModID, err)
-			} else if err := json.UnmarshalRead(metaFile, &metadata); err != nil {
-				_ = metaFile.Close()
-				slog.Warn("Failed to decode mod cache metadata, will re-download", "modId", mod.ModID, "versionId", mod.VersionID, "error", err)
-				return fmt.Errorf("failed to decode mod cache metadata for %s: %w", mod.ModID, err)
-			} else if metadata.ModVersion.VersionID != mod.VersionID {
-				_ = metaFile.Close()
-				slog.Warn("Mod cache metadata version mismatch, will re-download", "modId", mod.ModID, "versionId", mod.VersionID, "cachedVersionId", metadata.ModVersion.VersionID)
-				return fmt.Errorf("mod cache metadata version mismatch for %s: cached %s but expected %s", mod.ModID, metadata.ModVersion.VersionID, mod.VersionID)
-			} else {
-				_ = metaFile.Close()
+			extracted, err := extractThunderstoreZip(zipFile, zipInfo.Size(), mod.ModID, profileRoot)
+			zipFile.Close()
+			if err != nil {
+				return fmt.Errorf("failed to extract mod %s: %w", mod.ModID, err)
 			}
+			modPaths = append(modPaths, extracted...)
 
-			for _, file := range mod.Files {
-				if !binaryType.IsCompatibleWith(file.TargetPlatform) {
-					slog.Info("Skipping incompatible file in cache", "modId", mod.ModID, "versionId", mod.VersionID, "file", file, "binaryType", binaryType)
-					continue
-				}
-
-				path := fileDestinationPath(file)
-				if path == "" {
-					slog.Warn("File has no valid path, skipping", "modId", mod.ModID, "versionId", mod.VersionID, "file", file)
-					return fmt.Errorf("file has no valid path for mod %s version %s: %s", mod.ModID, mod.VersionID, file.Filename)
-				}
-				srcFile, err := cacheRoot.Open(path)
-				if err != nil {
-					return fmt.Errorf("failed to open cached file for %s: %w", path, err)
-				}
-				srcInfo, err := srcFile.Stat()
-				if err != nil {
-					_ = srcFile.Close()
-					return fmt.Errorf("failed to stat cached file for %s: %w", path, err)
-				}
-				if err := profileRoot.MkdirAll(filepath.Dir(path), 0755); err != nil {
-					_ = srcFile.Close()
-					return fmt.Errorf("failed to create directories for %s: %w", path, err)
-				}
-
-				if file.ContentType == model.ContentTypeArchive {
-					// Check zip hash
-					newHashChecker := newHashWriters(file.Hashes)
-					if _, err := io.Copy(io.Discard, io.TeeReader(srcFile, newHashChecker)); err != nil {
-						_ = srcFile.Close()
-						return fmt.Errorf("failed to read zip file for hashing: %w", err)
-					}
-					if computedHash, err := newHashChecker.Sum(); err != nil {
-						_ = srcFile.Close()
-						return fmt.Errorf("failed to compute hash for zip file: %w", err)
-					} else {
-						slog.Info("Zip file hash verified for cached file", "modId", mod.ModID, "versionId", mod.VersionID, "file", path, "hashes", computedHash)
-					}
-
-					_, _ = srcFile.Seek(0, io.SeekStart)
-
-					destRoot, err := profileRoot.OpenRoot(filepath.Dir(path))
-					if err != nil {
-						_ = srcFile.Close()
-						return fmt.Errorf("failed to open destination directory for %s: %w", path, err)
-					}
-
-					zipPaths, err := extractZip(srcFile, srcInfo.Size(), destRoot, progressListener, totalFiles)
-					if err != nil {
-						_ = srcFile.Close()
-						return fmt.Errorf("failed to extract zip file: %w", err)
-					}
-					for i, zipPath := range zipPaths {
-						zipPaths[i] = filepath.Clean(filepath.Join(filepath.Dir(path), zipPath))
-					}
-					modPaths = append(modPaths, zipPaths...)
-					completedCopies++
-					continue
-				}
-
-				destFile, err := profileRoot.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-				if err != nil {
-					_ = srcFile.Close()
-					return fmt.Errorf("failed to create destination file for %s: %w", path, err)
-				}
-
-				hashChecker := newHashWriters(file.Hashes)
-
-				writer := io.MultiWriter(destFile, hashChecker)
-				if progressListener != nil && totalFiles > 0 {
-					scale := 1.0 / float64(totalFiles)
-					start := float64(completedCopies) * scale
-					pw := progress.NewProgressWriter(start, scale, srcInfo.Size(), progressListener, writer)
-					writer = pw
-					if _, err := io.Copy(writer, srcFile); err != nil {
-						_ = destFile.Close()
-						_ = srcFile.Close()
-						return fmt.Errorf("failed to copy file: %w", err)
-					}
-					pw.Complete()
-				} else {
-					if _, err := io.Copy(writer, srcFile); err != nil {
-						_ = destFile.Close()
-						_ = srcFile.Close()
-						return fmt.Errorf("failed to copy file: %w", err)
-					}
-				}
-				if err := destFile.Close(); err != nil {
-					_ = srcFile.Close()
-					return fmt.Errorf("failed to close destination file: %w", err)
-				}
-				if err := srcFile.Close(); err != nil {
-					return fmt.Errorf("failed to close source file: %w", err)
-				}
-				computedHash, err := hashChecker.Sum()
-				if err != nil {
-					return fmt.Errorf("failed to compute hash for %s: %w", path, err)
-				}
-				for hashType, hashStr := range file.Hashes {
-					if computedHash[hashType] != hashStr {
-						slog.Warn("File hash mismatch for copied file, deleting profile file", "modId", mod.ModID, "versionId", mod.VersionID, "file", path, "hashType", hashType, "expectedHash", hashStr, "computedHash", computedHash[hashType])
-						return fmt.Errorf("file hash mismatch for %s: expected %s but got %s", path, hashStr, computedHash[hashType])
-					}
-					slog.Info("File hash verified for copied file", "modId", mod.ModID, "versionId", mod.VersionID, "file", path, "hashType", hashType, "hash", hashStr)
-				}
-				modPaths = append(modPaths, filepath.Clean(path))
-				completedCopies++
+			if progressListener != nil {
+				progressListener.SetValue(float64(idx+1) / float64(len(modVersions)))
 			}
 		}
 
-		// sort modPaths for consistent metadata (not strictly necessary but cleaner)
 		slices.SortStableFunc(modPaths, func(a, b string) int {
 			return len(filepath.Dir(b)) - len(filepath.Dir(a))
 		})
 
-		// Save metadata
 		newMeta := &ProfileMetadata{
 			ModVersions: modVersions,
 			GameVersion: gameVersion,
@@ -306,33 +163,9 @@ func PrepareProfileDirectory(profileDir string, gamePath string, cacheDir string
 		}
 	}
 
-	if _, err := os.Stat(filepath.Join(profileDir, "winhttp.dll")); os.IsNotExist(err) {
-		return nil
-	}
-
-	// Generate doorstop_config.ini
+	// Always ensure doorstop_config.ini exists in profileDir
 	doorstopConfig := GenerateDoorstopConfig(profileDir)
-
-	var writePath string
-	if gamePath != "" && aumgr.DetectLauncherType(gamePath) == aumgr.LauncherMicrosoft {
-		writePath = filepath.Join(gamePath, "doorstop_config.ini")
-		dstFile, err := os.OpenFile(filepath.Join(gamePath, "winhttp.dll"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-		if err != nil {
-			return fmt.Errorf("failed to create doorstop_config.ini in game directory: %w", err)
-		}
-		defer dstFile.Close()
-		srcFile, err := os.Open(filepath.Join(profileDir, "winhttp.dll"))
-		if err != nil {
-			return fmt.Errorf("failed to open winhttp.dll in profile directory: %w", err)
-		}
-		defer srcFile.Close()
-		if _, err := io.Copy(dstFile, srcFile); err != nil {
-			return fmt.Errorf("failed to copy winhttp.dll to game directory: %w", err)
-		}
-	} else {
-		writePath = filepath.Join(profileDir, "doorstop_config.ini")
-	}
-
+	writePath := filepath.Join(profileDir, "doorstop_config.ini")
 	if err := os.WriteFile(writePath, []byte(doorstopConfig), 0644); err != nil {
 		return fmt.Errorf("failed to write doorstop_config.ini: %w", err)
 	}
@@ -341,14 +174,7 @@ func PrepareProfileDirectory(profileDir string, gamePath string, cacheDir string
 }
 
 func GenerateDoorstopConfig(basePath string) string {
-	// Paths must be absolute or relative to the executable?
-	// With SetDllDirectory, winhttp.dll is loaded from basePath.
-	// Doorstop usually resolves relative paths against the game executable.
-	// So we should use absolute paths here to be safe, pointing to files inside basePath.
-
-	targetAssembly := filepath.Join(basePath, "BepInEx", "core", "BepInEx.Unity.IL2CPP.dll")
-	coreClrPath := filepath.Join(basePath, "dotnet", "coreclr.dll")
-	corlibDir := filepath.Join(basePath, "dotnet")
+	targetAssembly := filepath.Join(basePath, "BepInEx", "core", "BepInEx.Preloader.dll")
 
 	return fmt.Sprintf(`# General options for Unity Doorstop
 [General]
@@ -364,9 +190,5 @@ debug_enabled = false
 debug_start_server = true
 debug_address = 127.0.0.1:10000
 debug_suspend = false
-
-[Il2Cpp]
-coreclr_path = %s
-corlib_dir = %s
-`, targetAssembly, coreClrPath, corlibDir)
+`, targetAssembly)
 }

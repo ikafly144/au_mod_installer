@@ -3,7 +3,7 @@ package uicommon
 import (
 	"fmt"
 
-	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
+	"github.com/ikafly144/modrepo/pkg/modmgr"
 )
 
 func (s *State) Mod(id string) (*modmgr.Mod, error) {

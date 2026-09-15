@@ -14,18 +14,15 @@ import (
 
 	"github.com/zzl/go-win32api/v2/win32"
 
-	"github.com/ikafly144/au_mod_installer/client/ui/tab/launcher"
-	"github.com/ikafly144/au_mod_installer/client/ui/tab/repo"
-	servertab "github.com/ikafly144/au_mod_installer/client/ui/tab/server"
-	"github.com/ikafly144/au_mod_installer/client/ui/tab/settings"
-	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
+	"github.com/ikafly144/modrepo/client/ui/tab/launcher"
+	"github.com/ikafly144/modrepo/client/ui/tab/repo"
+	"github.com/ikafly144/modrepo/client/ui/tab/settings"
+	"github.com/ikafly144/modrepo/client/ui/uicommon"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/driver"
 	"fyne.io/fyne/v2/lang"
-	"fyne.io/fyne/v2/widget"
 )
 
 type Config struct {
@@ -114,10 +111,6 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 		repoItem := container.NewTabItem(lang.LocalizeKey("repository.tab_name", "Repository"), repoPlaceholder)
 		var loadRepoOnce sync.Once
 
-		serverPlaceholder := container.NewStack()
-		serverItem := container.NewTabItem(lang.LocalizeKey("server.tab_name", "Servers"), serverPlaceholder)
-		var loadServerOnce sync.Once
-
 		settingsPlaceholder := container.NewStack()
 		settingsItem := container.NewTabItem(lang.LocalizeKey("settings.title", "Settings"), settingsPlaceholder)
 		var loadSettingsOnce sync.Once
@@ -125,7 +118,6 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 		tabs := container.NewAppTabs(
 			launcherTab,
 			repoItem,
-			serverItem,
 			settingsItem,
 		)
 		tabs.OnSelected = func(item *container.TabItem) {
@@ -139,17 +131,6 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 						repoPlaceholder.Refresh()
 					} else {
 						slog.Error("Failed to create repo tab", "error", err)
-					}
-				})
-			case serverItem:
-				loadServerOnce.Do(func() {
-					st := servertab.NewServerTab(state)
-					t, err := st.Tab()
-					if err == nil {
-						serverPlaceholder.Objects = []fyne.CanvasObject{t.Content}
-						serverPlaceholder.Refresh()
-					} else {
-						slog.Error("Failed to create server tab", "error", err)
 					}
 				})
 			case settingsItem:
@@ -173,10 +154,6 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 		})
 		w.SetContent(tabs)
 		w.SetFixedSize(false)
-
-		for s, ok := state.Core.DiscordService.PopQueue(); ok; s, ok = state.Core.DiscordService.PopQueue() {
-			l.HandleJoinLink(s)
-		}
 	}
 
 	state.ShowWindow = func() {
@@ -200,9 +177,6 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 		w.Show()
 		state.SetWindowVisible(true)
 		w.RequestFocus()
-		if state.Core != nil && state.Core.DiscordService != nil {
-			state.Core.DiscordService.SetIdleActivityEnabled(true)
-		}
 		if nw, ok := w.(driver.NativeWindow); ok {
 			nw.RunNative(func(context any) {
 				if winCtx, ok := context.(driver.WindowsWindowContext); ok {
@@ -223,9 +197,6 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 		if state.CloseIPC != nil {
 			state.CloseIPC()
 		}
-		if state.Core != nil && state.Core.DiscordService != nil {
-			state.Core.DiscordService.SetIdleActivityEnabled(false)
-		}
 		uicommon.SaveMainWindowSize(w)
 		if textDropCleanup != nil {
 			textDropCleanup()
@@ -242,9 +213,6 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 			uicommon.SaveMainWindowSize(w)
 			w.Hide()
 			state.SetWindowVisible(false)
-			if state.Core != nil && state.Core.DiscordService != nil {
-				state.Core.DiscordService.SetIdleActivityEnabled(false)
-			}
 			slog.Info("Main window hidden to system tray", "tray_resident", resident, "game_running", gameRunning)
 			go func() {
 				time.Sleep(300 * time.Millisecond)
@@ -279,7 +247,6 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 	if !config.silent || sharedURI != "" || sharedArchive != "" {
 		state.ShowWindow()
 	} else {
-		// In silent mode, perform a prompt GC/FreeOSMemory after setting up tray
 		go func() {
 			time.Sleep(300 * time.Millisecond)
 			runtime.GC()
@@ -287,59 +254,11 @@ func Main(w fyne.Window, version string, sharedURI string, sharedArchive string,
 		}()
 	}
 
-	if state.Core.DiscordService != nil {
-		ds := state.Core.DiscordService
-		ds.Connect()
-		if !config.silent && !fyne.CurrentApp().Preferences().Bool("tried_discord_login") {
-			go func() {
-				ds.WaitReady()
-				if !ds.IsLoggedIn() {
-					fyne.Do(func() {
-						var loginDialog *dialog.CustomDialog
-						if ds.StartSignIn(func(success bool) {
-							fyne.Do(func() {
-								if loginDialog != nil {
-									loginDialog.Hide()
-								}
-								if success {
-									fyne.CurrentApp().Preferences().SetBool("tried_discord_login", true)
-								}
-							})
-						}) {
-							progress := widget.NewProgressBarInfinite()
-							content := container.NewVBox(
-								widget.NewLabel(lang.LocalizeKey("settings.discord_login_waiting", "Please complete the Discord login in your browser.")),
-								progress,
-							)
-							loginDialog = dialog.NewCustom(
-								lang.LocalizeKey("settings.discord_login_in_progress_title", "Login in progress"),
-								lang.LocalizeKey("common.cancel", "Cancel"),
-								content,
-								w,
-							)
-							loginDialog.SetOnClosed(func() {
-								if ds.IsSigningIn() {
-									ds.AbortSignIn()
-								}
-							})
-							loginDialog.Resize(fyne.NewSize(420, 160))
-							loginDialog.Show()
-						}
-					})
-				}
-			}()
-		}
-	}
-	state.Core.StartActivityPolling(ctx)
 	state.StartPeriodicUpdateChecker(ctx)
 	w.SetOnClosed(onClosed)
 	fyne.Do(func() {
 		slog.Info("Application started", "silent", config.silent)
-		if launcherTabInst != nil {
-			for s, ok := state.Core.DiscordService.PopQueue(); ok; s, ok = state.Core.DiscordService.PopQueue() {
-				launcherTabInst.HandleJoinLink(s)
-			}
-		}
+		_ = launcherTabInst
 	})
 	runtime.LockOSThread()
 	fyne.CurrentApp().Run()

@@ -74,6 +74,11 @@ func (m *Manager) List() []Profile {
 	return result
 }
 
+// All is an alias for List.
+func (m *Manager) All() []Profile {
+	return m.List()
+}
+
 func (m *Manager) Add(p Profile) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -96,6 +101,10 @@ func (m *Manager) Add(p Profile) error {
 	}
 
 	return m.save()
+}
+
+func (m *Manager) Update(p Profile) error {
+	return m.Add(p)
 }
 
 func (m *Manager) Remove(id uuid.UUID) error {
