@@ -9,30 +9,40 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
-	"github.com/ikafly144/au_mod_installer/common/rest/model"
-	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
-	"github.com/ikafly144/au_mod_installer/pkg/progress"
+	"github.com/ikafly144/modrepo/common/rest/model"
+	"github.com/ikafly144/modrepo/pkg/progress"
+	"github.com/ikafly144/modrepo/pkg/repomgr"
 )
 
 type CacheMetadata struct {
 	ModVersion ModVersion `json:"mod_version"`
 }
 
-func DownloadMods(cacheDir string, modVersions []ModVersion, binaryType aumgr.BinaryType, progressListener progress.Progress, force bool) error {
+func fileDestinationPath(file model.ModVersionFile) string {
+	path := file.ExtractPath
+	filename := filepath.Base(file.Filename)
+	if path == "" && file.ContentType == model.ContentTypePluginDll {
+		path = filepath.Join("BepInEx", "plugins", filename)
+	}
+	if path == "" {
+		path = filename
+	}
+	if filepath.Base(path) != filename {
+		path = filepath.Join(filepath.Dir(path), filename)
+	}
+	return path
+}
+
+func DownloadMods(cacheDir string, modVersions []ModVersion, binaryType repomgr.BinaryType, progressListener progress.Progress, force bool) error {
 	if err := os.MkdirAll(cacheDir, 0755); err != nil {
 		return fmt.Errorf("failed to create cache directory: %w", err)
 	}
 
-	totalDownloadCount := func() int {
-		count := 0
-		for i := range modVersions {
-			count += modVersions[i].CompatibleFilesCount(binaryType)
-		}
-		return count
-	}()
+	totalDownloadCount := len(modVersions)
 	if totalDownloadCount == 0 {
-		return fmt.Errorf("no compatible files to download for the selected mods and binary type")
+		return nil
 	}
 
 	if progressListener != nil {
@@ -50,165 +60,105 @@ func DownloadMods(cacheDir string, modVersions []ModVersion, binaryType aumgr.Bi
 		modCacheDir := filepath.Join(cacheDir, string(binaryType), modVersions[i].ModID, hashStr)
 		if _, err := os.Stat(modCacheDir); err == nil {
 			if !force {
-				// Load metadata and check if it matches the mod version
 				metaFile, err := os.Open(filepath.Join(modCacheDir, "metadata.json"))
-				if err != nil {
-					slog.Warn("Failed to open mod cache metadata, will re-download", "modId", modVersions[i].ModID, "versionId", modVersions[i].VersionID, "error", err)
-					goto download
-				}
-				var metadata CacheMetadata
-				if err := json.UnmarshalRead(metaFile, &metadata); err != nil {
-					slog.Warn("Failed to decode mod cache metadata, will re-download", "modId", modVersions[i].ModID, "versionId", modVersions[i].VersionID, "error", err)
-					goto download
-				} else if metadata.ModVersion.VersionID != modVersions[i].VersionID {
-					slog.Warn("Mod cache metadata version mismatch, will re-download", "modId", modVersions[i].ModID, "versionId", modVersions[i].VersionID, "cachedVersionId", metadata.ModVersion.VersionID)
-					goto download
-				}
-
-				// Check if all files exist in cache
-				for file := range modVersions[i].Downloads(binaryType) {
-					cachedFilePath := filepath.Join(modCacheDir, fileDestinationPath(file))
-					if _, err := os.Stat(cachedFilePath); os.IsNotExist(err) {
-						slog.Info("Cached mod file not found, need to re-download", "modId", modVersions[i].ModID, "versionId", modVersions[i].VersionID, "file", cachedFilePath)
-						goto download
+				if err == nil {
+					var metadata CacheMetadata
+					if err := json.UnmarshalRead(metaFile, &metadata); err == nil && metadata.ModVersion.VersionID == modVersions[i].VersionID {
+						metaFile.Close()
+						// Check if package zip exists
+						zipName := modVersions[i].ModID + ".zip"
+						if len(modVersions[i].Files) > 0 && modVersions[i].Files[0].Filename != "" {
+							zipName = modVersions[i].Files[0].Filename
+						}
+						if _, err := os.Stat(filepath.Join(modCacheDir, zipName)); err == nil {
+							slog.Info("Mod already cached", "modId", modVersions[i].ModID, "versionId", modVersions[i].VersionID)
+							if progressListener != nil {
+								progressListener.SetValue(progressListener.GetValue() + (1.0 / float64(totalDownloadCount)))
+							}
+							continue
+						}
+					} else {
+						metaFile.Close()
 					}
-					hashChecker := newHashWriters(file.Hashes)
-					hashFile, err := os.Open(cachedFilePath)
-					if err != nil {
-						slog.Error("Failed to open cached mod file for hashing", "modId", modVersions[i].ModID, "versionId", modVersions[i].VersionID, "file", cachedFilePath, "error", err)
-						goto download
-					}
-					if _, err := io.Copy(hashChecker, hashFile); err != nil {
-						slog.Error("Failed to hash cached mod file", "modId", modVersions[i].ModID, "versionId", modVersions[i].VersionID, "file", cachedFilePath, "error", err)
-						hashFile.Close()
-						goto download
-					}
-					if _, err := hashChecker.Sum(); err != nil {
-						slog.Warn("Cached mod file hash mismatch, will re-download", "modId", modVersions[i].ModID, "versionId", modVersions[i].VersionID, "file", cachedFilePath, "error", err)
-						hashFile.Close()
-						goto download
-					}
-					hashFile.Close()
-				}
-
-				slog.Info("Mod already cached", "modId", modVersions[i].ModID, "versionId", modVersions[i].VersionID)
-				if progressListener != nil {
-					progressListener.SetValue(progressListener.GetValue() + (float64(modVersions[i].CompatibleFilesCount(binaryType)) / float64(totalDownloadCount)))
-				}
-				continue
-			} else {
-				slog.Info("Force re-downloading mod, clearing cache", "modId", modVersions[i].ModID, "versionId", modVersions[i].VersionID)
-				if err := os.RemoveAll(modCacheDir); err != nil {
-					return fmt.Errorf("failed to clear mod cache: %w", err)
 				}
 			}
+			_ = os.RemoveAll(modCacheDir)
 		}
-	download:
 
 		if err := os.MkdirAll(modCacheDir, 0755); err != nil {
 			return fmt.Errorf("failed to create mod cache directory: %w", err)
 		}
 
-		modCacheRoot, err := os.OpenRoot(modCacheDir)
+		downloadURL := modVersions[i].DownloadURL
+		zipName := modVersions[i].ModID + ".zip"
+		if len(modVersions[i].Files) > 0 {
+			if len(modVersions[i].Files[0].Downloads) > 0 {
+				downloadURL = modVersions[i].Files[0].Downloads[0]
+			}
+			if modVersions[i].Files[0].Filename != "" {
+				zipName = modVersions[i].Files[0].Filename
+			}
+		}
+
+		if downloadURL == "" {
+			return fmt.Errorf("mod version has no download URL: %s@%s", modVersions[i].ModID, modVersions[i].VersionID)
+		}
+
+		slog.Info("Downloading mod", "modId", modVersions[i].ModID, "versionId", modVersions[i].VersionID, "url", downloadURL)
+		req, err := http.NewRequest(http.MethodGet, downloadURL, nil)
 		if err != nil {
-			return fmt.Errorf("failed to open mod cache root: %w", err)
+			return fmt.Errorf("failed to create request for %s: %w", downloadURL, err)
 		}
-		defer modCacheRoot.Close()
+		req.Header.Set("User-Agent", "MODREPO/1.0 (R.E.P.O. Mod Launcher)")
 
-		slog.Info("Downloading mod", "modId", modVersions[i].ModID, "versionId", modVersions[i].VersionID)
-		for file := range modVersions[i].Downloads(binaryType) {
-			var response *http.Response
-			for _, uri := range file.Downloads {
-				req, err := http.NewRequest(http.MethodGet, uri, nil)
-				if err != nil {
-					slog.Error("Failed to create HTTP request for mod file", "url", uri, "error", err)
-					continue
-				}
-				resp, err := hClient.Do(req)
-				if err != nil {
-					slog.Error("Failed to download mod file", "url", uri, "error", err)
-					continue
-				}
-				defer resp.Body.Close()
-				if resp.StatusCode != http.StatusOK {
-					slog.Error("Failed to download mod file, non-OK status", "url", uri, "status", resp.Status)
-					continue
-				}
-				response = resp
-				break
-			}
-			if response == nil {
-				return fmt.Errorf("failed to download mod file from all sources: %s@%s (%s)", modVersions[i].ModID, modVersions[i].VersionID, file.ID)
-			}
-			contentLength := response.ContentLength
-			slog.Info("Downloading mod file", "url", response.Request.URL, "contentLength", contentLength)
+		resp, err := hClient.Do(req)
+		if err != nil {
+			return fmt.Errorf("failed to download mod %s: %w", modVersions[i].ModID, err)
+		}
+		defer resp.Body.Close()
 
-			hashChecker := newHashWriters(file.Hashes)
-
-			body := io.TeeReader(response.Body, hashChecker)
-			var extractPath string
-
-			switch file.ContentType {
-			case model.ContentTypeArchive:
-				fallthrough
-			case model.ContentTypeBinary, model.ContentTypePluginDll:
-				extractPath = fileDestinationPath(file)
-				if extractPath == "" {
-					return fmt.Errorf("file path is empty")
-				}
-				_ = modCacheRoot.MkdirAll(filepath.Dir(extractPath), 0755)
-				slog.Info("Saving mod file to cache", "path", extractPath)
-				destFile, err := modCacheRoot.OpenFile(extractPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-				if err != nil {
-					return err
-				}
-				defer destFile.Close()
-				startVal := 0.0
-				if progressListener != nil {
-					startVal = progressListener.GetValue()
-				}
-				buf := progress.NewProgressWriter(startVal, (1.0 / float64(totalDownloadCount)), contentLength, progressListener, destFile)
-				if _, err := io.Copy(buf, body); err != nil {
-					return err
-				}
-				buf.Complete()
-			default:
-				return fmt.Errorf("unknown file type: %s", file.ContentType)
-			}
-
-			if computedHash, err := hashChecker.Sum(); err != nil {
-				if extractPath != "" {
-					slog.Warn("File hash mismatch for extracted file, deleting cached file", "modId", modVersions[i].ModID, "versionId", modVersions[i].VersionID, "file", extractPath, "error", err)
-					if err := modCacheRoot.RemoveAll(extractPath); err != nil {
-						slog.Warn("Failed to remove cached file after hash mismatch", "file", extractPath, "error", err)
-					}
-				}
-				return fmt.Errorf("downloaded file hash mismatch: %w", err)
-			} else {
-				slog.Info("File hash verified", "hash", computedHash)
-			}
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("failed to download mod %s, HTTP %d", modVersions[i].ModID, resp.StatusCode)
 		}
 
-		// Write metadata.json to cache directory
-		metadata := CacheMetadata{
-			ModVersion: modVersions[i],
-		}
-		metaFile, err := modCacheRoot.OpenFile("metadata.json", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+		cachedZipPath := filepath.Join(modCacheDir, zipName)
+		outFile, err := os.Create(cachedZipPath)
 		if err != nil {
 			return err
 		}
-		defer metaFile.Close()
+
+		startVal := 0.0
+		if progressListener != nil {
+			startVal = progressListener.GetValue()
+		}
+		pw := progress.NewProgressWriter(startVal, (1.0 / float64(totalDownloadCount)), resp.ContentLength, progressListener, outFile)
+		if _, err := io.Copy(pw, resp.Body); err != nil {
+			outFile.Close()
+			_ = os.Remove(cachedZipPath)
+			return fmt.Errorf("failed to save mod zip %s: %w", modVersions[i].ModID, err)
+		}
+		pw.Complete()
+		outFile.Close()
+
+		// Write metadata.json
+		metadata := CacheMetadata{ModVersion: modVersions[i]}
+		metaFile, err := os.Create(filepath.Join(modCacheDir, "metadata.json"))
+		if err != nil {
+			return err
+		}
 		if err := json.MarshalWrite(metaFile, metadata); err != nil {
+			metaFile.Close()
 			return err
 		}
+		metaFile.Close()
 	}
+
 	return nil
 }
 
 func removeEmptyDirs(root *os.Root, dir string) error {
 	dirInfo, err := root.Stat(dir)
 	if err != nil {
-		slog.Warn("Failed to stat directory during cleanup", "dir", dir, "error", err)
 		return err
 	}
 	if !dirInfo.IsDir() {
@@ -216,106 +166,101 @@ func removeEmptyDirs(root *os.Root, dir string) error {
 	}
 	d, err := root.Open(dir)
 	if err != nil {
-		slog.Warn("Failed to open directory during cleanup", "dir", dir, "error", err)
 		return err
 	}
 	defer d.Close()
+
 	entries, err := d.Readdirnames(-1)
 	if err != nil {
-		slog.Warn("Failed to read directory entries during cleanup", "dir", dir, "error", err)
 		return err
 	}
 	if len(entries) == 0 {
 		if err := root.Remove(dir); err != nil {
-			slog.Warn("Failed to remove empty directory during cleanup", "dir", dir, "error", err)
+			return err
 		}
-		return removeEmptyDirs(root, filepath.Dir(dir))
+		parent := filepath.Dir(dir)
+		if parent != "." && parent != "/" && parent != dir {
+			return removeEmptyDirs(root, parent)
+		}
 	}
 	return nil
 }
 
-func extractZip(reader io.ReaderAt, contentLength int64, destRoot *os.Root, progressListener progress.Progress, n int) ([]string, error) {
-	startVal := 0.0
-	if progressListener != nil {
-		startVal = progressListener.GetValue()
-	}
-	perFileScale := 1.0 / float64(n)
-	downloadScale := perFileScale * 0.75
-	extractScale := perFileScale - downloadScale
+// extractThunderstoreZip extracts a Thunderstore mod ZIP according to r2modman rules.
+func extractThunderstoreZip(reader io.ReaderAt, contentLength int64, modID string, profileRoot *os.Root) ([]string, error) {
 	zipReader, err := zip.NewReader(reader, contentLength)
 	if err != nil {
 		return nil, err
 	}
-	var files []*zip.File
-	var totalExtractBytes uint64
-	var extractFiles []string
+
+	var extractedFiles []string
+	isBepInExPack := strings.EqualFold(modID, "BepInEx-BepInExPack")
+
 	for _, f := range zipReader.File {
 		if f.FileInfo().IsDir() {
 			continue
 		}
-		files = append(files, f)
-		extractFiles = append(extractFiles, filepath.Clean(f.Name))
-		totalExtractBytes += f.UncompressedSize64
-	}
-	if len(files) == 0 {
-		if progressListener != nil {
-			progressListener.SetValue(startVal + perFileScale)
+
+		cleanName := filepath.Clean(f.Name)
+		normalized := strings.ReplaceAll(cleanName, "\\", "/")
+
+		var destPath string
+		if isBepInExPack {
+			// BepInExPack usually has BepInExPack/BepInEx/... or BepInExPack/winhttp.dll
+			trimmed := normalized
+			if strings.HasPrefix(strings.ToLower(trimmed), "bepinexpack/") {
+				trimmed = trimmed[len("bepinexpack/"):]
+			}
+			destPath = filepath.FromSlash(trimmed)
+		} else {
+			lower := strings.ToLower(normalized)
+			if strings.HasPrefix(lower, "bepinex/") {
+				destPath = filepath.FromSlash(normalized)
+			} else if strings.HasPrefix(lower, "plugins/") {
+				sub := normalized[len("plugins/"):]
+				destPath = filepath.Join("BepInEx", "plugins", modID, filepath.FromSlash(sub))
+			} else if strings.HasPrefix(lower, "patchers/") {
+				sub := normalized[len("patchers/"):]
+				destPath = filepath.Join("BepInEx", "patchers", modID, filepath.FromSlash(sub))
+			} else if strings.HasPrefix(lower, "config/") {
+				destPath = filepath.Join("BepInEx", filepath.FromSlash(normalized))
+			} else {
+				// Root level files: dll, bundle, etc.
+				destPath = filepath.Join("BepInEx", "plugins", modID, filepath.FromSlash(normalized))
+			}
 		}
-		return extractFiles, nil
-	}
-	extractStart := startVal + downloadScale
-	writtenExtractBytes := uint64(0)
-	var extractErr error
-	for _, f := range files {
-		fileScale := 0.0
-		if totalExtractBytes > 0 {
-			fileScale = (float64(f.UncompressedSize64) / float64(totalExtractBytes)) * extractScale
+
+		if destPath == "" {
+			continue
 		}
-		fileStart := extractStart
-		if totalExtractBytes > 0 {
-			fileStart += (float64(writtenExtractBytes) / float64(totalExtractBytes)) * extractScale
+
+		if err := extractZipFile(f, destPath, profileRoot); err != nil {
+			return nil, fmt.Errorf("failed to extract %s to %s: %w", f.Name, destPath, err)
 		}
-		pw := progress.NewProgressWriter(fileStart, fileScale, int64(f.UncompressedSize64), progressListener, nil)
-		if err := extractFile(f, destRoot, pw); err != nil {
-			slog.Warn("Failed to extract file from zip", "file", f.Name, "error", err)
-			extractErr = err
-			break
-		}
-		pw.Complete()
-		writtenExtractBytes += f.UncompressedSize64
+		extractedFiles = append(extractedFiles, filepath.Clean(destPath))
 	}
-	if extractErr == nil && progressListener != nil {
-		progressListener.SetValue(startVal + perFileScale)
-	}
-	return extractFiles, extractErr
+
+	return extractedFiles, nil
 }
 
-func extractFile(f *zip.File, destRoot *os.Root, progressWriter *progress.ProgressWriter) error {
+func extractZipFile(f *zip.File, destPath string, profileRoot *os.Root) error {
 	rc, err := f.Open()
 	if err != nil {
 		return err
 	}
 	defer rc.Close()
 
-	if filepath.Dir(f.Name) == f.Name {
-		slog.Warn("Skipping file with invalid path", "file", f.Name)
-		return nil
+	dir := filepath.Dir(destPath)
+	if dir != "." && dir != "/" {
+		_ = profileRoot.MkdirAll(dir, 0755)
 	}
 
-	_ = destRoot.MkdirAll(filepath.Dir(f.Name), 0755)
-	destFile, err := destRoot.OpenFile(f.Name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, f.Mode())
+	destFile, err := profileRoot.OpenFile(destPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, f.Mode())
 	if err != nil {
 		return err
 	}
 	defer destFile.Close()
 
-	writer := io.Writer(destFile)
-	if progressWriter != nil {
-		progressWriter.SetWriter(destFile)
-		writer = progressWriter
-	}
-	if _, err := io.Copy(writer, rc); err != nil {
-		return err
-	}
-	return nil
+	_, err = io.Copy(destFile, rc)
+	return err
 }

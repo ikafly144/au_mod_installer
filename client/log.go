@@ -13,11 +13,11 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
-	if err := os.MkdirAll(filepath.Join(configDir, "au_mod_installer"), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(configDir, "MODREPO"), 0755); err != nil {
 		panic(err)
 	}
 	fileLogger := &lumberjack.Logger{
-		Filename:   filepath.Join(configDir, "au_mod_installer", "app.log"), // ログファイルのパス
+		Filename:   filepath.Join(configDir, "MODREPO", "app.log"), // ログファイルのパス
 		MaxSize:    10,                                                      // 1ファイルあたりの最大サイズ (MB)
 		MaxBackups: 5,                                                       // 残す古いログファイルの最大数
 		MaxAge:     30,                                                      // 古いログファイルを保持する最大日数

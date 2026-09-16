@@ -1,4 +1,4 @@
-module github.com/ikafly144/au_mod_installer
+module github.com/ikafly144/modrepo
 
 go 1.27.1
 

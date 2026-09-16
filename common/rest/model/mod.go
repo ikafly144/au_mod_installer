@@ -19,6 +19,14 @@ type ModDetails struct {
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+
+	IconURL        string   `json:"icon_url,omitempty"`
+	PackageURL     string   `json:"package_url,omitempty"`
+	TotalDownloads int      `json:"total_downloads,omitempty"`
+	RatingScore    int      `json:"rating_score,omitempty"`
+	Categories     []string `json:"categories,omitempty"`
+	IsPinned       bool     `json:"is_pinned,omitempty"`
+	IsDeprecated   bool     `json:"is_deprecated,omitempty"`
 }
 
 type ModVersionListResult struct {
@@ -35,6 +43,11 @@ type ModVersionDetails struct {
 	Dependencies []ModVersionDependency `json:"dependencies,omitempty"`
 	Features     map[string]any         `json:"features,omitempty"`
 
+	DownloadURL string `json:"download_url,omitempty"`
+	FileSize    int64  `json:"file_size,omitempty"`
+	IconURL     string `json:"icon_url,omitempty"`
+	Description string `json:"description,omitempty"`
+
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
@@ -46,13 +59,10 @@ type ModVersionFile struct {
 	ContentType ContentType `json:"content_type"`
 	Size        int64       `json:"size"`
 
-	// ContentTypeが `binary` か `plugin_dll` の場合、ExtractPathの位置に配置される。nullの場合は、`plugin_dll`は BepInEx/plugins に、`binary`はゲームのルートに配置される。
-	// `archive` の場合は、アーカイブを展開した後のファイルの配置に影響する。ExtractPathがnullの場合、アーカイブ内のファイルはすべてゲームのルートに配置される。
 	ExtractPath    string         `json:"extract_path,omitempty"`
 	TargetPlatform TargetPlatform `json:"target_platform"`
 
-	// Hashes is a map of hash algorithm to hash value, e.g. "sha256" -> "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-	Hashes    map[string]string `json:"hashes"`
+	Hashes    map[string]string `json:"hashes,omitempty"`
 	Downloads []string          `json:"downloads"`
 
 	CreatedAt time.Time `json:"created_at"`
@@ -69,21 +79,15 @@ const (
 type TargetPlatform string
 
 const (
-	// Any platform (default)
 	TargetPlatformAny TargetPlatform = "any"
-	// Epic/MSStore
 	TargetPlatformX64 TargetPlatform = "x64"
-	// Steam/Itch
 	TargetPlatformX86 TargetPlatform = "x86"
-	// Android
-	TargetPlatformAArch64 TargetPlatform = "aarch64"
 )
 
 type ModVersionDependency struct {
-	ModID string `json:"mod_id"`
-	// if `any` is specified, it means any version of the mod is acceptable
+	ModID          string         `json:"mod_id"`
 	VersionID      string         `json:"version_id"`
-	DependencyType DependencyType `json:"dependency_type"` // "required" or "optional"
+	DependencyType DependencyType `json:"dependency_type"`
 }
 
 type DependencyType string

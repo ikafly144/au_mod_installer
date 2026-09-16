@@ -40,8 +40,8 @@ func init() {
 	}
 
 	app.SetMetadata(fyne.AppMetadata{
-		ID:      "com.github.ikafly.au_mod_installer",
-		Name:    "AU Mod Installer",
+		ID:      "com.github.ikafly.modrepo",
+		Name:    "MODREPO",
 		Version: version,
 		Build:   1,
 		Icon:    fyne.NewStaticResource("icon.png", icon),

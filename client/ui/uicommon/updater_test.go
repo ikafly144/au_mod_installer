@@ -6,8 +6,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	restcommon "github.com/ikafly144/au_mod_installer/common/rest"
-	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
+	restcommon "github.com/ikafly144/modrepo/common/rest"
+	"github.com/ikafly144/modrepo/pkg/modmgr"
+	"github.com/ikafly144/modrepo/pkg/thunderstore"
 )
 
 func TestFindBranchVersion(t *testing.T) {
@@ -72,20 +73,20 @@ func (m *mockRestClient) CheckForUpdates(installedVersions map[string]string) (m
 	return nil, nil
 }
 
-func (m *mockRestClient) ShareGame(aupack []byte, room restcommon.RoomInfo) (*restcommon.ShareGameResponse, error) {
+func (m *mockRestClient) SearchMods(query string, category string, sortBy string) ([]*modmgr.Mod, error) {
 	return nil, nil
 }
 
-func (m *mockRestClient) UpdateSharedGameExpiration(sessionID, hostKey string) (*restcommon.ShareGameResponse, error) {
-	return nil, nil
-}
-
-func (m *mockRestClient) DeleteSharedGame(sessionID, hostKey string) error {
+func (m *mockRestClient) RefreshPackages(ctx context.Context) error {
 	return nil
 }
 
-func (m *mockRestClient) GetJoinGameDownload(sessionID string) (*restcommon.JoinGameDownloadResponse, error) {
-	return nil, nil
+func (m *mockRestClient) GetCategories() []string {
+	return nil
+}
+
+func (m *mockRestClient) ThunderstoreClient() *thunderstore.Client {
+	return nil
 }
 
 func TestCheckForUpdatesNoUpdate(t *testing.T) {

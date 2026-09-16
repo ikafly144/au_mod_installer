@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ikafly144/au_mod_installer/common/rest/model"
-	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
+	"github.com/ikafly144/modrepo/common/rest/model"
+	"github.com/ikafly144/modrepo/pkg/modmgr"
 )
 
 func TestProfileManager_AddAndGet(t *testing.T) {

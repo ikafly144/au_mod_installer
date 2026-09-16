@@ -2,32 +2,15 @@ package core
 
 import (
 	"log/slog"
-	"path/filepath"
-	"strings"
 	"time"
 
 	"uuid"
 
-	commonrest "github.com/ikafly144/au_mod_installer/common/rest"
-	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
-	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
-	"github.com/ikafly144/au_mod_installer/pkg/profile"
+	"github.com/ikafly144/modrepo/pkg/repomgr"
 )
 
 func (a *App) GetGameVersion(gamePath string) (string, error) {
-	return aumgr.GetVersion(gamePath)
-}
-
-func (a *App) IsDirectJoinEnabledForRunningProfile() bool {
-	a.runningProfileMu.Lock()
-	defer a.runningProfileMu.Unlock()
-	return a.runningDirectJoin
-}
-
-func (a *App) SetRunningDirectJoin(enabled bool) {
-	a.runningProfileMu.Lock()
-	a.runningDirectJoin = enabled
-	a.runningProfileMu.Unlock()
+	return repomgr.GetVersion(gamePath)
 }
 
 func (a *App) SetRunningPlayStartedAt(t time.Time) {
@@ -41,27 +24,19 @@ func (a *App) OnGameStartedInternal(profileID uuid.UUID, pid int) {
 	wasRunning := a.runningProfileID == profileID && a.runningGamePID > 0
 	a.runningProfileID = profileID
 	a.runningGamePID = pid
-	directJoin := a.runningDirectJoin
 	isRunning := a.runningProfileID == profileID && a.runningGamePID > 0
 	a.runningProfileMu.Unlock()
 
 	if wasRunning != isRunning && a.OnGameStarted != nil {
 		a.OnGameStarted(profileID, pid)
 	}
-
-	if !directJoin || pid <= 0 || !a.IsLobbyInfoAvailable() {
-		return
-	}
-	a.StartLobbyPolling(pid)
 }
 
 func (a *App) OnGameExitedInternal(profileID uuid.UUID) {
-	a.StopLobbyPolling()
 	a.runningProfileMu.Lock()
 	wasRunning := a.runningProfileID == profileID && a.runningGamePID > 0
 	a.runningProfileID = uuid.Nil()
 	a.runningGamePID = 0
-	a.runningDirectJoin = false
 	a.runningStartedAt = time.Time{}
 	isRunning := a.runningProfileID == profileID && a.runningGamePID > 0
 	a.runningProfileMu.Unlock()
@@ -88,7 +63,7 @@ func (a *App) WatchRestoredRunningProfile(profileID uuid.UUID, pid int, startedA
 			if !a.IsCurrentRunningProcess(profileID, pid) {
 				return
 			}
-			running, err := aumgr.IsProcessRunning(pid)
+			running, err := repomgr.IsProcessRunning(pid)
 			if err != nil {
 				slog.Debug("Failed to check restored game process state", "profile_id", profileID, "pid", pid, "error", err)
 				continue
@@ -109,98 +84,10 @@ func (a *App) WatchRestoredRunningProfile(profileID uuid.UUID, pid int, startedA
 	}()
 }
 
-func (a *App) StartLobbyPolling(pid int) {
-	a.StopLobbyPolling()
-	stop := a.StartLobbyInfoPolling(pid, 2*time.Second, func(info *IPCLobbyInfo) {
-		a.runningProfileMu.Lock()
-		a.lobbyInfo = info
-		onLobbyInfoUpdated := a.OnLobbyInfoUpdated
-		a.runningProfileMu.Unlock()
-		if onLobbyInfoUpdated != nil {
-			onLobbyInfoUpdated(info)
-		}
-	}, func(err error) {
-		slog.Debug("Lobby polling failed", "error", err)
-	})
-	a.runningProfileMu.Lock()
-	a.lobbyPollStop = stop
-	a.runningProfileMu.Unlock()
-}
-
-func (a *App) StopLobbyPolling() {
-	a.runningProfileMu.Lock()
-	stop := a.lobbyPollStop
-	a.lobbyPollStop = nil
-	a.lobbyInfo = nil
-	onLobbyInfoUpdated := a.OnLobbyInfoUpdated
-	a.runningProfileMu.Unlock()
-	if stop != nil {
-		stop()
-	}
-	if onLobbyInfoUpdated != nil {
-		onLobbyInfoUpdated(nil)
-	}
-}
-
-func (a *App) CurrentRoomInfo(info *IPCLobbyInfo) (commonrest.RoomInfo, bool) {
-	if info == nil {
-		return commonrest.RoomInfo{}, false
-	}
-	if !info.IsConnected || (info.IsHost != nil && !*info.IsHost) {
-		return commonrest.RoomInfo{}, false
-	}
-	if strings.TrimSpace(info.LobbyCode) == "" {
-		return commonrest.RoomInfo{}, false
-	}
-	if info.ServerIP == "" || info.ServerPort <= 0 {
-		return commonrest.RoomInfo{}, false
-	}
-
-	gameVersion := ""
-	a.runningProfileMu.Lock()
-	profileID := a.runningProfileID
-	a.runningProfileMu.Unlock()
-	if profileID != uuid.Nil() {
-		profileDir := filepath.Join(a.ConfigDir, "profiles", profileID.String())
-		if meta, err := modmgr.GetProfileMetadata(profileDir); err == nil && meta != nil {
-			gameVersion = meta.GameVersion
-		}
-	}
-	if gameVersion == "" {
-		if gamePath, err := a.DetectGamePath(); err == nil && gamePath != "" {
-			if v, err := aumgr.GetVersion(gamePath); err == nil {
-				gameVersion = v
-			}
-		}
-	}
-
-	room := commonrest.RoomInfo{
-		LobbyCode:      strings.TrimSpace(info.LobbyCode),
-		ServerIP:       strings.TrimSpace(info.ServerIP),
-		ServerPort:     uint16(info.ServerPort),
-		MatchMakerIp:   strings.TrimSpace(info.MatchMakerIp),
-		MatchMakerPort: uint16(info.MatchMakerPort),
-		GameVersion:    strings.TrimSpace(gameVersion),
-	}
-	return room, true
-}
-
 func (a *App) CurrentRunningProfileAndPID() (uuid.UUID, int) {
 	a.runningProfileMu.Lock()
 	defer a.runningProfileMu.Unlock()
 	return a.runningProfileID, a.runningGamePID
-}
-
-func (a *App) CurrentRunningProfile() (profile.Profile, int, bool) {
-	profileID, runningPID := a.CurrentRunningProfileAndPID()
-	if profileID == uuid.Nil() {
-		return profile.Profile{}, 0, false
-	}
-	prof, ok := a.ProfileManager.Get(profileID)
-	if !ok {
-		return profile.Profile{}, 0, false
-	}
-	return prof, runningPID, true
 }
 
 func (a *App) SetRunningProfile(profileID uuid.UUID) {
@@ -264,13 +151,4 @@ func (a *App) IsProfileRunning(profileID uuid.UUID) bool {
 	a.runningProfileMu.Lock()
 	defer a.runningProfileMu.Unlock()
 	return a.runningProfileID == profileID && a.runningGamePID > 0
-}
-
-func (a *App) HasDirectJoinFeature(versions []modmgr.ModVersion) bool {
-	for _, v := range versions {
-		if v.HasFeature(modmgr.FeatureDirectJoin) {
-			return true
-		}
-	}
-	return false
 }

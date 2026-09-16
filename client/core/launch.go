@@ -2,7 +2,6 @@ package core
 
 import (
 	"fmt"
-	"log/slog"
 	"maps"
 	"os"
 	"path/filepath"
@@ -10,19 +9,10 @@ import (
 
 	"uuid"
 
-	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
-	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
-	"github.com/ikafly144/au_mod_installer/pkg/progress"
+	"github.com/ikafly144/modrepo/pkg/modmgr"
+	"github.com/ikafly144/modrepo/pkg/progress"
+	"github.com/ikafly144/modrepo/pkg/repomgr"
 )
-
-type LaunchJoinInfo struct {
-	LobbyCode      string
-	ServerIP       string
-	ServerPort     uint16
-	MatchMakerIp   string
-	MatchMakerPort uint16
-	GameVersion    string
-}
 
 // ResolveProfileDependencies resolves all required dependencies for the given profile.
 func (a *App) ResolveProfileDependencies(profileID uuid.UUID) ([]modmgr.ModVersion, error) {
@@ -48,8 +38,8 @@ func (a *App) ResolveDependencies(initialMods []modmgr.ModVersion) ([]modmgr.Mod
 
 // PrepareLaunch prepares the game for launch by preparing the profile directory.
 func (a *App) PrepareLaunch(gamePath string, profileID uuid.UUID) (string, func() error, error) {
-	if _, err := os.Stat(filepath.Join(gamePath, "Among Us.exe")); os.IsNotExist(err) {
-		return "", nil, fmt.Errorf("among Us executable not found: %w", err)
+	if _, err := os.Stat(filepath.Join(gamePath, repomgr.ExecutableName)); os.IsNotExist(err) {
+		return "", nil, fmt.Errorf("R.E.P.O. executable not found: %w", err)
 	}
 
 	if profileID == uuid.Nil() {
@@ -68,14 +58,11 @@ func (a *App) PrepareLaunch(gamePath string, profileID uuid.UUID) (string, func(
 
 	cacheDir := filepath.Join(a.ConfigDir, "mods")
 	profileDir := filepath.Join(a.ConfigDir, "profiles", profileID.String())
-	binaryType, err := aumgr.GetBinaryType(gamePath)
-	if err != nil {
-		return "", nil, err
-	}
+	binaryType := repomgr.BinaryType64Bit
 
-	gameVersion, err := aumgr.GetVersion(gamePath)
+	gameVersion, err := repomgr.GetVersion(gamePath)
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to get game version: %w", err)
+		gameVersion = "unknown"
 	}
 
 	needSync := false
@@ -85,12 +72,8 @@ func (a *App) PrepareLaunch(gamePath string, profileID uuid.UUID) (string, func(
 		if meta.GameVersion != "" && meta.GameVersion != gameVersion {
 			needSync = true
 		}
-		if meta.BinaryType != "" && meta.BinaryType != binaryType {
-			needSync = true
-		}
 	} else if err != nil {
-		// If metadata is not found, we can assume it's an old profile and try to prepare it anyway
-		return "", nil, fmt.Errorf("profile metadata not found. the profile might be created with an older version of the installer. please sync profile to update it to the latest format: %w", err)
+		return "", nil, fmt.Errorf("profile metadata error: %w", err)
 	}
 
 	if needSync {
@@ -99,29 +82,23 @@ func (a *App) PrepareLaunch(gamePath string, profileID uuid.UUID) (string, func(
 		}
 	}
 
+	// Ensure mods are downloaded to cache
+	if err := modmgr.DownloadMods(cacheDir, resolvedVersions, binaryType, nil, false); err != nil {
+		return "", nil, fmt.Errorf("failed to download mods: %w", err)
+	}
+
 	if err := modmgr.PrepareProfileDirectory(profileDir, gamePath, cacheDir, resolvedVersions, binaryType, gameVersion, false, nil); err != nil {
 		return "", nil, err
 	}
 
 	cleanup := func() error {
-		if aumgr.DetectLauncherType(gamePath) == aumgr.LauncherMicrosoft {
-			// Remove winhttp.dll and doorstop_config.ini
-			winHttpPath := filepath.Join(gamePath, "winhttp.dll")
-			if err := os.Remove(winHttpPath); err != nil && !os.IsNotExist(err) {
-				return fmt.Errorf("failed to remove winhttp.dll: %w", err)
-			}
-			configPath := filepath.Join(gamePath, "doorstop_config.ini")
-			if err := os.Remove(configPath); err != nil && !os.IsNotExist(err) {
-				return fmt.Errorf("failed to remove doorstop_config.ini: %w", err)
-			}
-		}
 		return nil
 	}
 	return profileDir, cleanup, nil
 }
 
 // SyncProfile forces a re-sync of the profile directory by clearing it and re-installing mods.
-func (a *App) SyncProfile(profileID uuid.UUID, binaryType aumgr.BinaryType, gameVersion string, progressListener progress.Progress) error {
+func (a *App) SyncProfile(profileID uuid.UUID, binaryType repomgr.BinaryType, gameVersion string, progressListener progress.Progress) error {
 	profile, found := a.ProfileManager.Get(profileID)
 	if !found {
 		return fmt.Errorf("profile not found: %s", profileID)
@@ -135,46 +112,15 @@ func (a *App) SyncProfile(profileID uuid.UUID, binaryType aumgr.BinaryType, game
 	cacheDir := filepath.Join(a.ConfigDir, "mods")
 	profileDir := filepath.Join(a.ConfigDir, "profiles", profileID.String())
 
+	if err := modmgr.DownloadMods(cacheDir, resolvedVersions, binaryType, progressListener, true); err != nil {
+		return fmt.Errorf("failed to download mods: %w", err)
+	}
+
 	return modmgr.PrepareProfileDirectory(profileDir, "", cacheDir, resolvedVersions, binaryType, gameVersion, true, progressListener)
 }
 
-// ExecuteLaunch launches the game and blocks until it exits.
-func (a *App) ExecuteLaunch(gamePath string, dllDir string, joinInfo *LaunchJoinInfo, onStarted func(pid int) error) error {
-	launcherType := aumgr.DetectLauncherType(gamePath)
-	var exchangeCode string
-	if launcherType == aumgr.LauncherEpicGames {
-		session, err := a.EpicSessionManager.GetValidSession(a.EpicApi)
-		if err == nil {
-			ec, err := a.EpicApi.GetExchangeCode(session.AccessToken)
-			if err == nil {
-				exchangeCode = ec
-			}
-		}
-	}
-	var directJoinInfo aumgr.DirectJoinInfo
-	if joinInfo != nil && launcherType != aumgr.LauncherMicrosoft {
-		directJoinInfo = aumgr.DirectJoinInfo{
-			LobbyCode:      joinInfo.LobbyCode,
-			ServerIP:       joinInfo.ServerIP,
-			ServerPort:     joinInfo.ServerPort,
-			MatchMakerIp:   joinInfo.MatchMakerIp,
-			MatchMakerPort: joinInfo.MatchMakerPort,
-		}
-	} else if joinInfo != nil && launcherType == aumgr.LauncherMicrosoft {
-		onStartedOld := onStarted
-		onStarted = func(pid int) error {
-			if errCh := a.SendLobbyJoinByPID(pid, *joinInfo); errCh != nil {
-				go func() {
-					if err := <-errCh; err != nil {
-						slog.Error("Failed to send lobby join info to game process", "error", err)
-					}
-				}()
-			}
-			if err := onStartedOld(pid); err != nil {
-				return err
-			}
-			return nil
-		}
-	}
-	return aumgr.LaunchAmongUs(launcherType, gamePath, dllDir, exchangeCode, directJoinInfo, onStarted)
+// ExecuteLaunch launches R.E.P.O. and blocks until it exits.
+func (a *App) ExecuteLaunch(gamePath string, dllDir string, onStarted func(pid int) error) error {
+	launcherType := repomgr.DetectLauncherType(gamePath)
+	return repomgr.Launch(launcherType, gamePath, dllDir, onStarted)
 }

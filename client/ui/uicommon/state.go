@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log/slog"
 	"sync"
+	"time"
 
 	"uuid"
 
@@ -14,29 +15,21 @@ import (
 	"fyne.io/fyne/v2/lang"
 	"fyne.io/fyne/v2/widget"
 
-	"github.com/ikafly144/au_mod_installer/client/core"
-	"github.com/ikafly144/au_mod_installer/client/discord"
-	"github.com/ikafly144/au_mod_installer/client/rest"
-	"github.com/ikafly144/au_mod_installer/pkg/profile"
+	"github.com/ikafly144/modrepo/client/core"
+	"github.com/ikafly144/modrepo/client/rest"
+	"github.com/ikafly144/modrepo/pkg/profile"
 )
 
 type Option func(*Config)
 
 type Config struct {
-	rest            rest.Client
-	activityService *discord.DiscordService
-	initial         bool
+	rest    rest.Client
+	initial bool
 }
 
 func WithRestClient(c rest.Client) func(*Config) {
 	return func(cfg *Config) {
 		cfg.rest = c
-	}
-}
-
-func WithActivityService(a *discord.DiscordService) func(*Config) {
-	return func(cfg *Config) {
-		cfg.activityService = a
 	}
 }
 
@@ -52,14 +45,13 @@ func NewState(w fyne.Window, version string, options ...Option) (*State, error) 
 		option(&cfg)
 	}
 
-	app, err := core.New(version, cfg.rest, cfg.activityService)
+	app, err := core.New(version, cfg.rest)
 	if err != nil {
 		return nil, err
 	}
 
 	detectedPath, err := app.DetectGamePath()
 	if err != nil {
-		// TODO: インストールが正常に選択されていない状態でバグらないことを検証する
 		slog.Warn("Failed to detect game path", "error", err)
 		detectedPath = ""
 	}
@@ -91,7 +83,7 @@ func NewState(w fyne.Window, version string, options ...Option) (*State, error) 
 	s.ModInstalledInfo.TextStyle.Symbol = true
 	s.ErrorText.Wrapping = fyne.TextWrapWord
 	s.ErrorText.Hide()
-	s.InstallSelect.PlaceHolder = lang.LocalizeKey("installer.select_install", "(Select Among Us)")
+	s.InstallSelect.PlaceHolder = lang.LocalizeKey("installer.select_install", "(Select R.E.P.O.)")
 	detectedLauncher := app.DetectLauncherType(detectedPath)
 	s.InstallSelect.Options = []string{detectedLauncher.String(), lang.LocalizeKey("installer.manual_select", "Manual Selection")}
 	s.InstallSelect.Selected = detectedLauncher.String()
@@ -116,26 +108,19 @@ func NewState(w fyne.Window, version string, options ...Option) (*State, error) 
 			listener(profileID)
 		}
 	}
-	app.OnLobbyInfoUpdated = func(info *core.IPCLobbyInfo) {
-		if s.OnLobbyInfoUpdated != nil {
-			s.OnLobbyInfoUpdated(info)
-		}
-	}
 
 	return &s, nil
 }
 
 type State struct {
-	Version   string
-	IsInitial bool
-	Window    fyne.Window
-	// ModPath          string
+	Version          string
+	IsInitial        bool
+	Window           fyne.Window
 	SelectedGamePath binding.String
 	DetectedGamePath string
 	CanLaunch        binding.Bool
 	CanInstall       binding.Bool
 	launchLock       sync.Mutex
-	joinInfoLock     sync.Mutex
 	dialogLock       sync.Mutex
 	activeDialog     dialog.Dialog
 
@@ -163,12 +148,9 @@ type State struct {
 	OnDroppedURIs           func([]fyne.URI)
 	OnGameStarted           func(profileID uuid.UUID, pid int)
 	OnGameExited            func(profileID uuid.UUID)
-	OnLobbyInfoUpdated      func(info *core.IPCLobbyInfo)
 	OnProfileMetricsUpdated func(profileID uuid.UUID)
 	ShowWindow              func()
 	CloseIPC                func()
-
-	pendingJoinInfo *core.LaunchJoinInfo
 }
 
 func (s *State) IsWindowVisible() bool {
@@ -271,24 +253,19 @@ func (s *State) ClearError() {
 	})
 }
 
-func (s *State) SetPendingJoinInfo(joinInfo *core.LaunchJoinInfo) {
-	s.joinInfoLock.Lock()
-	defer s.joinInfoLock.Unlock()
-	if joinInfo == nil {
-		s.pendingJoinInfo = nil
-		return
+func (s *State) UpdateProfileLaunchMetrics(profileID uuid.UUID, startedAt, endedAt time.Time) error {
+	if prof, ok := s.ProfileManager.Get(profileID); ok {
+		if !startedAt.IsZero() && endedAt.After(startedAt) {
+			prof.AddPlayDuration(endedAt.Sub(startedAt))
+		}
+		prof.LastLaunchedAt = endedAt
+		if err := s.ProfileManager.Update(prof); err != nil {
+			return err
+		}
+		if s.OnProfileMetricsUpdated != nil {
+			s.OnProfileMetricsUpdated(profileID)
+		}
 	}
-	cp := *joinInfo
-	s.pendingJoinInfo = &cp
+	return nil
 }
 
-func (s *State) TakePendingJoinInfo() *core.LaunchJoinInfo {
-	s.joinInfoLock.Lock()
-	defer s.joinInfoLock.Unlock()
-	if s.pendingJoinInfo == nil {
-		return nil
-	}
-	cp := *s.pendingJoinInfo
-	s.pendingJoinInfo = nil
-	return &cp
-}

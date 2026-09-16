@@ -1,8 +1,11 @@
 package rest
 
 import (
-	"github.com/ikafly144/au_mod_installer/common/rest"
-	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
+	"context"
+
+	"github.com/ikafly144/modrepo/common/rest"
+	"github.com/ikafly144/modrepo/pkg/modmgr"
+	"github.com/ikafly144/modrepo/pkg/thunderstore"
 )
 
 type Client interface {
@@ -16,8 +19,12 @@ type Client interface {
 	GetLatestModVersion(modID string) (*modmgr.ModVersion, error)
 	GetModThumbnail(modID string) ([]byte, error)
 	CheckForUpdates(installedVersions map[string]string) (map[string]*modmgr.ModVersion, error)
-	ShareGame(aupack []byte, room rest.RoomInfo) (*rest.ShareGameResponse, error)
-	UpdateSharedGameExpiration(sessionID, hostKey string) (*rest.ShareGameResponse, error)
-	DeleteSharedGame(sessionID, hostKey string) error
-	GetJoinGameDownload(sessionID string) (*rest.JoinGameDownloadResponse, error)
+	SearchMods(query string, category string, sortBy string) ([]*modmgr.Mod, error)
+	GetCategories() []string
+	RefreshPackages(ctx context.Context) error
+	ThunderstoreClient() *thunderstore.Client
+}
+
+func NewClient(serverURL string) Client {
+	return NewThunderstoreClient("", nil)
 }

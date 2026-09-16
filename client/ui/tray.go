@@ -9,7 +9,7 @@ import (
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/lang"
 
-	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
+	"github.com/ikafly144/modrepo/client/ui/uicommon"
 )
 
 func setupSystemTray(w fyne.Window, state *uicommon.State, onQuit func()) {
@@ -19,7 +19,7 @@ func setupSystemTray(w fyne.Window, state *uicommon.State, onQuit func()) {
 		return
 	}
 
-	showItem := fyne.NewMenuItem(lang.LocalizeKey("tray.show", "Show Mod of Us"), func() {
+	showItem := fyne.NewMenuItem(lang.LocalizeKey("tray.show", "Show MODREPO"), func() {
 		fyne.Do(func() {
 			if state != nil && state.ShowWindow != nil {
 				state.ShowWindow()

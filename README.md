@@ -1,39 +1,48 @@
-# Mod of Us
+# MODREPO
 
 [English](README.md) | [日本語](README_JA.md)
 
-Mod of Us is a mod manager for the game "Among Us". It allows players to easily install, manage, and switch between different mods to enhance their gaming experience.
+MODREPO is a modern, standalone mod launcher and manager for the game **R.E.P.O.** (Semiwork Studios).
+It allows players to easily discover, install, update, and manage mods directly from [Thunderstore](https://thunderstore.io/c/repo/) with isolated profile management.
+
+## Key Features
+
+- **Zero Game Directory Pollution**: Uses Unity Mono Doorstop with `windows.SetDllDirectory` and command-line arguments to load BepInEx from dedicated profile directories. The original R.E.P.O. game directory remains 100% untouched.
+- **Thunderstore Integration**: Seamlessly fetches mods, dependencies, and updates from the official Thunderstore REPO community API (`https://thunderstore.io/c/repo/`) with ETag caching.
+- **Profile Management**: Create and switch between isolated mod profiles. Export and share profiles via `.repopack` archives.
+- **Automatic BepInEx Provisioning**: Automatically installs and configures `BepInEx-BepInExPack` for every profile.
 
 ## Install
 
 ### Latest Release
 
-You can download the latest version of Mod of Us from the [releases page](https://github.com/ikafly144/au_mod_installer/releases/latest).
+You can download the latest version of MODREPO from the [releases page](https://github.com/ikafly144/modrepo/releases/latest).
 Windows releases are distributed as an MSI installer.
 
 ### Build from Source
 
-To build Mod of Us from source, ensure you have [Go](https://golang.org/dl/) installed. Then, clone the repository and run the following commands:
+To build MODREPO from source, ensure you have [Go](https://golang.org/dl/) (1.27+ recommended) and a C compiler (for CGo/Fyne) installed. Then, clone the repository and run:
 
 ```bash
-git clone https://github.com/ikafly144/au_mod_installer.git
-cd au_mod_installer
-```
-
-The Discord SDK DLL is required at build time. Obtain `discord_partner_sdk.dll` from the private `ikafly144/mus-libs` repository and place it in `lib/`.
-
-```bash
+git clone https://github.com/ikafly144/modrepo.git
+cd modrepo
 go build ./client
 ```
 
-## Localization
+To run tests:
 
-Mod of Us supports multiple languages. To add or modify translations, edit the files in the `client/locales` directory. Each language has its own JSON file where you can add key-value pairs for translations.
+```bash
+go test ./...
+```
+
+## Profile Archive Format
+
+Profiles can be exported and imported using `.repopack` archive files (standard zip archives containing `modrepo.profile.json` and optional profile icons).
 
 ## Contributing
 
-Contributions are welcome! If you would like to contribute to Mod of Us, please fork the repository and create a pull request with your changes. Make sure to follow the existing code style and include tests for any new functionality.
+Contributions are welcome! Please submit issues or pull requests.
 
 ## License
 
-Mod of Us is licensed under the GNU General Public License v3.0. See the [LICENSE](LICENSE) file for more details.
+MODREPO is licensed under the GNU General Public License v3.0. See the [LICENSE](LICENSE) file for more details.

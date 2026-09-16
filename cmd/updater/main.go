@@ -20,18 +20,18 @@ import (
 
 	"github.com/nightlyone/lockfile"
 
-	"github.com/ikafly144/au_mod_installer/client/rest"
-	"github.com/ikafly144/au_mod_installer/common/versioning"
+	"github.com/ikafly144/modrepo/client/rest"
+	"github.com/ikafly144/modrepo/common/versioning"
 )
 
-var defaultServer = "https://modofus.sabafly.net/api/v1"
+var defaultServer = "https://thunderstore.io/c/repo/"
 
 func isMainAppRunning() bool {
 	pd, err := windows.KnownFolderPath(windows.FOLDERID_ProgramData, 0)
 	if err != nil {
 		return false
 	}
-	lockPath := filepath.Join(pd, "au_mod_installer.lock")
+	lockPath := filepath.Join(pd, "modrepo.lock")
 	lock, err := lockfile.New(lockPath)
 	if err != nil {
 		return false
@@ -117,7 +117,7 @@ func readPreferences() map[string]any {
 	if err != nil {
 		return nil
 	}
-	prefPath := filepath.Join(configDir, "fyne", "com.github.ikafly.au_mod_installer", "preferences.json")
+	prefPath := filepath.Join(configDir, "fyne", "com.github.ikafly.modrepo", "preferences.json")
 	data, err := os.ReadFile(prefPath)
 	if err != nil {
 		return nil

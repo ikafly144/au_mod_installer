@@ -4,8 +4,6 @@ package launcher
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"image"
@@ -13,12 +11,10 @@ import (
 	imagedraw "image/draw"
 	"image/png"
 	"log/slog"
-	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -36,37 +32,21 @@ import (
 
 	"uuid"
 
-	discordsdk "github.com/ikafly144/discord_social_sdk"
-
-	"github.com/ikafly144/au_mod_installer/client/core"
-	"github.com/ikafly144/au_mod_installer/client/discord"
-	"github.com/ikafly144/au_mod_installer/client/ui/uicommon"
-	"github.com/ikafly144/au_mod_installer/common/rest"
-	"github.com/ikafly144/au_mod_installer/pkg/aumgr"
-	"github.com/ikafly144/au_mod_installer/pkg/modmgr"
-	"github.com/ikafly144/au_mod_installer/pkg/profile"
-	"github.com/ikafly144/au_mod_installer/pkg/progress"
+	"github.com/ikafly144/modrepo/client/ui/uicommon"
+	"github.com/ikafly144/modrepo/pkg/modmgr"
+	"github.com/ikafly144/modrepo/pkg/profile"
+	"github.com/ikafly144/modrepo/pkg/progress"
+	"github.com/ikafly144/modrepo/pkg/repomgr"
 
 	_ "image/gif"
 	_ "image/jpeg"
 )
 
 type Launcher struct {
-	state                  *uicommon.State
-	launchButton           *widget.Button
-	shareRoomButton        *widget.Button
-	copyRoomLinkButton     *widget.Button
-	inviteFriendsButton    *widget.Button
-	roomVisibilitySelector *widget.Select
-	unpublishRoomButton    *widget.Button
-	roomLinkEntry          *widget.Label
-	roomLinkLabel          *widget.Label
-	roomLinkContainer      *fyne.Container
-	roomLinkTray           *fyne.Container
-	roomLinkTrayToggle     *widget.Button
-	roomLinkTrayExpanded   bool
-	createProfileButton    *widget.Button
-	importProfileButton    *widget.Button
+	state               *uicommon.State
+	launchButton        *widget.Button
+	createProfileButton *widget.Button
+	importProfileButton *widget.Button
 
 	profileList       *widget.List
 	profileGrid       *fyne.Container
@@ -81,21 +61,10 @@ type Launcher struct {
 	sortMode          string
 	sortDescending    bool
 
-	joinMu              sync.Mutex
-	inFlightJoinSession string
-	recentJoinSessions  map[string]time.Time
-	lastDirectJoinKey   string
-	lastDirectJoinTime  time.Time
-
 	modThumbMu             sync.Mutex
 	modThumbnailImageCache map[string]image.Image
 	modThumbnailFetched    map[string]bool
 	modThumbnailLoading    map[string]bool
-
-	friendAvatarMu      sync.Mutex
-	friendAvatarCache   map[uint64]image.Image
-	friendAvatarFetched map[uint64]bool
-	friendAvatarLoading map[uint64]bool
 
 	profileIconMu      sync.Mutex
 	profileIconCache   map[uuid.UUID]image.Image
@@ -104,16 +73,6 @@ type Launcher struct {
 	canLaunchListener binding.DataListener
 
 	content *fyne.Container
-}
-
-type discordFriend struct {
-	id             uint64
-	name           string
-	avatarURL      string
-	status         discordsdk.StatusType
-	playingModOfUs bool
-	canJoin        bool
-	inSameSession  bool
 }
 
 var _ uicommon.Tab = (*Launcher)(nil)
@@ -141,7 +100,6 @@ const (
 	launcherRunningBadgeGap  = float32(4)
 
 	restoredProcessWatchInterval = 2 * time.Second
-	roomLinkTrayWidth            = float32(320)
 )
 
 var launcherRunningProfileStrokeColor = color.NRGBA{R: 56, G: 170, B: 92, A: 255}
@@ -152,305 +110,26 @@ func NewLauncherTab(s *uicommon.State) *Launcher {
 	sortMode := normalizeSortMode(fyne.CurrentApp().Preferences().StringWithFallback(prefLauncherSortMode, sortModeName))
 	sortDescending := fyne.CurrentApp().Preferences().BoolWithFallback(prefLauncherSortDescending, defaultSortDescendingForMode(sortMode))
 	l = Launcher{
-		state:               s,
-		launchButton:        widget.NewButtonWithIcon(lang.LocalizeKey("launcher.launch", "Launch"), theme.MediaPlayIcon(), l.runLaunch),
-		shareRoomButton:     widget.NewButtonWithIcon(lang.LocalizeKey("launcher.join_link.create", "Create Join Link"), theme.MailForwardIcon(), func() { l.shareCurrentRoom(true) }),
-		copyRoomLinkButton:  widget.NewButtonWithIcon(lang.LocalizeKey("launcher.join_link.copy", "Copy Link"), theme.ContentCopyIcon(), l.copyRoomLinkToClipboard),
-		inviteFriendsButton: widget.NewButtonWithIcon(lang.LocalizeKey("launcher.discord_friends.button", "Friend List"), theme.MailComposeIcon(), l.showDiscordFriendsDialog),
-		unpublishRoomButton: widget.NewButtonWithIcon(lang.LocalizeKey("launcher.join_link.unpublish", "Stop Sharing"), theme.MediaStopIcon(), l.unpublishCurrentRoom),
-		roomVisibilitySelector: widget.NewSelect([]string{lang.LocalizeKey("launcher.party.visibility.public", "Public"), lang.LocalizeKey("launcher.party.visibility.private", "Private")}, func(s string) {
-			public := false
-			switch s {
-			case lang.LocalizeKey("launcher.party.visibility.public", "Public"):
-				public = true
-			case lang.LocalizeKey("launcher.party.visibility.private", "Private"):
-				public = false
-			}
-			fyne.CurrentApp().Preferences().SetBool("public_party", public)
-		}),
-		roomLinkEntry:          widget.NewLabel(""),
-		roomLinkLabel:          widget.NewLabel(lang.LocalizeKey("launcher.join_link.title", "Join Link")),
+		state:                  s,
+		launchButton:           widget.NewButtonWithIcon(lang.LocalizeKey("launcher.launch", "Launch"), theme.MediaPlayIcon(), l.runLaunch),
 		createProfileButton:    widget.NewButtonWithIcon(lang.LocalizeKey("profile.create", "Create Profile"), theme.ContentAddIcon(), l.createProfile),
 		importProfileButton:    widget.NewButtonWithIcon(lang.LocalizeKey("profile.import", "Import"), theme.ContentPasteIcon(), l.showImportDialog),
 		sortMode:               sortMode,
 		sortDescending:         sortDescending,
 		isGridView:             viewMode == viewModeGrid,
-		recentJoinSessions:     map[string]time.Time{},
 		modThumbnailImageCache: map[string]image.Image{},
 		modThumbnailFetched:    map[string]bool{},
 		modThumbnailLoading:    map[string]bool{},
-		friendAvatarCache:      map[uint64]image.Image{},
-		friendAvatarFetched:    map[uint64]bool{},
-		friendAvatarLoading:    map[uint64]bool{},
 		profileIconCache:       map[uuid.UUID]image.Image{},
 		profileIconFetched:     map[uuid.UUID]bool{},
 	}
 	l.createProfileButton.Importance = widget.HighImportance
-	l.shareRoomButton.Importance = widget.MediumImportance
-	l.inviteFriendsButton.Importance = widget.LowImportance
-	l.shareRoomButton.Disable()
-	l.copyRoomLinkButton.Importance = widget.LowImportance
-	l.copyRoomLinkButton.Disable()
-	l.unpublishRoomButton.Importance = widget.LowImportance
-	l.unpublishRoomButton.Disable()
-	l.roomLinkEntry.Selectable = true
-	l.roomLinkEntry.Wrapping = fyne.TextWrapOff
-	l.roomVisibilitySelector.SetSelectedIndex(func() int {
-		if fyne.CurrentApp().Preferences().BoolWithFallback("public_party", true) {
-			return 0
-		} else {
-			return 1
-		}
-	}())
-
 	l.init()
 
 	return &l
 }
 
-const recentJoinTTL = 5 * time.Second
-
-func (l *Launcher) tryStartJoinSession(sessionID string) bool {
-	sessionID = strings.TrimSpace(sessionID)
-	if sessionID == "" {
-		return false
-	}
-	l.joinMu.Lock()
-	defer l.joinMu.Unlock()
-
-	if l.inFlightJoinSession != "" {
-		slog.Warn("Join session is already in flight", "inFlight", l.inFlightJoinSession, "requested", sessionID)
-		return false
-	}
-
-	if l.recentJoinSessions == nil {
-		l.recentJoinSessions = make(map[string]time.Time)
-	}
-	now := time.Now()
-	for k, t := range l.recentJoinSessions {
-		if now.Sub(t) > recentJoinTTL {
-			delete(l.recentJoinSessions, k)
-		}
-	}
-	if t, ok := l.recentJoinSessions[sessionID]; ok && now.Sub(t) < recentJoinTTL {
-		slog.Warn("Join session was recently processed, skipping duplicate", "sessionID", sessionID)
-		return false
-	}
-
-	l.inFlightJoinSession = sessionID
-	l.recentJoinSessions[sessionID] = now
-	return true
-}
-
-func (l *Launcher) finishJoinSession(sessionID string) {
-	sessionID = strings.TrimSpace(sessionID)
-	l.joinMu.Lock()
-	defer l.joinMu.Unlock()
-	if l.inFlightJoinSession == sessionID {
-		l.inFlightJoinSession = ""
-	}
-}
-
-const directJoinDebounceTTL = 5 * time.Second
-
-func (l *Launcher) trySendDirectJoin(pid int, joinInfo core.LaunchJoinInfo) bool {
-	joinKey := fmt.Sprintf("%d:%s:%s:%d", pid, joinInfo.LobbyCode, joinInfo.MatchMakerIp, joinInfo.MatchMakerPort)
-	l.joinMu.Lock()
-	defer l.joinMu.Unlock()
-
-	now := time.Now()
-	if l.lastDirectJoinKey == joinKey && now.Sub(l.lastDirectJoinTime) < directJoinDebounceTTL {
-		slog.Warn("Skipping duplicate direct join request to game process", "key", joinKey)
-		return false
-	}
-	l.lastDirectJoinKey = joinKey
-	l.lastDirectJoinTime = now
-	return true
-}
-
-func (l *Launcher) HandleJoinLink(s string) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return
-	}
-	fyne.Do(func() {
-		if l.state.ShowWindow != nil {
-			l.state.ShowWindow()
-		} else if l.state.Window != nil {
-			l.state.Window.Show()
-			l.state.Window.RequestFocus()
-		}
-	})
-	if strings.HasPrefix(s, "mod-of-us://") {
-		l.handleJoinGameURI(s)
-		return
-	}
-	uri, err := url.Parse(s)
-	if err != nil {
-		slog.Error("Failed to parse join URI", "error", err, "uri", s)
-		return
-	}
-	sessionID := uri.Query().Get("session_id")
-	if sessionID == "" {
-		path := strings.TrimPrefix(uri.Path, "/")
-		if after, ok := strings.CutPrefix(path, "v1/"); ok {
-			sessionID = after
-		} else if !strings.Contains(path, "/") && path != "" {
-			sessionID = path
-		}
-	}
-	if sessionID == "" && s != "" && !strings.Contains(s, "/") && !strings.Contains(s, ":") && !strings.Contains(s, "?") {
-		sessionID = s
-	}
-	gameLink := &core.JoinGameLink{
-		SessionID:  sessionID,
-		ServerBase: l.state.Rest.ServerBaseURL(),
-	}
-	l.handleGameLink(gameLink)
-}
-
-func (l *Launcher) getDiscordUserName(userID uint64) string {
-	senderName := fmt.Sprintf("User %d", userID)
-	if u, ok := l.state.Core.DiscordService.Client().GetUser(userID); ok {
-		if name := strings.TrimSpace(u.DisplayName()); name != "" {
-			senderName = name
-		} else if name := strings.TrimSpace(u.Username()); name != "" {
-			senderName = name
-		}
-	}
-	return senderName
-}
-
-func (l *Launcher) handleActivityInvite(invite *discordsdk.ActivityInvite) {
-	if invite == nil {
-		return
-	}
-	var clonedInvite discordsdk.ActivityInvite
-	clonedInvite.Clone(invite)
-
-	switch clonedInvite.Type() {
-	case discordsdk.ActivityActionTypesJoinRequest:
-		senderID := clonedInvite.SenderId()
-		senderName := l.getDiscordUserName(senderID)
-
-		uicommon.Notify(
-			lang.LocalizeKey("notification.join_request.title", "Join Request Received"),
-			lang.LocalizeKey("notification.join_request.message", "{{.Name}} has requested to join your game.", map[string]any{"Name": senderName}),
-		)
-
-		fyne.Do(func() {
-			if l.state.ShowWindow != nil {
-				l.state.ShowWindow()
-			} else if l.state.Window != nil {
-				l.state.Window.Show()
-				l.state.Window.RequestFocus()
-			}
-
-			title := lang.LocalizeKey("launcher.discord_friends.join_request_received_title", "Join Request Received")
-			msg := lang.LocalizeKey(
-				"launcher.discord_friends.join_request_received_message",
-				"{{.Name}} has requested to join your game. Accept?",
-				map[string]any{"Name": senderName},
-			)
-
-			d := dialog.NewConfirm(
-				title,
-				msg,
-				func(accept bool) {
-					defer clonedInvite.Drop()
-					if accept {
-						l.state.Core.DiscordService.SendActivityJoinRequestReply(&clonedInvite, func(err error) {
-							if err != nil {
-								fyne.Do(func() {
-									l.state.ShowErrorDialog(err)
-								})
-							}
-						})
-					}
-				},
-				l.state.Window,
-			)
-			d.SetDismissText(lang.LocalizeKey("launcher.discord_friends.join_request_reject", "Decline"))
-			d.SetConfirmText(lang.LocalizeKey("launcher.discord_friends.join_request_accept", "Accept"))
-			d.Show()
-		})
-
-	case discordsdk.ActivityActionTypesJoin:
-		senderID := clonedInvite.SenderId()
-		senderName := l.getDiscordUserName(senderID)
-
-		if l.state.Core.DiscordService.ConsumeSentJoinRequest(senderID) {
-			uicommon.Notify(
-				lang.LocalizeKey("notification.invite.title", "Game Invite Received"),
-				lang.LocalizeKey("notification.invite.message", "Received game invite."),
-			)
-
-			client := l.state.Core.DiscordService.Client()
-			if client != nil {
-				client.AcceptActivityInvite(&clonedInvite, func(result *discordsdk.ClientResult, secret string) {
-					defer clonedInvite.Drop()
-					if result.Successful() && secret != "" {
-						l.HandleJoinLink(secret)
-					}
-				})
-			} else {
-				clonedInvite.Drop()
-			}
-			return
-		}
-
-		uicommon.Notify(
-			lang.LocalizeKey("notification.invite.title", "Game Invite Received"),
-			lang.LocalizeKey("notification.invite.message_from_user", "{{.Name}} has invited you to join their game.", map[string]any{"Name": senderName}),
-		)
-
-		fyne.Do(func() {
-			if l.state.ShowWindow != nil {
-				l.state.ShowWindow()
-			} else if l.state.Window != nil {
-				l.state.Window.Show()
-				l.state.Window.RequestFocus()
-			}
-
-			title := lang.LocalizeKey("launcher.discord_friends.invite_received_title", "Game Invite Received")
-			msg := lang.LocalizeKey(
-				"launcher.discord_friends.invite_received_message",
-				"{{.Name}} has invited you to join their game. Join?",
-				map[string]any{"Name": senderName},
-			)
-
-			d := dialog.NewConfirm(
-				title,
-				msg,
-				func(accept bool) {
-					defer clonedInvite.Drop()
-					if accept {
-						client := l.state.Core.DiscordService.Client()
-						if client != nil {
-							client.AcceptActivityInvite(&clonedInvite, func(result *discordsdk.ClientResult, secret string) {
-								if result.Successful() && secret != "" {
-									l.HandleJoinLink(secret)
-								}
-							})
-						}
-					}
-				},
-				l.state.Window,
-			)
-			d.SetDismissText(lang.LocalizeKey("launcher.discord_friends.invite_reject", "Decline"))
-			d.SetConfirmText(lang.LocalizeKey("launcher.discord_friends.invite_accept", "Join"))
-			d.Show()
-		})
-	default:
-		clonedInvite.Drop()
-	}
-}
-
 func (l *Launcher) init() {
-	client := l.state.Core.DiscordService.Client()
-	client.SetActivityJoinCallback(l.HandleJoinLink)
-	l.state.Core.DiscordService.AddActivityInviteCallback(l.handleActivityInvite)
-
 	l.state.OnSharedURIReceived = func(uri string) {
 		l.state.SharedURI = uri
 		fyne.Do(func() {
@@ -497,17 +176,9 @@ func (l *Launcher) init() {
 		})
 	}
 	l.state.OnGameExited = func(profileID uuid.UUID) {
-		l.state.Core.InvalidateCachedRoomShareAsync()
 		fyne.Do(func() {
 			l.refreshProfileHighlights()
-			l.refreshRoomLinkUI(nil, false)
 			l.checkLaunchState()
-		})
-	}
-	l.state.OnLobbyInfoUpdated = func(info *core.IPCLobbyInfo) {
-		slog.Info("Received lobby info", "info", fmt.Sprintf("%+v", info))
-		fyne.Do(func() {
-			l.refreshRoomLinkUI(info, true)
 		})
 	}
 	l.state.OnProfileMetricsUpdated = func(profileID uuid.UUID) {
@@ -515,16 +186,6 @@ func (l *Launcher) init() {
 			l.refreshProfiles()
 		})
 	}
-	l.setupRoomLinkUI()
-	bind := binding.NewString()
-	bind.AddListener(binding.NewDataListener(func() {
-		l.copyRoomLinkButton.SetText(lang.LocalizeKey("launcher.join_link.copy", "Copy Link"))
-		if link, err := bind.Get(); err != nil || strings.TrimSpace(link) == "" {
-			l.copyRoomLinkButton.Disable()
-			return
-		}
-		l.copyRoomLinkButton.Enable()
-	}))
 	if l.canLaunchListener == nil {
 		l.canLaunchListener = binding.NewDataListener(l.checkLaunchState)
 		l.state.CanLaunch.AddListener(l.canLaunchListener)
@@ -554,17 +215,12 @@ func (l *Launcher) restoreRunningProfiles() {
 			slog.Warn("Skipping extra running profile lock because launcher supports one active profile", "profile_id", info.ProfileID, "game_pid", info.GamePID)
 			continue
 		}
-		prof, ok := l.state.Core.ProfileManager.Get(info.ProfileID)
+		_, ok := l.state.Core.ProfileManager.Get(info.ProfileID)
 		if !ok {
 			slog.Warn("Skipping running profile lock because profile was not found", "profile_id", info.ProfileID, "game_pid", info.GamePID)
 			continue
 		}
-		directJoinEnabled := info.DirectJoinEnabled
-		if !directJoinEnabled && l.state.Core.HasDirectJoinFeature(prof.Versions()) {
-			directJoinEnabled = true
-		}
-		slog.Info("Restoring running profile from lock file", "profile_id", info.ProfileID, "game_pid", info.GamePID, "direct_join", directJoinEnabled, "play_started_at", info.PlayStartedAt)
-		l.state.Core.SetRunningDirectJoin(directJoinEnabled)
+		slog.Info("Restoring running profile from lock file", "profile_id", info.ProfileID, "game_pid", info.GamePID, "play_started_at", info.PlayStartedAt)
 		l.state.Core.SetRunningPlayStartedAt(info.PlayStartedAt)
 		l.state.Core.SetRunningProfile(info.ProfileID)
 		restored = true
@@ -577,51 +233,6 @@ func (l *Launcher) restoreRunningProfiles() {
 		})
 		fyne.Do(l.checkLaunchState)
 	}
-}
-
-func (l *Launcher) setupRoomLinkUI() {
-	l.roomLinkEntry.SetText(lang.LocalizeKey("launcher.join_link.placeholder", "No room shared now"))
-	l.copyRoomLinkButton.Disable()
-	l.unpublishRoomButton.Disable()
-	panelBackground := canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground))
-	panelBackground.CornerRadius = theme.InputRadiusSize()
-	panelSizer := canvas.NewRectangle(color.Transparent)
-	panelSizer.SetMinSize(fyne.NewSize(roomLinkTrayWidth, 0))
-	linkBackground := canvas.NewRectangle(theme.Color(theme.ColorNameBackground))
-	linkBackground.CornerRadius = theme.InputRadiusSize()
-	l.roomLinkContainer = container.NewStack(
-		panelSizer,
-		panelBackground,
-		container.NewPadded(container.NewVBox(
-			l.roomLinkLabel,
-			container.NewStack(
-				linkBackground,
-				container.NewHScroll(l.roomLinkEntry),
-			),
-			container.NewBorder(nil, nil, nil, l.roomVisibilitySelector, container.NewHBox(l.shareRoomButton, l.copyRoomLinkButton, l.unpublishRoomButton)),
-		)),
-	)
-	l.roomLinkTrayToggle = widget.NewButtonWithIcon(lang.LocalizeKey("launcher.join_link.tray_title", "Join Link"), theme.NavigateBackIcon(), func() {
-		l.setRoomLinkTrayExpanded(!l.roomLinkTrayExpanded)
-	})
-	l.roomLinkTrayToggle.Importance = widget.LowImportance
-	l.roomLinkTray = container.NewVBox(l.roomLinkContainer, l.roomLinkTrayToggle)
-	l.setRoomLinkTrayExpanded(false)
-	l.roomLinkTray.Hide()
-}
-
-func (l *Launcher) setRoomLinkTrayExpanded(expanded bool) {
-	l.roomLinkTrayExpanded = expanded
-	if l.roomLinkContainer == nil || l.roomLinkTrayToggle == nil {
-		return
-	}
-	if expanded {
-		l.roomLinkContainer.Show()
-		l.roomLinkTrayToggle.SetIcon(theme.MoveDownIcon())
-		return
-	}
-	l.roomLinkContainer.Hide()
-	l.roomLinkTrayToggle.SetIcon(theme.MoveUpIcon())
 }
 
 func (l *Launcher) refreshProfileHighlights() {
@@ -661,667 +272,8 @@ func (l *Launcher) applyProfileBorderStyle(bg *canvas.Rectangle, profileID uuid.
 	}
 }
 
-func (l *Launcher) refreshRoomLinkUI(info *core.IPCLobbyInfo, running bool) {
-	if !running || !l.state.Core.IsDirectJoinEnabledForRunningProfile() {
-		if l.roomLinkTray != nil {
-			l.roomLinkTray.Hide()
-		}
-		l.setRoomLinkTrayExpanded(false)
-		l.roomLinkEntry.SetText(lang.LocalizeKey("launcher.join_link.placeholder", "No room shared now"))
-		l.copyRoomLinkButton.Disable()
-		l.shareRoomButton.Disable()
-		l.unpublishRoomButton.Disable()
-		return
-	}
-	room, ok := l.state.Core.CurrentRoomInfo(info)
-	if !ok {
-		if l.roomLinkTray != nil {
-			l.roomLinkTray.Hide()
-			if l.content != nil {
-				l.content.Refresh()
-			}
-		}
-		l.setRoomLinkTrayExpanded(false)
-		l.roomLinkEntry.SetText(lang.LocalizeKey("launcher.join_link.placeholder", "No room shared now"))
-		l.copyRoomLinkButton.Disable()
-		l.shareRoomButton.Disable()
-		l.unpublishRoomButton.Disable()
-		l.state.Core.InvalidateCachedRoomShareAsync()
-		return
-	}
-
-	visible := l.roomLinkTray.Visible()
-	if l.roomLinkTray.Show(); !visible {
-		if l.content != nil {
-			l.content.Refresh()
-		}
-	}
-	l.shareRoomButton.Enable()
-	runningProfileID, _ := l.state.Core.CurrentRunningProfileAndPID()
-	key := core.RoomKeyForCache(room, runningProfileID)
-	cache := l.state.Core.GetSharedRoom()
-	if cache.RoomKey != key {
-		if fyne.CurrentApp().Preferences().BoolWithFallback("auto_sharing", true) {
-			l.state.Core.InvalidateCachedRoomShareAsync()
-			l.shareCurrentRoom(false)
-			return
-		}
-		l.roomLinkEntry.SetText(lang.LocalizeKey("launcher.join_link.placeholder", "No room shared now"))
-		l.copyRoomLinkButton.Disable()
-		l.unpublishRoomButton.Disable()
-		if cache.SessionID != "" {
-			l.state.Core.InvalidateCachedRoomShareAsync()
-		}
-		return
-	}
-	if cache.URL != "" && cache.ExpiresAt.After(time.Now()) {
-		l.roomLinkEntry.SetText(cache.URL)
-		l.copyRoomLinkButton.Enable()
-		if fyne.CurrentApp().Preferences().BoolWithFallback("auto_sharing", true) {
-			l.unpublishRoomButton.Disable()
-			l.unpublishRoomButton.Hide()
-			l.shareRoomButton.Hide()
-		} else {
-			l.unpublishRoomButton.Enable()
-			l.unpublishRoomButton.Show()
-			l.shareRoomButton.Show()
-		}
-	} else {
-		l.roomLinkEntry.SetText(lang.LocalizeKey("launcher.join_link.placeholder", "No room shared now"))
-		l.copyRoomLinkButton.Disable()
-		l.unpublishRoomButton.Disable()
-	}
-}
-
-func (l *Launcher) copyRoomLinkToClipboard() {
-	link := strings.TrimSpace(l.roomLinkEntry.Text)
-	if link == "" {
-		return
-	}
-	fyne.CurrentApp().Clipboard().SetContent(link)
-	l.state.ShowInfoDialog(
-		lang.LocalizeKey("common.success", "Success"),
-		lang.LocalizeKey("launcher.join_link.copied", "Copied join link to clipboard."),
-	)
-}
-
-func (l *Launcher) unpublishCurrentRoom() {
-	cache := l.state.Core.GetSharedRoom()
-	if cache.SessionID == "" || cache.HostKey == "" {
-		return
-	}
-	l.state.Core.SetSharedRoom(core.SharedRoomLink{})
-
-	if err := l.state.Rest.DeleteSharedGame(cache.SessionID, cache.HostKey); err != nil {
-		slog.Warn("Failed to unpublish room link", "error", err, "session_id", cache.SessionID)
-	}
-
-	fyne.Do(func() {
-		l.roomLinkEntry.SetText(lang.LocalizeKey("launcher.join_link.placeholder", "No room shared now"))
-		l.copyRoomLinkButton.Disable()
-		l.unpublishRoomButton.Disable()
-	})
-	l.state.ShowInfoDialog(
-		lang.LocalizeKey("common.success", "Success"),
-		lang.LocalizeKey("launcher.join_link.unpublished", "Unpublished join link."),
-	)
-}
-
-func (l *Launcher) shareCurrentRoom(copyToClipboard bool) {
-	if l.state.Core.IsRoomShareGenerating() {
-		return
-	}
-	l.state.Core.SetRoomShareGenerating(true)
-	defer func() {
-		l.state.Core.SetRoomShareGenerating(false)
-	}()
-
-	prof, _, ok := l.state.Core.CurrentRunningProfile()
-	if !ok {
-		l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("launcher.join_link.no_running_profile", "No running profile found.")))
-		return
-	}
-	room, ok := l.state.Core.CurrentRoomInfo(l.state.Core.GetLobbyInfo())
-	if !ok {
-		l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("launcher.join_link.no_room", "Could not get room info. Please join a room and try again.")))
-		return
-	}
-	roomKey := core.RoomKeyForCache(room, prof.ID)
-
-	cache := l.state.Core.GetSharedRoom()
-	if cache.RoomKey == roomKey && cache.URL != "" && cache.ExpiresAt.After(time.Now()) {
-		fyne.Do(func() {
-			l.roomLinkTray.Show()
-			l.setRoomLinkTrayExpanded(true)
-			l.roomLinkEntry.SetText(cache.URL)
-			l.copyRoomLinkButton.Enable()
-			if fyne.CurrentApp().Preferences().BoolWithFallback("auto_sharing", true) {
-				l.unpublishRoomButton.Disable()
-			} else {
-				l.unpublishRoomButton.Enable()
-			}
-		})
-		if copyToClipboard {
-			l.copyRoomLinkToClipboard()
-		}
-		return
-	}
-
-	iconPNG, err := l.state.ProfileManager.LoadIconPNG(prof.ID)
-	if err != nil {
-		l.state.ShowErrorDialog(err)
-		return
-	}
-	base := strings.TrimSpace(l.state.Rest.ServerBaseURL())
-	if base == "" {
-		l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("launcher.join_link.server_unavailable", "Cannot generate join link in this mode.")))
-		return
-	}
-	aupack, err := l.state.Core.ExportProfileArchive(prof, iconPNG)
-	if err != nil {
-		l.state.ShowErrorDialog(err)
-		return
-	}
-	rs, err := l.state.Rest.ShareGame(aupack, room)
-	if err != nil {
-		l.state.ShowErrorDialog(err)
-		return
-	}
-	if strings.HasPrefix(rs.URL, "/") {
-		rs.URL = strings.TrimRight(base, "/") + rs.URL
-	}
-	l.state.Core.SetSharedRoom(core.SharedRoomLink{
-		RoomKey:   roomKey,
-		URL:       rs.URL,
-		SessionID: rs.SessionID,
-		HostKey:   rs.HostKey,
-		ExpiresAt: rs.ExpiresAt,
-	})
-	fyne.Do(func() {
-		l.roomLinkTray.Show()
-		l.setRoomLinkTrayExpanded(true)
-		l.roomLinkEntry.SetText(rs.URL)
-		l.copyRoomLinkButton.Enable()
-		if fyne.CurrentApp().Preferences().BoolWithFallback("auto_sharing", true) {
-			l.unpublishRoomButton.Disable()
-		} else {
-			l.unpublishRoomButton.Enable()
-		}
-	})
-	if copyToClipboard {
-		fyne.Do(l.copyRoomLinkToClipboard)
-	}
-}
-
-func (l *Launcher) canSendDiscordInvite() bool {
-	if l.state == nil || l.state.Core == nil || l.state.Core.DiscordService == nil {
-		return false
-	}
-	if !l.state.Core.DiscordService.IsLoggedIn() {
-		return false
-	}
-	share := l.state.Core.GetSharedRoom()
-	if share.URL == "" || share.ExpiresAt.Before(time.Now()) {
-		return false
-	}
-	_, active := l.state.Core.DiscordService.CurrentActivity()
-	return active
-}
-
-var discordModOfUsStatusColor = color.NRGBA{R: 145, G: 70, B: 255, A: 255}
-
-func discordStatusColor(status discordsdk.StatusType, isPlayingModOfUs bool) color.Color {
-	if isPlayingModOfUs {
-		return discordModOfUsStatusColor
-	}
-	switch status {
-	case discordsdk.StatusTypeOnline:
-		return theme.Color(theme.ColorNameSuccess)
-	case discordsdk.StatusTypeIdle, discordsdk.StatusTypeStreaming:
-		return theme.Color(theme.ColorNameWarning)
-	case discordsdk.StatusTypeDnd:
-		return theme.Color(theme.ColorNameError)
-	case discordsdk.StatusTypeOffline, discordsdk.StatusTypeInvisible:
-		return theme.Color(theme.ColorNameDisabled)
-	default:
-		return theme.Color(theme.ColorNameDisabled)
-	}
-}
-
-func discordStatusPriority(status discordsdk.StatusType, isPlayingModOfUs bool, canJoin bool, inSameSession bool) int {
-	if isPlayingModOfUs {
-		if inSameSession {
-			return 0
-		}
-		if canJoin {
-			return 1
-		}
-		return 2
-	}
-	switch status {
-	case discordsdk.StatusTypeOnline:
-		return 3
-	case discordsdk.StatusTypeIdle, discordsdk.StatusTypeStreaming:
-		return 4
-	case discordsdk.StatusTypeDnd:
-		return 5
-	case discordsdk.StatusTypeOffline, discordsdk.StatusTypeInvisible:
-		return 6
-	default:
-		return 7
-	}
-}
-
-func (l *Launcher) showDiscordFriendsDialog() {
-	if l.state == nil || l.state.Core == nil || l.state.Core.DiscordService == nil {
-		l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("settings.discord_unavailable", "Discord is unavailable.")))
-		return
-	}
-	ds := l.state.Core.DiscordService
-	if ds.IsSigningIn() {
-		l.state.ShowInfoDialog(
-			lang.LocalizeKey("settings.discord_login_in_progress_title", "Login In Progress"),
-			lang.LocalizeKey("settings.discord_login_in_progress_message", "Discord login is already in progress."),
-		)
-		return
-	}
-	if !ds.IsLoggedIn() {
-		var loginDialog *dialog.CustomDialog
-		cancelled := false
-		if ds.StartSignIn(func(success bool) {
-			fyne.Do(func() {
-				if loginDialog != nil {
-					loginDialog.Hide()
-				}
-				if success {
-					go func() {
-						l.state.Core.DiscordService.WaitReady()
-						fyne.Do(l.showDiscordFriendsDialog)
-					}()
-				} else if !cancelled {
-					l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("settings.discord_login_failed", "Failed to log in to Discord.")))
-				}
-			})
-		}) {
-			loginDialog = l.newDiscordLoginProgressDialog(func() {
-				if ds.IsSigningIn() {
-					cancelled = true
-					ds.AbortSignIn()
-				}
-			})
-			loginDialog.Show()
-		} else {
-			l.state.ShowInfoDialog(
-				lang.LocalizeKey("settings.discord_login_in_progress_title", "Login In Progress"),
-				lang.LocalizeKey("settings.discord_login_in_progress_message", "Discord login is already in progress."),
-			)
-		}
-		return
-	}
-
-	if !ds.IsReady() {
-		progress := widget.NewProgressBarInfinite()
-		d := dialog.NewCustomWithoutButtons(
-			lang.LocalizeKey("settings.discord_login_in_progress_title", "Login in progress"),
-			container.NewVBox(widget.NewLabel(lang.LocalizeKey("settings.discord_login_in_progress_message", "Login in progress...")), progress),
-			l.state.Window,
-		)
-		d.Show()
-		go func() {
-			ds.WaitReady()
-			fyne.Do(func() {
-				d.Hide()
-				l.showDiscordFriendsDialog()
-			})
-		}()
-		return
-	}
-
-	contentBox := container.NewVBox()
-	scroll := container.NewVScroll(contentBox)
-	emptyLabel := widget.NewLabel(lang.LocalizeKey("launcher.discord_friends.empty", "No friends found."))
-	emptyLabel.Alignment = fyne.TextAlignCenter
-	emptyLabel.Hide()
-
-	loading := widget.NewProgressBarInfinite()
-	loading.Hide()
-
-	const friendAvatarSize = float32(48)
-	const friendStatusSize = float32(14)
-
-	var searchSeq uint64
-	buildFriendItem := func(friend discordFriend) fyne.CanvasObject {
-		avatarBg := canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground))
-		avatarBg.CornerRadius = 6
-		avatarBg.SetMinSize(fyne.NewSquareSize(friendAvatarSize))
-		avatar := canvas.NewImageFromImage(placeholderProfileIcon(int(friendAvatarSize)))
-		avatar.CornerRadius = 8
-		avatar.SetMinSize(fyne.NewSquareSize(friendAvatarSize))
-		avatar.FillMode = canvas.ImageFillContain
-		status := canvas.NewCircle(discordStatusColor(friend.status, friend.playingModOfUs))
-		status.StrokeColor = theme.Color(theme.ColorNameBackground)
-		status.StrokeWidth = 2
-		avatarContainer := container.New(&discordFriendAvatarLayout{
-			statusSize: friendStatusSize,
-			inset:      2,
-		}, avatarBg, avatar, status)
-
-		l.refreshDiscordFriendAvatarCanvas(avatar, friend.id, int(friendAvatarSize))
-		l.ensureDiscordFriendAvatarLoaded(friend.id, friend.avatarURL, func() {
-			l.refreshDiscordFriendAvatarCanvas(avatar, friend.id, int(friendAvatarSize))
-		})
-
-		name := widget.NewLabelWithStyle(friend.name, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-		name.SizeName = theme.SizeNameSubHeadingText
-		name.Wrapping = fyne.TextWrapOff
-		name.Truncation = fyne.TextTruncateEllipsis
-
-		var actionButtons []fyne.CanvasObject
-
-		if friend.inSameSession {
-			inSameSessionButton := widget.NewButtonWithIcon(
-				lang.LocalizeKey("launcher.discord_friends.in_same_session", "In Same Room"),
-				theme.ConfirmIcon(),
-				nil,
-			)
-			inSameSessionButton.Disable()
-			actionButtons = append(actionButtons, inSameSessionButton)
-		} else if friend.canJoin {
-			joinButton := widget.NewButtonWithIcon(lang.LocalizeKey("launcher.discord_friends.join", "Join"), theme.LoginIcon(), nil)
-			joinButton.Importance = widget.HighImportance
-			friendID := friend.id
-			friendName := friend.name
-			joinButton.OnTapped = func() {
-				l.state.Core.DiscordService.SendActivityJoinRequest(friendID, func(err error) {
-					fyne.Do(func() {
-						if err != nil {
-							l.state.ShowErrorDialog(fmt.Errorf("%s: %w", lang.LocalizeKey("launcher.discord_friends.join_request_failed_title", "Failed to Send Join Request"), err))
-						} else {
-							l.state.ShowInfoDialog(
-								lang.LocalizeKey("launcher.discord_friends.join_request_sent_title", "Join Request Sent"),
-								lang.LocalizeKey("launcher.discord_friends.join_request_sent_message", "Sent join request to {{.Name}}.", map[string]any{"Name": friendName}),
-							)
-						}
-					})
-				})
-			}
-			actionButtons = append(actionButtons, joinButton)
-		}
-
-		inviteButton := widget.NewButtonWithIcon(lang.LocalizeKey("launcher.discord_friends.invite", "Invite"), theme.MailSendIcon(), nil)
-		inviteButton.Importance = widget.LowImportance
-		if l.canSendDiscordInvite() && !friend.inSameSession {
-			inviteButton.Enable()
-		} else {
-			inviteButton.Disable()
-		}
-		inviteButton.OnTapped = func() {
-			if !l.canSendDiscordInvite() {
-				l.state.ShowInfoDialog(
-					lang.LocalizeKey("launcher.discord_friends.invite_unavailable_title", "Invite Unavailable"),
-					lang.LocalizeKey("launcher.discord_friends.invite_unavailable_message", "Invites are available only while sharing a room."),
-				)
-				return
-			}
-			l.state.Core.DiscordService.SendInvite(friend.id, l.state.Core.GetSharedRoom().URL)
-		}
-		actionButtons = append(actionButtons, inviteButton)
-
-		rightContainer := container.NewHBox(actionButtons...)
-		itemContent := container.NewBorder(nil, nil, avatarContainer, rightContainer, container.NewPadded(container.NewVBox(name)))
-
-		bg := canvas.NewRectangle(theme.Color(theme.ColorNameBackground))
-		bg.StrokeColor = theme.Color(theme.ColorNameButton)
-		bg.StrokeWidth = 1
-		bg.CornerRadius = theme.InputRadiusSize()
-
-		return container.NewStack(bg, container.NewPadded(itemContent))
-	}
-
-	var allFriends []discordFriend
-	var displayedCount int
-	const pageSize = 20
-	var loadMoreBtn *widget.Button
-
-	loadMore := func() {
-		if displayedCount >= len(allFriends) {
-			if loadMoreBtn != nil {
-				loadMoreBtn.Hide()
-			}
-			return
-		}
-		end := min(displayedCount+pageSize, len(allFriends))
-		for i := displayedCount; i < end; i++ {
-			contentBox.Add(buildFriendItem(allFriends[i]))
-		}
-		displayedCount = end
-
-		if loadMoreBtn != nil {
-			contentBox.Remove(loadMoreBtn)
-			if displayedCount < len(allFriends) {
-				contentBox.Add(loadMoreBtn)
-				loadMoreBtn.Show()
-			} else {
-				loadMoreBtn.Hide()
-			}
-		}
-		contentBox.Refresh()
-	}
-
-	loadMoreBtn = widget.NewButton(lang.LocalizeKey("repository.load_next", "Load More..."), loadMore)
-	loadMoreBtn.Hide()
-
-	updateList := func(query string) {
-		searchSeq++
-		mySeq := searchSeq
-		loading.Show()
-		go func() {
-			defer func() {
-				if r := recover(); r != nil {
-					slog.Error("Panic in discord friends updateList", "recover", r)
-					fyne.Do(func() {
-						if mySeq == searchSeq {
-							loading.Hide()
-						}
-					})
-				}
-			}()
-
-			var userHandles []discordsdk.UserHandle
-			query = strings.TrimSpace(query)
-			if query == "" {
-				friends, err := l.state.Core.DiscordService.GetFriends()
-				if err != nil {
-					fyne.Do(func() {
-						if mySeq != searchSeq {
-							return
-						}
-						l.state.ShowErrorDialog(err)
-						loading.Hide()
-					})
-					return
-				}
-				userHandles = friends
-			} else {
-				searchResult, err := l.state.Core.DiscordService.SearchFriends(query)
-				if err != nil {
-					fyne.Do(func() {
-						if mySeq != searchSeq {
-							return
-						}
-						l.state.ShowErrorDialog(err)
-						loading.Hide()
-					})
-					return
-				}
-				userHandles = searchResult
-			}
-
-			client := l.state.Core.DiscordService.Client()
-			var clientAppID uint64
-			if client != nil {
-				clientAppID = client.GetApplicationId()
-			}
-
-			myLobby := l.state.Core.GetLobbyInfo()
-			var myLobbyHash string
-			if myLobby != nil && myLobby.IsConnected && myLobby.LobbyCode != "" {
-				hashBytes := sha256.Sum256([]byte(myLobby.MatchMakerIp + ":" + strconv.Itoa(myLobby.MatchMakerPort) + "@" + myLobby.LobbyCode))
-				myLobbyHash = hex.EncodeToString(hashBytes[:])
-			}
-			mySharedRoom := l.state.Core.GetSharedRoom()
-			myShareURL := strings.TrimSpace(mySharedRoom.URL)
-
-			newFriends := make([]discordFriend, 0, len(userHandles))
-			for _, user := range userHandles {
-				name := strings.TrimSpace(user.DisplayName())
-				if name == "" {
-					if globalName, ok := user.GlobalName(); ok {
-						name = strings.TrimSpace(globalName)
-					}
-				}
-				if name == "" {
-					name = strings.TrimSpace(user.Username())
-				}
-				if name == "" {
-					name = fmt.Sprintf("User %d", user.Id())
-				}
-				avatarURL := ""
-				if avatarHash, ok := user.Avatar(); ok && strings.TrimSpace(avatarHash) != "" {
-					avatarURL = user.AvatarUrl(discordsdk.UserHandleAvatarTypeGif, discordsdk.UserHandleAvatarTypePng)
-				} else {
-					avatarURL = fmt.Sprintf("https://cdn.discordapp.com/embed/avatars/%d.png", (user.Id()>>22)%6)
-				}
-				isPlayingModOfUs := false
-				canJoin := false
-				inSameSession := false
-				if act, ok := user.GameActivity(); ok {
-					if appID, hasAppID := act.ApplicationId(); hasAppID {
-						if appID == discord.ApplicationID || (clientAppID != 0 && appID == clientAppID) {
-							isPlayingModOfUs = true
-
-							var friendLobbyHash string
-							var friendPartyID string
-							if party, hasParty := act.Party(); hasParty {
-								friendPartyID = strings.TrimSpace(party.Id())
-								if friendPartyID != "" {
-									parts := strings.Split(friendPartyID, "/")
-									friendLobbyHash = parts[len(parts)-1]
-								}
-							}
-
-							var friendJoinSecret string
-							if secrets, hasSec := act.Secrets(); hasSec {
-								friendJoinSecret = strings.TrimSpace(secrets.Join())
-							}
-
-							if myLobbyHash != "" && friendLobbyHash != "" && strings.EqualFold(myLobbyHash, friendLobbyHash) {
-								inSameSession = true
-							} else if myShareURL != "" && friendJoinSecret != "" && myShareURL == friendJoinSecret {
-								inSameSession = true
-							}
-
-							if !inSameSession {
-								if friendJoinSecret != "" {
-									canJoin = true
-								} else if party, hasParty := act.Party(); hasParty && friendPartyID != "" {
-									if party.MaxSize() <= 0 || party.CurrentSize() < party.MaxSize() {
-										canJoin = true
-									}
-								}
-							}
-						}
-					}
-				}
-				newFriends = append(newFriends, discordFriend{
-					id:             user.Id(),
-					name:           name,
-					avatarURL:      avatarURL,
-					status:         user.Status(),
-					playingModOfUs: isPlayingModOfUs,
-					canJoin:        canJoin,
-					inSameSession:  inSameSession,
-				})
-			}
-			sort.Slice(newFriends, func(i, j int) bool {
-				pI := discordStatusPriority(newFriends[i].status, newFriends[i].playingModOfUs, newFriends[i].canJoin, newFriends[i].inSameSession)
-				pJ := discordStatusPriority(newFriends[j].status, newFriends[j].playingModOfUs, newFriends[j].canJoin, newFriends[j].inSameSession)
-				if pI != pJ {
-					return pI < pJ
-				}
-				return strings.ToLower(newFriends[i].name) < strings.ToLower(newFriends[j].name)
-			})
-
-			fyne.Do(func() {
-				if mySeq != searchSeq {
-					return
-				}
-				contentBox.Objects = nil
-				allFriends = newFriends
-				displayedCount = 0
-				if len(allFriends) == 0 {
-					emptyLabel.Show()
-				} else {
-					emptyLabel.Hide()
-					loadMore()
-				}
-				contentBox.Refresh()
-				scroll.Refresh()
-				loading.Hide()
-			})
-		}()
-	}
-
-	searchBar := widget.NewEntry()
-	searchBar.SetPlaceHolder(lang.LocalizeKey("launcher.discord_friends.search_placeholder", "Search by name..."))
-	searchBar.OnChanged = updateList
-
-	canInvite := l.canSendDiscordInvite()
-	inviteHint := widget.NewLabelWithStyle(
-		lang.LocalizeKey("launcher.discord_friends.invite_unavailable_message", "Invites are available only while sharing a room."),
-		fyne.TextAlignLeading,
-		fyne.TextStyle{Italic: true},
-	)
-	inviteHint.Wrapping = fyne.TextWrapWord
-	if canInvite {
-		inviteHint.Hide()
-	}
-
-	updateList("")
-
-	content := container.NewBorder(container.NewVBox(inviteHint, searchBar, loading), nil, nil, nil, container.NewStack(scroll, container.NewCenter(emptyLabel)))
-	d := dialog.NewCustom(
-		lang.LocalizeKey("launcher.discord_friends.title", "Discord Friends"),
-		lang.LocalizeKey("common.cancel", "Cancel"),
-		content,
-		l.state.Window,
-	)
-
-	callbackID := ds.AddRelationshipChangedCallback(func(friends []discordsdk.UserHandle) {
-		fyne.Do(func() {
-			updateList(searchBar.Text)
-		})
-	})
-	d.SetOnClosed(func() {
-		ds.RemoveRelationshipChangedCallback(callbackID)
-	})
-
-	d.Resize(fyne.NewSize(480, 560))
-	d.Show()
-}
-
 func (l *Launcher) shareProfile(prof profile.Profile) {
 	var d *dialog.CustomDialog
-	shareCodeBtn := widget.NewButtonWithIcon(
-		lang.LocalizeKey("profile.share.action.copy_code", "Copy Share Code"),
-		theme.ContentCopyIcon(),
-		func() {
-			if d != nil {
-				d.Hide()
-			}
-			l.shareProfileAsCode(prof, true)
-		},
-	)
 	shareArchiveCopyBtn := widget.NewButtonWithIcon(
 		lang.LocalizeKey("profile.share.action.copy_archive", "Copy Archive"),
 		theme.ContentCopyIcon(),
@@ -1344,7 +296,6 @@ func (l *Launcher) shareProfile(prof profile.Profile) {
 	)
 	content := container.NewVBox(
 		widget.NewLabel(lang.LocalizeKey("profile.share.options_hint", "Choose share action.")),
-		shareCodeBtn,
 		shareArchiveCopyBtn,
 		shareArchiveSaveBtn,
 	)
@@ -1355,39 +306,8 @@ func (l *Launcher) shareProfile(prof profile.Profile) {
 		content,
 		l.state.Window,
 	)
-	d.Resize(fyne.NewSize(420, 240))
+	d.Resize(fyne.NewSize(420, 180))
 	d.Show()
-}
-
-func (l *Launcher) shareProfileAsCode(prof profile.Profile, copyToClipboard bool) {
-	uri, err := l.state.Core.ExportProfile(prof)
-	if err != nil {
-		dialog.ShowError(err, l.state.Window)
-		return
-	}
-	if copyToClipboard {
-		fyne.CurrentApp().Clipboard().SetContent(uri)
-		dialog.ShowInformation(lang.LocalizeKey("common.success", "Success"), lang.LocalizeKey("profile.shared_clipboard", "Copied share code to clipboard."), l.state.Window)
-		return
-	}
-	l.saveProfileShareCodeToFile(prof, uri)
-}
-
-func (l *Launcher) saveProfileShareCodeToFile(prof profile.Profile, uri string) {
-	path, err := l.state.ExplorerSaveFile(
-		lang.LocalizeKey("profile.share.code_file_type", "Share Code"),
-		"*.txt",
-		profileShareFileBaseName(prof)+".txt",
-	)
-	if err != nil {
-		slog.Info("Save share code cancelled or failed", "error", err)
-		return
-	}
-	if err := os.WriteFile(path, []byte(uri), 0600); err != nil {
-		dialog.ShowError(errors.New(lang.LocalizeKey("profile.error.failed_to_save_share_code", "Failed to save share code: {{.Error}}", map[string]any{"Error": err.Error()})), l.state.Window)
-		return
-	}
-	dialog.ShowInformation(lang.LocalizeKey("common.success", "Success"), lang.LocalizeKey("profile.share.saved", "Saved profile output."), l.state.Window)
 }
 
 func (l *Launcher) shareProfileAsArchive(prof profile.Profile, copyToClipboard bool) {
@@ -1402,7 +322,7 @@ func (l *Launcher) shareProfileAsArchive(prof profile.Profile, copyToClipboard b
 		return
 	}
 	if copyToClipboard {
-		tempFilePath := filepath.Join(os.TempDir(), profileShareFileBaseName(prof)+".aupack")
+		tempFilePath := filepath.Join(os.TempDir(), profileShareFileBaseName(prof)+".repopack")
 		if err := os.WriteFile(tempFilePath, archive, 0600); err != nil {
 			dialog.ShowError(errors.New(lang.LocalizeKey("profile.error.failed_to_create_temp_archive", "Failed to create temporary archive file: {{.Error}}", map[string]any{"Error": err.Error()})), l.state.Window)
 			return
@@ -1417,8 +337,8 @@ func (l *Launcher) shareProfileAsArchive(prof profile.Profile, copyToClipboard b
 
 	path, err := l.state.ExplorerSaveFile(
 		lang.LocalizeKey("profile.share.archive_file_type", "Archive"),
-		"*.aupack",
-		profileShareFileBaseName(prof)+".aupack",
+		"*.repopack",
+		profileShareFileBaseName(prof)+".repopack",
 	)
 	if err != nil {
 		slog.Info("Save archive cancelled or failed", "error", err)
@@ -1434,7 +354,7 @@ func (l *Launcher) shareProfileAsArchive(prof profile.Profile, copyToClipboard b
 func profileShareFileBaseName(prof profile.Profile) string {
 	name := strings.TrimSpace(prof.Name)
 	if name == "" {
-		return "mod-of-us-profile"
+		return "modrepo-profile"
 	}
 	invalidChars := []string{"\\", "/", ":", "*", "?", "\"", "<", ">", "|"}
 	for _, ch := range invalidChars {
@@ -1445,16 +365,6 @@ func profileShareFileBaseName(prof profile.Profile) string {
 
 func (l *Launcher) showImportDialog() {
 	var d *dialog.CustomDialog
-	importCodeBtn := widget.NewButtonWithIcon(
-		lang.LocalizeKey("profile.import_clipboard", "Import from Clipboard"),
-		theme.ContentPasteIcon(),
-		func() {
-			if d != nil {
-				d.Hide()
-			}
-			l.showImportCodeDialog()
-		},
-	)
 	importArchiveBtn := widget.NewButtonWithIcon(
 		lang.LocalizeKey("profile.import_file", "Import from Archive"),
 		theme.FolderOpenIcon(),
@@ -1465,12 +375,22 @@ func (l *Launcher) showImportDialog() {
 			l.importProfileFromArchiveFileDialog()
 		},
 	)
+	importURLBtn := widget.NewButtonWithIcon(
+		lang.LocalizeKey("profile.import_url", "Import from URL"),
+		theme.DownloadIcon(),
+		func() {
+			if d != nil {
+				d.Hide()
+			}
+			l.showImportURLDialog()
+		},
+	)
 	content := container.NewVBox(
 		widget.NewLabel(lang.LocalizeKey("profile.import_source_hint", "Choose how to import profile data.")),
-		importCodeBtn,
 		importArchiveBtn,
+		importURLBtn,
 		widget.NewSeparator(),
-		widget.NewLabel(lang.LocalizeKey("profile.import_drop_hint", "Or drop an archive (.aupack) onto this window to import.")),
+		widget.NewLabel(lang.LocalizeKey("profile.import_drop_hint", "Or drop an archive (.repopack) onto this window to import.")),
 	)
 	d = dialog.NewCustom(
 		lang.LocalizeKey("profile.import_source_title", "Import Profile"),
@@ -1478,28 +398,30 @@ func (l *Launcher) showImportDialog() {
 		content,
 		l.state.Window,
 	)
-	d.Resize(fyne.NewSize(500, 220))
+	d.Resize(fyne.NewSize(500, 200))
 	d.Show()
 }
 
-func (l *Launcher) showImportCodeDialog() {
+func (l *Launcher) showImportURLDialog() {
 	entry := widget.NewMultiLineEntry()
-	entry.PlaceHolder = "mod-of-us://profile/..."
-	entry.SetMinRowsVisible(3)
+	entry.PlaceHolder = "https://example.com/profile.repopack"
+	entry.SetMinRowsVisible(2)
 
 	dialog.ShowCustomConfirm(lang.LocalizeKey("profile.import_title", "Import Profile"), lang.LocalizeKey("common.add", "Import"), lang.LocalizeKey("common.cancel", "Cancel"), entry, func(confirm bool) {
 		if !confirm {
 			return
 		}
-		l.state.SharedURI = strings.TrimSpace(entry.Text)
-		l.checkSharedURI()
+		raw := strings.TrimSpace(entry.Text)
+		if raw != "" {
+			l.importProfileFromArchiveURL(raw)
+		}
 	}, l.state.Window)
 }
 
 func (l *Launcher) importProfileFromArchiveFileDialog() {
 	path, err := l.state.ExplorerOpenFile(
 		lang.LocalizeKey("profile.import_file_dialog_type", "Archive"),
-		"*.aupack",
+		"*.repopack;*.aupack;*.zip",
 	)
 	if err != nil {
 		slog.Info("Archive selection cancelled or failed", "error", err)
@@ -1540,12 +462,12 @@ func (l *Launcher) importProfileFromArchiveURI(uri fyne.URI) {
 
 func (l *Launcher) handleDroppedURIs(uris []fyne.URI) {
 	for _, uri := range uris {
-		if uri != nil && strings.EqualFold(uri.Extension(), ".aupack") {
+		if uri != nil && (strings.EqualFold(uri.Extension(), ".repopack") || strings.EqualFold(uri.Extension(), ".aupack") || strings.EqualFold(uri.Extension(), ".zip")) {
 			l.importProfileFromArchiveURI(uri)
 			return
 		}
 	}
-	dialog.ShowError(errors.New(lang.LocalizeKey("profile.import_drop_no_zip", "No archive (.aupack) found in dropped items.")), l.state.Window)
+	dialog.ShowError(errors.New(lang.LocalizeKey("profile.import_drop_no_zip", "No archive (.repopack) found in dropped items.")), l.state.Window)
 }
 
 func (l *Launcher) checkSharedURI() {
@@ -1571,157 +493,13 @@ func (l *Launcher) checkSharedURI() {
 		case strings.EqualFold(parsed.Scheme, "http"), strings.EqualFold(parsed.Scheme, "https"):
 			l.importProfileFromArchiveURL(parsed.String())
 			return
-		case strings.EqualFold(parsed.Scheme, "mod-of-us"):
-			switch strings.ToLower(parsed.Host) {
-			case "join_game":
-				l.handleJoinGameURI(sharedURI)
-				return
-			case "profile":
-				prof, err := l.state.Core.HandleSharedProfile(sharedURI)
-				if err != nil {
-					dialog.ShowError(err, l.state.Window)
-					return
-				}
-				l.confirmAndImportProfile(prof, nil)
-			default:
-				slog.Info("Unknown mod-of-us URI host", "host", parsed.Host)
+		case strings.EqualFold(parsed.Scheme, "modrepo"), strings.EqualFold(parsed.Scheme, "mod-of-us"):
+			if rawURL := parsed.Query().Get("url"); rawURL != "" {
+				l.importProfileFromArchiveURL(rawURL)
 			}
 			return
 		}
 	}
-
-}
-
-func (l *Launcher) joinGameErrorMessage(errorType string) string {
-	switch errorType {
-	case rest.JoinGameErrorSessionExpired:
-		return lang.LocalizeKey("launcher.join_link.error.session_expired", "The join link has expired.")
-	case rest.JoinGameErrorSessionNotFound:
-		return lang.LocalizeKey("launcher.join_link.error.session_not_found", "The join link was not found.")
-	case rest.JoinGameErrorInvalidSession:
-		return lang.LocalizeKey("launcher.join_link.error.invalid_session", "The join link is invalid.")
-	default:
-		return lang.LocalizeKey("launcher.join_link.error.invalid_session", "The join link is invalid.")
-	}
-}
-
-func (l *Launcher) handleJoinGameURI(sharedURI string) {
-	joinURI, err := l.state.Core.ParseJoinGameURI(sharedURI)
-	if err != nil {
-		uicommon.Alert(
-			lang.LocalizeKey("notification.game_launch_failed.title", "Launch Failed"),
-			lang.LocalizeKey("notification.game_launch_failed.message", "Failed to launch game: {{.Error}}", map[string]any{"Error": err.Error()}),
-		)
-		dialog.ShowError(err, l.state.Window)
-		return
-	}
-	if joinURI.ErrorType != "" {
-		errMsg := l.joinGameErrorMessage(joinURI.ErrorType)
-		uicommon.Alert(
-			lang.LocalizeKey("notification.game_launch_failed.title", "Launch Failed"),
-			lang.LocalizeKey("notification.game_launch_failed.message", "Failed to launch game: {{.Error}}", map[string]any{"Error": errMsg}),
-		)
-		l.state.ShowErrorDialog(errors.New(errMsg))
-		return
-	}
-	l.handleGameLink(joinURI)
-}
-
-func (l *Launcher) handleGameLink(joinURI *core.JoinGameLink) {
-	if joinURI == nil || strings.TrimSpace(joinURI.SessionID) == "" {
-		return
-	}
-
-	if !l.tryStartJoinSession(joinURI.SessionID) {
-		return
-	}
-
-	fyne.Do(func() {
-		if l.state.ShowWindow != nil {
-			l.state.ShowWindow()
-		} else if l.state.Window != nil {
-			l.state.Window.Show()
-			l.state.Window.RequestFocus()
-		}
-	})
-	go func() {
-		defer l.finishJoinSession(joinURI.SessionID)
-
-		shared, iconPNG, joinInfo, err := l.state.Core.HandleJoinGameDownload(joinURI.SessionID, joinURI.ServerBase)
-		fyne.DoAndWait(func() {
-			if err != nil {
-				uicommon.Alert(
-					lang.LocalizeKey("notification.game_launch_failed.title", "Launch Failed"),
-					lang.LocalizeKey("notification.game_launch_failed.message", "Failed to launch game: {{.Error}}", map[string]any{"Error": err.Error()}),
-				)
-				dialog.ShowError(err, l.state.Window)
-				return
-			}
-
-			if joinInfo != nil && joinInfo.GameVersion != "" {
-				gamePath := l.state.ModInstallDir()
-				if gamePath == "" {
-					gamePath, _ = l.state.Core.DetectGamePath()
-				}
-				if gamePath != "" {
-					gameVersion, err := aumgr.GetVersion(gamePath)
-					if err == nil && gameVersion != "" && joinInfo.GameVersion != gameVersion {
-						errMsg := lang.LocalizeKey(
-							"launcher.error.game_version_mismatch",
-							"The room's Among Us version ({{.RoomVersion}}) does not match your installed game version ({{.GameVersion}}).",
-							map[string]any{
-								"RoomVersion": joinInfo.GameVersion,
-								"GameVersion": gameVersion,
-							},
-						)
-						uicommon.Alert(
-							lang.LocalizeKey("notification.game_launch_failed.title", "Launch Failed"),
-							lang.LocalizeKey("notification.game_launch_failed.message", "Failed to launch game: {{.Error}}", map[string]any{"Error": errMsg}),
-						)
-						l.state.ShowErrorDialog(errors.New(errMsg))
-						return
-					}
-				}
-			}
-
-			runningProfileID, runningPID := l.state.Core.CurrentRunningProfileAndPID()
-			if runningProfile, ok := l.state.Core.ProfileManager.Get(runningProfileID); ok && runningPID > 0 && runningProfile.MatchesShared(*shared) && l.state.Core.HasDirectJoinFeature(runningProfile.Versions()) {
-				if !l.trySendDirectJoin(runningPID, *joinInfo) {
-					return
-				}
-				if errCh := l.state.Core.SendLobbyJoinByPID(runningPID, *joinInfo); errCh != nil {
-					go func() {
-						if err := <-errCh; err != nil {
-							uicommon.Alert(
-								lang.LocalizeKey("notification.game_launch_failed.title", "Launch Failed"),
-								lang.LocalizeKey("notification.game_launch_failed.message", "Failed to launch game: {{.Error}}", map[string]any{"Error": err.Error()}),
-							)
-							fyne.Do(func() {
-								dialog.ShowError(errors.New(lang.LocalizeKey("launcher.error.failed_to_send_join_request", "Failed to send join request to game process: {{.Error}}", map[string]any{"Error": err.Error()})), l.state.Window)
-							})
-						}
-					}()
-				}
-				uicommon.Notify(
-					lang.LocalizeKey("notification.game_launch_success.title", "Game Launched"),
-					lang.LocalizeKey("launcher.join_link.join_sent", "Sent room join request to running game."),
-				)
-				l.state.ShowInfoDialog(
-					lang.LocalizeKey("common.success", "Success"),
-					lang.LocalizeKey("launcher.join_link.join_sent", "Sent room join request to running game."),
-				)
-				return
-			}
-			if err := l.importProfileWithJoinInfo(shared, iconPNG, joinInfo); err != nil {
-				uicommon.Alert(
-					lang.LocalizeKey("notification.game_launch_failed.title", "Launch Failed"),
-					lang.LocalizeKey("notification.game_launch_failed.message", "Failed to launch game: {{.Error}}", map[string]any{"Error": err.Error()}),
-				)
-				dialog.ShowError(err, l.state.Window)
-				return
-			}
-		})
-	}()
 }
 
 func (l *Launcher) checkSharedArchive() {
@@ -1810,30 +588,6 @@ func (l *Launcher) importProfile(shared *profile.SharedProfile, iconPNG []byte) 
 		l.invalidateProfileIconCache(prof.ID)
 	}
 	l.refreshProfiles()
-}
-
-func (l *Launcher) importProfileWithJoinInfo(shared *profile.SharedProfile, iconPNG []byte, joinInfo *core.LaunchJoinInfo) error {
-	prof, err := l.state.Core.ImportSharedProfile(shared, iconPNG)
-	if err != nil {
-		return err
-	}
-
-	if prof != nil {
-		l.invalidateProfileIconCache(prof.ID)
-	}
-
-	l.refreshProfiles()
-	for i, p := range l.profiles {
-		if p.ID == prof.ID {
-			l.profileList.Select(i)
-			break
-		}
-	}
-	if joinInfo != nil {
-		l.state.SetPendingJoinInfo(joinInfo)
-		l.runLaunch()
-	}
-	return nil
 }
 
 func (l *Launcher) setupProfileList() {
@@ -2005,47 +759,6 @@ func (l *launcherListItemLayout) MinSize(objects []fyne.CanvasObject) fyne.Size 
 	return fyne.NewSize(width, height)
 }
 
-type discordFriendAvatarLayout struct {
-	statusSize float32
-	inset      float32
-}
-
-func (l *discordFriendAvatarLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
-	if len(objects) < 3 {
-		return
-	}
-	bg := objects[0]
-	avatar := objects[1]
-	status := objects[2]
-
-	bg.Resize(size)
-	bg.Move(fyne.NewPos(0, 0))
-	avatar.Resize(size)
-	avatar.Move(fyne.NewPos(0, 0))
-
-	statusSize := l.statusSize
-	if statusSize <= 0 {
-		statusSize = min(size.Width, size.Height)
-	}
-	if statusSize > size.Width {
-		statusSize = size.Width
-	}
-	if statusSize > size.Height {
-		statusSize = size.Height
-	}
-	status.Resize(fyne.NewSquareSize(statusSize))
-	status.Move(fyne.NewPos(
-		size.Width-statusSize-l.inset,
-		size.Height-statusSize-l.inset,
-	))
-}
-
-func (l *discordFriendAvatarLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
-	if len(objects) == 0 {
-		return fyne.NewSize(0, 0)
-	}
-	return objects[0].MinSize()
-}
 
 func (l *Launcher) setupProfileGrid() {
 	l.profileGrid = container.New(&launcherProfileGridLayout{
@@ -2258,12 +971,11 @@ func (l *Launcher) Tab() (*container.TabItem, error) {
 			nil,
 			nil,
 			container.NewHBox(l.toggleViewButton, l.sortOrderButton, l.sortSelect),
-			container.NewHBox(l.createProfileButton, l.importProfileButton, l.inviteFriendsButton),
+			container.NewHBox(l.createProfileButton, l.importProfileButton),
 		)),
 	)
 
 	footer := container.NewVBox(
-		l.roomLinkTray,
 		l.launchButton,
 		l.state.ErrorText,
 	)
@@ -2293,7 +1005,7 @@ func (l *Launcher) runLaunch() {
 		return
 	}
 
-	binaryType, err := aumgr.GetBinaryType(path)
+	binaryType, err := repomgr.GetBinaryType(path)
 	if err != nil {
 		dialog.ShowError(err, l.state.Window)
 		return
@@ -2315,7 +1027,6 @@ func (l *Launcher) runLaunch() {
 		l.state.ShowErrorDialog(errors.New(lang.LocalizeKey("error.game_already_running", "Already running.")))
 		return
 	}
-	l.state.Core.SetRunningDirectJoin(false)
 
 	launchDialog, launchProgress := l.newLaunchProgressDialog()
 	l.state.Core.SetLaunchingProfile(targetProfile.ID, true)
@@ -2326,7 +1037,7 @@ func (l *Launcher) runLaunch() {
 	}
 	if err := l.state.CanLaunch.Set(false); err != nil {
 		slog.Warn("Failed to set canLaunch", "error", err)
-	} // Disable launch while downloading
+	}
 	fyne.Do(launchDialog.Show)
 
 	go func() {
@@ -2362,7 +1073,7 @@ func (l *Launcher) runLaunch() {
 			launchErr = err
 			return
 		}
-		cacheDir := filepath.Join(configDir, "au_mod_installer", "mods")
+		cacheDir := filepath.Join(configDir, "MODREPO", "mods")
 
 		if err := modmgr.DownloadMods(cacheDir, resolvedVersions, binaryType, launchProgress, false); err != nil {
 			launchErr = err
@@ -2380,15 +1091,12 @@ func (l *Launcher) runLaunch() {
 			launchDialog.Hide()
 			progressShown = false
 		})
-		l.state.Core.SetRunningDirectJoin(l.state.Core.HasDirectJoinFeature(resolvedVersions))
 		l.state.Core.SetLaunchingProfile(targetProfile.ID, false)
 		l.state.Core.SetRunningProfile(targetProfile.ID)
 		fyne.DoAndWait(l.checkLaunchState)
 
 		// Proceed to Launch
-		l.state.Launch(path, l.state.Core.HasDirectJoinFeature(resolvedVersions))
-		l.state.Core.StopLobbyPolling()
-		l.state.Core.SetRunningDirectJoin(false)
+		l.state.Launch(path)
 		l.state.Core.SetRunningPlayStartedAt(time.Time{})
 		l.state.Core.ClearRunningProfile(targetProfile.ID)
 		fyne.DoAndWait(l.checkLaunchState)
@@ -2421,16 +1129,13 @@ func (l *Launcher) checkLaunchState() {
 	l.launchButton.SetText(lang.LocalizeKey("launcher.launch", "Launch"))
 	l.launchButton.SetIcon(theme.MediaPlayIcon())
 
-	// Enable launch if profile selected and game path exists
-	// We might also check if game is running (handled in state.Launch but button state is good to have)
-
 	// Check Game Path
 	path, err := l.state.SelectedGamePath.Get()
 	if err != nil || path == "" {
 		l.launchButton.Disable()
 		return
 	}
-	if _, err := os.Stat(filepath.Join(path, "Among Us.exe")); os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(path, repomgr.ExecutableName)); os.IsNotExist(err) {
 		l.launchButton.Disable()
 		return
 	}
@@ -2455,13 +1160,13 @@ func (l *Launcher) syncProfile(prof profile.Profile) {
 		return
 	}
 
-	binaryType, err := aumgr.GetBinaryType(path)
+	binaryType, err := repomgr.GetBinaryType(path)
 	if err != nil {
 		dialog.ShowError(err, l.state.Window)
 		return
 	}
 
-	gameVersion, err := aumgr.GetVersion(path)
+	gameVersion, err := repomgr.GetVersion(path)
 	if err != nil {
 		dialog.ShowError(err, l.state.Window)
 		return
@@ -2508,7 +1213,7 @@ func (l *Launcher) syncProfile(prof profile.Profile) {
 			syncErr = err
 			return
 		}
-		cacheDir := filepath.Join(configDir, "au_mod_installer", "mods")
+		cacheDir := filepath.Join(configDir, "MODREPO", "mods")
 
 		downloadProgress := progress.NewPhaseProgress(syncProgress, 0.0, 0.5)
 		if err := modmgr.DownloadMods(cacheDir, resolvedVersions, binaryType, downloadProgress, true); err != nil {
@@ -2549,23 +1254,6 @@ func (l *Launcher) newProgressDialog(titleKey, titleDefault, messageKey, message
 	)
 	d.Resize(fyne.NewSize(420, 140))
 	return d, progressBar
-}
-
-func (l *Launcher) newDiscordLoginProgressDialog(onClosed func()) *dialog.CustomDialog {
-	progress := widget.NewProgressBarInfinite()
-	content := container.NewVBox(
-		widget.NewLabel(lang.LocalizeKey("settings.discord_login_waiting", "Please complete the Discord login in your browser.")),
-		progress,
-	)
-	d := dialog.NewCustom(
-		lang.LocalizeKey("settings.discord_login_in_progress_title", "Login in progress"),
-		lang.LocalizeKey("common.cancel", "Cancel"),
-		content,
-		l.state.Window,
-	)
-	d.SetOnClosed(onClosed)
-	d.Resize(fyne.NewSize(420, 160))
-	return d
 }
 
 func (l *Launcher) refreshProfiles() {
@@ -3585,73 +2273,6 @@ func (l *Launcher) ensureModThumbnailLoaded(modID string, onLoaded func()) {
 			fyne.Do(onLoaded)
 		}
 	}(modID)
-}
-
-func (l *Launcher) discordFriendAvatarImage(userID uint64, fallbackSize int) image.Image {
-	l.friendAvatarMu.Lock()
-	img := l.friendAvatarCache[userID]
-	l.friendAvatarMu.Unlock()
-	if img == nil {
-		return placeholderProfileIcon(fallbackSize)
-	}
-	return img
-}
-
-func (l *Launcher) refreshDiscordFriendAvatarCanvas(target *canvas.Image, userID uint64, fallbackSize int) {
-	target.Image = l.discordFriendAvatarImage(userID, fallbackSize)
-	target.SetMinSize(fyne.NewSquareSize(float32(fallbackSize)))
-	target.Refresh()
-}
-
-func (l *Launcher) ensureDiscordFriendAvatarLoaded(userID uint64, avatarURL string, onLoaded func()) {
-	if userID == 0 {
-		return
-	}
-	if strings.TrimSpace(avatarURL) == "" {
-		l.friendAvatarMu.Lock()
-		l.friendAvatarFetched[userID] = true
-		l.friendAvatarMu.Unlock()
-		return
-	}
-	l.friendAvatarMu.Lock()
-	if l.friendAvatarFetched[userID] || l.friendAvatarLoading[userID] {
-		l.friendAvatarMu.Unlock()
-		return
-	}
-	l.friendAvatarLoading[userID] = true
-	l.friendAvatarMu.Unlock()
-
-	go func(targetUserID uint64, targetURL string) {
-		client := &http.Client{Timeout: 10 * time.Second}
-		resp, err := client.Get(targetURL)
-		var decoded image.Image
-		if err == nil {
-			defer resp.Body.Close()
-			if resp.StatusCode != http.StatusOK {
-				err = fmt.Errorf("unexpected status %d", resp.StatusCode)
-			} else {
-				decoded, _, err = image.Decode(resp.Body)
-				if err == nil {
-					decoded = centerCropSquare(decoded)
-				}
-			}
-		}
-		if err != nil {
-			slog.Debug("Failed to load Discord avatar", "userID", targetUserID, "error", err)
-		}
-
-		l.friendAvatarMu.Lock()
-		delete(l.friendAvatarLoading, targetUserID)
-		l.friendAvatarFetched[targetUserID] = true
-		if decoded != nil {
-			l.friendAvatarCache[targetUserID] = decoded
-		}
-		l.friendAvatarMu.Unlock()
-
-		if onLoaded != nil {
-			fyne.Do(onLoaded)
-		}
-	}(userID, avatarURL)
 }
 
 func (l *Launcher) newModDetailsDialog(mod *modmgr.Mod, onSelect func(modmgr.ModVersion)) *dialog.CustomDialog {
