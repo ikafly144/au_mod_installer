@@ -11,6 +11,7 @@ require (
 	github.com/danieljoos/wincred v1.2.3
 	github.com/gin-gonic/gin v1.12.0
 	github.com/google/go-github/v91 v91.0.0
+	github.com/google/go-github/v92 v92.0.0
 	github.com/ikafly144/discord_social_sdk v0.1.3
 	github.com/jchv/go-webview2 v0.0.0-20260205173254-56598839c808
 	github.com/josephspurrier/goversioninfo v1.7.0
