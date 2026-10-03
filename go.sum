@@ -4,6 +4,7 @@ fyne.io/systray v1.12.3-0.20260810170012-af4e8e793ec4 h1:149/+Wa5EsLLXfyj2pdTmvn
 fyne.io/systray v1.12.3-0.20260810170012-af4e8e793ec4/go.mod h1:RVwqP9nYMo7h5zViCBHri2FgjXF7H2cub7MAq4NSoLs=
 fyne.io/tools v1.7.2 h1:+uDZ3uOPVfdcOGRxzTI7uwBj7y3VRzz9qwntZ59J62M=
 fyne.io/tools v1.7.2/go.mod h1:MOPy1Z0+abfaOOyFxFqiuVuKx587jlfprGANBcOqvO0=
+fyne.io/tools v1.7.3/go.mod h1:qR7kEPTVOw5hlulFBFOXTUQilQYeyq1nzH0PeGfpyEY=
 git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3 h1:N3IGoHHp9pb6mj1cbXbuaSXV/UMKwmbKLf53nQmtqMA=
 git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3/go.mod h1:QtOLZGz8olr4qH2vWK0QH0w0O4T9fEIjMuWpKUsH7nc=
 github.com/AlecAivazis/survey/v2 v2.3.7 h1:6I/u8FvytdGsgonrYsVn2t8t4QiRnh6QSTqkkhIiSjQ=
