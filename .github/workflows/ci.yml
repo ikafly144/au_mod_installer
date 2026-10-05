@@ -52,7 +52,6 @@ jobs:
             $dlls | ForEach-Object { $_.FullName }
             exit 1
           }
-          Copy-Item -Path $dlls[0].FullName -Destination "lib\discord_partner_sdk.dll" -Force
           Copy-Item -Path $dlls[0].FullName -Destination "discord_partner_sdk.dll" -Force
           $libPath = (Get-Item "lib").FullName
           Add-Content -Path $env:GITHUB_PATH -Value $libPath
@@ -99,7 +98,6 @@ jobs:
             $dlls | ForEach-Object { $_.FullName }
             exit 1
           }
-          Copy-Item -Path $dlls[0].FullName -Destination "lib\discord_partner_sdk.dll" -Force
           Copy-Item -Path $dlls[0].FullName -Destination "discord_partner_sdk.dll" -Force
           $libPath = (Get-Item "lib").FullName
           Add-Content -Path $env:GITHUB_PATH -Value $libPath
