@@ -380,10 +380,9 @@ func (s *Settings) Tab() (*container.TabItem, error) {
 				lang.LocalizeKey("settings.display_scale_hint", "Adjust UI display scale"),
 				container.NewBorder(
 					nil,
-					nil,
+					s.DisplayScaleSlider,
 					nil,
 					container.New(layout.NewGridWrapLayout(fyne.NewSize(110, s.DisplayScaleSelect.MinSize().Height)), s.DisplayScaleSelect),
-					s.DisplayScaleSlider,
 				),
 			),
 		),
