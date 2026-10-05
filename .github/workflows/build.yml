@@ -38,7 +38,6 @@ jobs:
           $dlls = @(Get-ChildItem -Path mus-libs -Recurse -Filter discord_partner_sdk.dll)
           if ($dlls.Count -eq 0) { throw "discord_partner_sdk.dll not found in mus-libs" }
           elseif ($dlls.Count -ne 1) { throw "multiple discord_partner_sdk.dll files found; please ensure exactly one match" }
-          else { Copy-Item $dlls[0].FullName -Destination lib\discord_partner_sdk.dll -Force }
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:

@@ -13,11 +13,6 @@ on:
   pull_request:
     branches:
       - master
-    paths:
-      - "**.go"
-      - "**/go.sum"
-      - "**/go.mod"
-      - ".golangci.yml"
 
 permissions:
   contents: read

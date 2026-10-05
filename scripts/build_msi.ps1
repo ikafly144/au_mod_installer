@@ -46,7 +46,7 @@ $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $distPath = Join-Path $repoRoot $DistDir
 $buildPath = Join-Path $distPath $BuildDirName
 $exePath = Join-Path $buildPath $BinaryName
-$dllPath = Join-Path $repoRoot "lib\discord_partner_sdk.dll"
+$dllPath = Join-Path $repoRoot "mus-libs\discord_partner_sdk.dll"
 $iconPath = Join-Path $repoRoot "client\icon.ico"
 $wxsPath = Join-Path $repoRoot "installer\wix\product.wxs"
 $stagePath = Join-Path $distPath "wix"
@@ -89,7 +89,8 @@ if (-not (Test-Path $updaterPath)) {
     } | Select-Object -First 1
     if ($updaterCandidate) {
         $updaterPath = Join-Path $updaterCandidate.FullName "updater.exe"
-    } else {
+    }
+    else {
         Write-Host "Building updater.exe for staging..."
         & go build -ldflags "-s -w -H=windowsgui" -o (Join-Path $stagePath "updater.exe") ./cmd/updater
     }
