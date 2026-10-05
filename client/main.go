@@ -121,7 +121,6 @@ func realMain(sharedURI string, sharedArchive string) error {
 	var (
 		localMode string
 		server    string
-		offline   bool
 		silent    bool
 		initial   bool
 	)
@@ -157,7 +156,6 @@ func realMain(sharedURI string, sharedArchive string) error {
 
 	flag.StringVar(&localMode, "local", "", "Path to local mods.json file for local mode")
 	flag.StringVar(&server, "server", DefaultServer, "URL of the mod server")
-	flag.BoolVar(&offline, "offline", false, "Run in offline mode (only uninstallation and management of installed mods are available)")
 	flag.BoolVar(&silent, "silent", false, "Start minimized in system tray")
 	flag.BoolVar(&initial, "initial", false, "Indicates the application was launched from updater on startup")
 	flag.Parse()
@@ -186,19 +184,18 @@ func realMain(sharedURI string, sharedArchive string) error {
 			return err
 		}
 		client = f
-	} else if offline {
-		slog.Info("Running in offline mode")
-		client = rest.NewOfflineClient()
 	} else {
 		slog.Info("Running in server mode", "server", server)
 		client = rest.NewClient(server)
-
+	retry:
 		if _, err := client.GetHealthStatus(); err != nil {
 			slog.Error("Failed to connect to server", "error", err)
-			yes := (&dialog.MsgBuilder{Msg: lang.LocalizeKey("error.server_connection_failed_offline_prompt", "Failed to connect to server: {{.Error}}\nDo you want to continue in offline mode?\n(Only uninstallation and management of installed mods are available)", map[string]any{"Error": err})}).Title(lang.LocalizeKey("error.connection_error", "Connection Error")).YesNo()
-			if yes {
-				slog.Info("Continuing in offline mode")
-				client = rest.NewOfflineClient()
+			res, winErr := win32.MessageBox(win32.NULL, win32.StrToPwstr(lang.LocalizeKey("error.server_connection_failed", "Failed to connect to server: {{.Error}}\nCheck your connection and try again.", map[string]any{"Error": err})), win32.StrToPwstr(lang.LocalizeKey("error.connection_error", "Connection Error")), win32.MB_ICONERROR|win32.MB_RETRYCANCEL|win32.MB_SETFOREGROUND|win32.MB_TOPMOST)
+			if winErr.NilOrError() != nil {
+				slog.Error("Failed to show message box", "error", winErr)
+			}
+			if res == win32.IDRETRY {
+				goto retry
 			} else {
 				return err
 			}
