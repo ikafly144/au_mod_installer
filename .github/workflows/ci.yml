@@ -53,7 +53,7 @@ jobs:
             exit 1
           }
           Copy-Item -Path $dlls[0].FullName -Destination "discord_partner_sdk.dll" -Force
-          $libPath = (Get-Item "lib").FullName
+          $libPath = (Get-Item "mus-libs").FullName
           Add-Content -Path $env:GITHUB_PATH -Value $libPath
       - name: Cache golangci-lint cache
         id: cache-golangci-lint
@@ -99,7 +99,7 @@ jobs:
             exit 1
           }
           Copy-Item -Path $dlls[0].FullName -Destination "discord_partner_sdk.dll" -Force
-          $libPath = (Get-Item "lib").FullName
+          $libPath = (Get-Item "mus-libs").FullName
           Add-Content -Path $env:GITHUB_PATH -Value $libPath
       - name: Cache Go modules
         id: cache-go-mod
