@@ -6,7 +6,7 @@ require (
 	fyne.io/fyne/v2 v2.8.2
 	git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3
 	github.com/AlecAivazis/survey/v2 v2.3.7
-	github.com/Microsoft/go-winio v0.6.3
+	github.com/Microsoft/go-winio v0.6.4
 	github.com/TheTitanrain/w32 v0.0.0-20200114052255-2654d97dbd3d
 	github.com/danieljoos/wincred v1.2.3
 	github.com/gin-gonic/gin v1.12.0
