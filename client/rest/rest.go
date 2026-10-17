@@ -20,4 +20,11 @@ type Client interface {
 	UpdateSharedGameExpiration(sessionID, hostKey string) (*rest.ShareGameResponse, error)
 	DeleteSharedGame(sessionID, hostKey string) error
 	GetJoinGameDownload(sessionID string) (*rest.JoinGameDownloadResponse, error)
+	ShareLobby(aupack []byte, hostDiscordUserID uint64, room *rest.RoomInfo) (*rest.ShareLobbyResponse, error)
+	UpdateSharedLobbyRoom(sessionID, hostKey string, room *rest.RoomInfo) (*rest.ShareLobbyResponse, error)
+	UpdateSharedLobbyExpiration(sessionID, hostKey string) (*rest.ShareLobbyResponse, error)
+	DeleteSharedLobby(sessionID, hostKey string) error
+	GetJoinLobbyDownload(sessionID string) (*rest.JoinLobbyDownloadResponse, error)
+	AddLobbyMember(sessionID string, discordUserID uint64) error
+	RemoveLobbyMember(sessionID string, discordUserID uint64) error
 }
