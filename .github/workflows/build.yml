@@ -82,7 +82,7 @@ jobs:
             Remove-Item $artifactRoot -Recurse -Force
           }
       - name: Set up MinGW
-        uses: egor-tensin/setup-mingw@41b837e47d7f85214629d255b9c4bc3fcbe9fd63 # v3.0
+        uses: egor-tensin/setup-mingw@d54f5ef0ce585bd3fbb1f8a71b5b254f59dbf931 # v3.0
         with:
           platform: x64
       - name: Set up .NET
@@ -174,7 +174,7 @@ jobs:
             Remove-Item $artifactRoot -Recurse -Force
           }
       - name: Set up MinGW
-        uses: egor-tensin/setup-mingw@41b837e47d7f85214629d255b9c4bc3fcbe9fd63 # v3.0
+        uses: egor-tensin/setup-mingw@d54f5ef0ce585bd3fbb1f8a71b5b254f59dbf931 # v3.0
         with:
           platform: x64
       - name: Set up .NET
