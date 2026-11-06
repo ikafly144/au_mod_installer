@@ -6,6 +6,10 @@ const (
 	JoinGameErrorInvalidSession  = "invalid_session"
 	JoinGameErrorSessionNotFound = "session_not_found"
 	JoinGameErrorSessionExpired  = "session_expired"
+
+	JoinLobbyErrorInvalidSession  = "invalid_session"
+	JoinLobbyErrorSessionNotFound = "session_not_found"
+	JoinLobbyErrorSessionExpired  = "session_expired"
 )
 
 type HealthStatus struct {
@@ -47,4 +51,40 @@ type JoinGameDownloadResponse struct {
 	Aupack    []byte    `json:"aupack"`
 	Room      RoomInfo  `json:"room"`
 	ExpiresAt time.Time `json:"expires_at"`
+}
+
+type ShareLobbyRequest struct {
+	Aupack            []byte    `json:"aupack"`
+	HostDiscordUserID uint64    `json:"host_discord_user_id,omitempty"`
+	Room              *RoomInfo `json:"room,omitempty"`
+}
+
+type ShareLobbyResponse struct {
+	URL            string    `json:"url"`
+	SessionID      string    `json:"session_id"`
+	HostKey        string    `json:"host_key"`
+	DiscordLobbyID uint64    `json:"discord_lobby_id,omitempty"`
+	ExpiresAt      time.Time `json:"expires_at"`
+}
+
+type UpdateLobbyRoomRequest struct {
+	HostKey string    `json:"host_key"`
+	Room    *RoomInfo `json:"room,omitempty"`
+}
+
+type HeartbeatLobbyRequest struct {
+	SessionID string `json:"session_id"`
+	HostKey   string `json:"host_key"`
+}
+
+type JoinLobbyMemberRequest struct {
+	DiscordUserID uint64 `json:"discord_user_id"`
+}
+
+type JoinLobbyDownloadResponse struct {
+	SessionID      string    `json:"session_id"`
+	Aupack         []byte    `json:"aupack"`
+	DiscordLobbyID uint64    `json:"discord_lobby_id,omitempty"`
+	Room           *RoomInfo `json:"room,omitempty"`
+	ExpiresAt      time.Time `json:"expires_at"`
 }
