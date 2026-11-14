@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/ikafly144/au_mod_installer/common/rest"
 )
@@ -33,7 +34,7 @@ func WithHTTPClient(httpClient *http.Client) config {
 
 func NewClient(baseURL string, configs ...config) *clientImpl {
 	client := &clientImpl{
-		BaseURL:    baseURL,
+		BaseURL:    strings.TrimRight(baseURL, "/"),
 		HTTPClient: &http.Client{},
 	}
 	for _, config := range configs {

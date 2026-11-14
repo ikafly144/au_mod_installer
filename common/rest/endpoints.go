@@ -17,6 +17,13 @@ var (
 	EndpointUpdateShareGame     = NewEndpoint("PUT", "/share_game")
 	EndpointDeleteShareGame     = NewEndpoint("DELETE", "/share_game")
 	EndpointJoinGame            = NewEndpoint("GET", "/join_game")
+	EndpointShareLobby          = NewEndpoint("POST", "/share_lobby")
+	EndpointUpdateLobbyRoom     = NewEndpoint("PUT", "/share_lobby/:session_id/room")
+	EndpointHeartbeatLobby      = NewEndpoint("POST", "/share_lobby/heartbeat")
+	EndpointDeleteLobby         = NewEndpoint("DELETE", "/share_lobby/:session_id")
+	EndpointAddLobbyMember      = NewEndpoint("POST", "/share_lobby/:session_id/members")
+	EndpointRemoveLobbyMember   = NewEndpoint("DELETE", "/share_lobby/:session_id/members/:user_id")
+	EndpointJoinLobby           = NewEndpoint("GET", "/join_lobby")
 	EndpointGetVersionInfo      = NewEndpoint("GET", "/version_info")
 )
 
