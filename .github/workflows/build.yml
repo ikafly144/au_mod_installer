@@ -39,7 +39,7 @@ jobs:
           if ($dlls.Count -eq 0) { throw "discord_partner_sdk.dll not found in mus-libs" }
           elseif ($dlls.Count -ne 1) { throw "multiple discord_partner_sdk.dll files found; please ensure exactly one match" }
       - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: "go.mod"
           cache: false
@@ -94,7 +94,7 @@ jobs:
           dotnet tool install --global wix --version 7.*
           echo "$env:USERPROFILE\\.dotnet\\tools" >> $env:GITHUB_PATH
       - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: "go.mod"
           cache: false
@@ -186,7 +186,7 @@ jobs:
           dotnet tool install --global wix --version 7.*
           echo "$env:USERPROFILE\\.dotnet\\tools" >> $env:GITHUB_PATH
       - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: "go.mod"
           cache: false
