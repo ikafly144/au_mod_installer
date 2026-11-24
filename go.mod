@@ -3,7 +3,7 @@ module github.com/ikafly144/au_mod_installer
 go 1.27.4
 
 require (
-	fyne.io/fyne/v2 v2.8.2
+	fyne.io/fyne/v2 v2.8.3
 	git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3
 	github.com/AlecAivazis/survey/v2 v2.3.7
 	github.com/Microsoft/go-winio v0.6.4
